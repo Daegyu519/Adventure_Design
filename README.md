@@ -1,2 +1,2 @@
 # Adventure_Design
-Repository for 어벤디
+This repository is for Adventure Design at CNU
