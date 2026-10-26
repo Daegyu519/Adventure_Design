@@ -6,6 +6,7 @@ import json
 import os
 import re
 import time
+from collections.abc import Mapping
 
 import httpx
 
@@ -39,19 +40,26 @@ class TokenBucket:
         return False
 
 
+def available(name: str, pcfg: dict, env: Mapping[str, str]) -> bool:
+    """공급자를 쓸 수 있는지. 라우터·레지스트리·/health가 이 함수 하나를 같이 쓴다."""
+    if name == "mock":
+        return True
+    if name == "local":
+        return env.get("USE_LOCAL_MODEL") == "1"
+    return bool(env.get(pcfg.get("api_key_env", ""))) or bool(pcfg.get("allow_no_key", False))  # 빈 값(.env의 `KEY=`)은 없는 것으로
+
+
 class OpenAICompatProvider:
-    def __init__(self, name: str, base_url: str, api_key_env: str, allow_no_key: bool = False):
+    def __init__(self, name: str, pcfg: dict):
         self.name = name
-        self.base_url = base_url.rstrip("/")
-        self.api_key = os.getenv(api_key_env, "")
-        self.allow_no_key = allow_no_key
+        self.pcfg = pcfg
+        self.base_url = pcfg["base_url"].rstrip("/")
+        self.api_key = os.getenv(pcfg.get("api_key_env", ""), "")
         self._client = httpx.AsyncClient()
 
     @property
     def available(self) -> bool:
-        if self.name == "local":
-            return os.getenv("USE_LOCAL_MODEL") == "1"
-        return bool(self.api_key) or self.allow_no_key
+        return available(self.name, self.pcfg, os.environ)
 
     async def complete(self, model: str, system: str, user: str, payload: dict, timeout_s: float) -> str:
         headers = {"Content-Type": "application/json"}

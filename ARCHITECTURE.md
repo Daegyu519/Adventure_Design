@@ -269,13 +269,18 @@ sequenceDiagram
 모델은 모두 같은 규격의 전문가로 꽂는다. 새 모델 추가 = `models.yaml`에 항목 추가.
 
 ```python
+ExpertPath = Literal["realtime", "detail", "mirror", "async"]
+
 class ExpertRequest(BaseModel):
-    path: Literal["realtime", "detail", "mirror"]
+    path: ExpertPath
     draft: str                 # 개인정보 가린 상태
-    turns: list[Turn]          # 최근 8개(화자 표시, 답장이면 원문이 맨 앞), 개인정보 가린 상태
+    turns: list[Turn] = []     # 최근 8개(DB가 자름, 오래된 것 → 최신, 그룹방은 label로 화자 표시), 가린 상태
     relation: str
-    signals: list[str]         # L0 결과
-    intent: str | None         # 고쳐 쓰기 요청에만. 판정 전문가는 None이라 캐시에 걸린다
+    signals: list[str] = []    # L0 결과
+    reply_to: Turn | None = None   # 답장 대상(가린 상태). 프롬프트 맥락 맨 앞 줄
+    room_kind: Literal["direct", "group"] = "direct"
+    intent: str | None = None  # rewrite 전문가에게만 전달된다. 판정 전문가는 None이라 캐시에 걸린다
+    extra: dict[str, Any] = {} # judge: context/tone_a/tone_b/risk, feedback: text/about
 
 class ExpertResult(BaseModel):
     expert_id: str
@@ -293,9 +298,10 @@ class Expert(Protocol):
     async def run(self, req: ExpertRequest, deadline: float) -> ExpertResult: ...
 ```
 
-- `LLMExpert`: 프롬프트 + 라우터(폴백 목록) + 출력 스키마 검사.
-- `ClassifierExpert`: KcELECTRA 같은 분류기. 같은 `ToneReading`을 돌려준다.
-- 레지스트리는 경로별로 쓸 전문가 목록을 만든다.
+- `LLMExpert`(`experts/llm.py`): 프롬프트 + 라우터(사슬) + 출력 스키마 검사. role별 스키마(context → `ContextReading`, tone → `ToneReading`, judge → `JudgeOut`, rewrite → `RewriteSet`, feedback → `FeedbackResult`). confidence는 출력에 있으면 그 값, 없으면 1.0.
+- `ClassifierExpert`: KcELECTRA 같은 분류기. 같은 `ToneReading`을 돌려준다(T-18).
+- 레지스트리(`experts/registry.py`)는 경로·역할별로 쓸 전문가 목록을 설정 순서대로 만든다. `force_mock`인데 사슬에 mock이 없는 전문가, `optional`인데 첫 모델 공급자를 쓸 수 없는 전문가는 빠진다. 로드할 때 role, prompt 파일, 사슬의 `mock:<이름>`이 `mock_rules`에 있는지 검사한다(실패하면 시작 실패).
+- `run_all`은 전문가를 동시에 돌리고, 시간 안에 못 온 전문가와 모든 모델이 실패한 전문가는 뺀다.
 
 ```yaml
 # engine/config/models.yaml (형식)
@@ -303,36 +309,39 @@ providers:
   nvidia: {base_url: https://integrate.api.nvidia.com/v1, api_key_env: NVIDIA_API_KEY, rpm: 40}
   gemini: {base_url: https://generativelanguage.googleapis.com/v1beta/openai, api_key_env: GEMINI_API_KEY, rpm: 15}  # 합성 문장 평가만. experts·fallback에 넣지 않는다
   github: {base_url: https://models.github.ai/inference, api_key_env: GITHUB_TOKEN, rpm: 10}
-  local:  {base_url: http://localhost:11434/v1, api_key_env: LOCAL_API_KEY, rpm: 600}   # Ollama
+  local:  {base_url: http://localhost:11434/v1, api_key_env: LOCAL_API_KEY, rpm: 600, allow_no_key: true}   # Ollama. USE_LOCAL_MODEL=1일 때만 쓴다
   mock:   {}
 experts:
-  - {id: ctx_fast,   role: context, model: nvidia:deepseek-ai/deepseek-v4.1-flash, prompt: context, paths: [realtime]}
-  - {id: ctx_deep,   role: context, model: nvidia:moonshotai/kimi-k3,              prompt: context, paths: [detail]}
-  - {id: tone_ds,    role: tone,    model: nvidia:deepseek-ai/deepseek-v4.1-flash, prompt: tone,    paths: [realtime, detail], weight: 1.0}
-  - {id: tone_hcx,   role: tone,    model: local:HyperCLOVAX-SEED-Text-Instruct-1.5B, prompt: tone, paths: [realtime, detail], weight: 1.0, optional: true}
-  - {id: tone_nv2,   role: tone,    model: "nvidia:<다른 계열 모델 — 설정에서 정함>", prompt: tone, paths: [detail], weight: 1.0}
-  - {id: tone_kce,   role: tone,    model: classifier:kcelectra-tone,              paths: [realtime], weight: 0.5, optional: true}
-  - {id: judge,      role: judge,   model: nvidia:moonshotai/kimi-k3,              prompt: judge,   paths: [detail]}
-  - {id: rewrite,    role: rewrite, model: nvidia:deepseek-ai/deepseek-v4.1-flash, prompt: rewrite, paths: [detail]}
-  - {id: feedback,   role: feedback,model: nvidia:moonshotai/kimi-k3,              prompt: feedback,paths: [async]}
-fallback:            # 전문가 모델이 실패하면 순서대로
+  - {id: ctx_fast,  role: context,  model: nvidia:deepseek-ai/deepseek-v4.1-flash, prompt: context,  paths: [realtime]}
+  - {id: ctx_deep,  role: context,  model: nvidia:moonshotai/kimi-k3,              prompt: context,  paths: [detail, mirror]}
+  - {id: tone_ds,   role: tone,     model: nvidia:deepseek-ai/deepseek-v4.1-flash, prompt: tone,     paths: [realtime, detail, mirror], weight: 1.0}
+  - {id: tone_kimi, role: tone,     model: nvidia:moonshotai/kimi-k3,              prompt: tone,     paths: [detail, mirror], weight: 1.0, mock: tone_alt}
+  - {id: tone_hcx,  role: tone,     model: local:naver-hyperclovax/HyperCLOVAX-SEED-Text-Instruct-1.5B, prompt: tone, paths: [realtime, detail, mirror], weight: 1.0, optional: true}
+  - {id: judge,     role: judge,    model: nvidia:moonshotai/kimi-k3,              prompt: judge,    paths: [detail, mirror]}
+  - {id: rewrite,   role: rewrite,  model: nvidia:deepseek-ai/deepseek-v4.1-flash, prompt: rewrite,  paths: [detail, mirror]}
+  - {id: feedback,  role: feedback, model: nvidia:moonshotai/kimi-k3,              prompt: feedback, paths: [async]}
+fallback:   # 실제 문장이 지나가므로 gemini 금지
   nvidia:deepseek-ai/deepseek-v4.1-flash: [github:openai/gpt-4.1-mini, mock:auto]
+  nvidia:moonshotai/kimi-k3: [nvidia:deepseek-ai/deepseek-v4.1-flash, mock:auto]
 paths:
   realtime: {deadline_ms: 1500, expert_deadline_ms: 1200, gate_threshold: 0.3}
   detail:   {deadline_ms: 8000}
+  mirror:   {deadline_ms: 8000}
   async:    {deadline_ms: 60000}
 aggregate:
   weights: {bias: -2.2, prior: 1.6, neg: 2.4, violation: 1.4, pattern: 0.9}
   alert_threshold: 0.6
   max_disagreement: 0.35
   min_confidence: 0.4
-  global_min_obs: 5
+  global_min_obs: 5     # 신호별 서로 다른 신고자 수
 ```
+
+- 전문가의 사슬 = `[model, *fallback[model]]`. `mock:auto`는 `mock:<전문가의 mock>`(없으면 prompt 이름)으로 바뀐다.
 
 모델 ID는 2026-10 기준 build.nvidia.com 무료 엔드포인트다. 목록이 자주 바뀌므로 설정에서만 바꾼다.
 
 - Gemini는 실제 대화 문장이 지나가는 경로(실시간·상세·털어놓기·거울)의 전문가와 폴백 목록에 넣지 않는다. 대조 세트·상황 카드 같은 합성 문장 평가에만 쓴다.
-- 상세 경로의 두 번째 말투 전문가(`tone_nv2`)는 `tone_ds`와 다른 계열의 NVIDIA 모델로 고른다. 앙상블의 의견 차이·심판·전문가 비교(T-20)는 NVIDIA 두 계열 + 로컬 SEED로 한다.
+- 상세 경로의 두 번째 말투 전문가(`tone_kimi`)는 `tone_ds`와 다른 계열의 NVIDIA 모델로 고른다. 앙상블의 의견 차이·심판·전문가 비교(T-20)는 NVIDIA 두 계열 + 로컬 SEED로 한다.
 - `local`은 Ollama(GGUF 양자화)다. `optional: true`라 없어도 돈다.
 
 ### 6-3. 집계기
@@ -350,14 +359,16 @@ risk = sigmoid( w0 + w1·prior + w2·Σk(αk·negk)/Σk(αk) + w3·violation + w
 
 ### 6-4. 라우터
 
+- 라우터는 전문가 ID로 부른다: `Router.call(expert_id, …)`가 그 전문가의 사슬을 앞에서부터 시도한다.
 - 역할별 전문가는 동시에 부른다(`asyncio.gather` + 전문가별 deadline).
 - 공급자·모델별 토큰 버킷. 한도에 걸리면 기다리지 않고 폴백.
 - 같은 모델 3회 연속 실패 → 60초 건너뜀.
-- 같은 (전문가, 입력) 결과는 캐시. 의도 칩만 바꾼 상세 재호출에서는 판정 전문가가 여기 걸린다(3-3).
+- 같은 (전문가, 입력) 결과는 캐시. 의도 칩만 바꾼 상세 재호출에서는 판정 전문가가 여기 걸린다(3-3). 캐시는 `CACHE_MAX`(2048)를 넘으면 통째로 비운다. trace는 최근 1000개만 두고 원문은 없다.
 - 출력은 `<think>…</think>` 제거 → 첫 JSON 객체 추출 → pydantic 검사. 실패하면 폴백.
 - 선택 기능: 실시간 경로에서 같은 역할의 빠른 모델 두 개에 동시에 보내고 먼저 온 유효한 답을 쓴다(지연 편차 감소, 호출 2배).
-- `pii.mask`는 파이프라인 입구에서 한 번 하고, 모든 레이어는 가린 문장만 받는다. 가리는 것: 전화번호, 이메일, 주민번호·계좌 모양 숫자, 참여자 이름. 대상: 초안, 최근 대화, 의도, 하소연, 거울 카드 문장.
-- 고쳐 쓰기 후보(거울 `options` 포함)의 이름 자리표시는 엔진이 응답 직전에 원래 이름으로 되돌린다. 자리표시→이름 대응표는 그 요청의 메모리에만 두고 로그·trace에 남기지 않는다. 자리표시는 이름마다 다르게 붙인다(프로토타입은 모두 `[이름]`이라 되돌릴 수 없다).
+- 입구 가리기: 파이프라인 입구에서 요청마다 `pii.Masker`(참여자 이름 포함)를 한 번 거치고, 모든 레이어는 가린 문장만 받는다. 가리는 것: 전화번호, 이메일, 주민번호·계좌 모양 숫자, 긴 숫자, 참여자 이름(2글자 이상, 3글자 한글 이름은 뒤 2글자도). 대상: 초안, 최근 대화(그룹방 화자 label 포함), 답장 대상, 의도, 하소연, 거울 카드 문장.
+- 자리표시는 종류별로 등장 순서대로 번호를 붙이고 같은 값은 같은 자리표시를 받는다(`[이름1]`, `[전화번호1]` …). 고쳐 쓰기 후보(거울 `options` 포함)는 엔진이 응답 직전에 `Masker.restore`로 되돌린다. 대응표는 그 요청의 `Masker` 메모리에만 두고 로그·trace·큐 인자에 남기지 않는다.
+- 안전망: 그 위에 `Router.call`이 `local`·`mock`이 아닌 공급자로 보내기 직전에 user와 payload 안의 모든 문자열(중첩 포함)에 `pii.mask`(이름 없이 패턴만)를 한 번 더 쓴다. `pii`를 import하는 곳은 `pipeline.py`와 `harness/router.py`뿐이다(테스트로 고정).
 
 ### 6-5. 문구 규칙
 - 제목 템플릿: "차갑게 / 성의 없게 / 화난 것처럼 느껴질 수도 있어요".
@@ -385,7 +396,7 @@ risk = sigmoid( w0 + w1·prior + w2·Σk(αk·negk)/Σk(αk) + w3·violation + w
 | 위치 | 변수 |
 |---|---|
 | 앱 | `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`, `EXPO_PUBLIC_ENGINE_URL`, `EXPO_PUBLIC_VAPID_PUBLIC_KEY` |
-| 엔진 | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_DB_URL`, `HOOK_SECRET`, `NVIDIA_API_KEY`, `GEMINI_API_KEY`(합성 문장 평가만), `GITHUB_TOKEN`, `LOCAL_API_KEY`, `EXPO_ACCESS_TOKEN`(선택), `FORCE_MOCK`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` |
+| 엔진 | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_DB_URL`, `HOOK_SECRET`, `NVIDIA_API_KEY`, `GEMINI_API_KEY`(합성 문장 평가만), `GITHUB_TOKEN`, `LOCAL_API_KEY`, `USE_LOCAL_MODEL`(`1`이면 로컬 모델 사용), `MODELS_PATH`(선택, 기본 `engine/config/models.yaml`), `EXPO_ACCESS_TOKEN`(선택), `FORCE_MOCK`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` |
 | 협업 스크립트 | `TONE_ACCOUNT`(`a`·`b`, 셸에서 설정) |
 
 - 이름 목록은 `.env.example`에 있다. 값은 `.env`(git 밖)에만 넣는다.
