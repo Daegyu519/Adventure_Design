@@ -97,7 +97,7 @@ UI 문구 근거: "상황에 맞는 말투, AI로 재치있게 변경해 드려�
 |---|---|
 | `public.rooms` | id, kind(`direct`·`group`), title(그룹만), relation, created_by, created_at. **user_a, user_b 삭제** |
 | `public.room_members` (새) | room_id, user_id, joined_at, last_read_at, muted. PK(room_id, user_id) |
-| `public.messages` | + reply_to(uuid, 같은 방), + image_path, + mentions(uuid[]). 수정·삭제 없음 유지 |
+| `public.messages` | + reply_to(bigint, 같은 방), + image_path, + mentions(uuid[]). 수정·삭제 없음 유지 |
 | `public.reactions` (새) | message_id, user_id, emoji(고정 6개 중), created_at. PK(message_id, user_id) |
 | `public.invites` | + room_id(그룹 초대면 채움), + max_uses. `accept_invite(code)`가 1:1 방 생성 또는 그룹 참여 |
 | `public.mirror_attempts` (새, 5장) | 본인 행만 |
