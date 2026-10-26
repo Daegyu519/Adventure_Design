@@ -1,8 +1,8 @@
 # ARCHITECTURE
 
-1:1 채팅 앱 안에서, 내가 보내려는 문장이 상대에게 차갑거나 성의 없게 읽힐 수 있을 때 나에게만 조용히 알려 준다. 판단에는 상대가 AI에게만 남긴 피드백이 쓰이지만, 누가 남겼는지는 드러나지 않는다.
+1:1·그룹 채팅 앱 안에서, 내가 보내려는 문장이 상대에게 차갑거나 성의 없게 읽힐 수 있을 때 나에게만 조용히 알려 준다. 판단에는 상대가 AI에게만 남긴 피드백이 쓰이지만, 누가 남겼는지는 드러나지 않는다. 하루 2분 거울 세션으로 내 문장이 어떻게 읽히는지 스스로 맞혀 보게 한다.
 
-범위는 수업 프로젝트다. 2~3명이 1~2달 동안 만들고, 20~30명(10~15쌍)이 1주 파일럿을 한다. 출시 기준은 잡지 않는다.
+범위는 수업 프로젝트다. 2~3명이 1~2달 동안 만들고, 20~30명(10~15쌍 + 팀 그룹방)이 1주 파일럿을 한다. 출시 기준은 잡지 않는다.
 
 ---
 
@@ -11,12 +11,13 @@
 ```mermaid
 flowchart LR
   subgraph Client["앱 (Expo: iOS · Android · 웹)"]
-    UI["대화 · 힌트 · 살펴보기 · 털어놓기 · 리포트"]
+    UI["대화 · 힌트 · 살펴보기 · 털어놓기 · 거울 · 리포트"]
   end
-  subgraph SB["Supabase"]
+  subgraph SB["Supabase (클라우드, 서울)"]
     Auth["Auth"]
     PG[("Postgres<br/>public: 채팅<br/>tone: 말투")]
-    RT["Realtime"]
+    RT["Realtime<br/>메시지 · Presence"]
+    ST["Storage<br/>chat-images"]
     WH["DB 웹훅"]
   end
   subgraph EN["AI 엔진 (FastAPI)"]
@@ -24,11 +25,11 @@ flowchart LR
     H["하네스<br/>L0 → 전문가들 → 집계기 → 문구 검사"]
     Q["작업 큐<br/>L4 · 기준선 · 푸시 · 평가"]
   end
-  M["모델 공급자<br/>NVIDIA · Gemini · GitHub Models · 로컬"]
-  P["Expo Push"]
+  M["모델 공급자<br/>NVIDIA · GitHub Models · 로컬(Ollama)"]
+  P["푸시<br/>Expo Push · 웹 푸시"]
 
-  UI <-->|"로그인 · 메시지 저장/구독"| SB
-  UI -->|"입력 중 문장 · 살펴보기 · 털어놓기"| API
+  UI <-->|"로그인 · 메시지·사진 저장/구독"| SB
+  UI -->|"입력 중 문장 · 살펴보기 · 털어놓기 · 거울"| API
   WH -->|"새 메시지"| API
   API --> H
   API --> Q
@@ -41,15 +42,17 @@ flowchart LR
 
 | 구성 요소 | 맡는 일 | 맡지 않는 일 |
 |---|---|---|
-| 앱 (`apps/mobile`) | 화면 8개(로그인, 대화 목록, 1:1 대화, 힌트 영역, 살펴보기 시트, 털어놓기 시트, 리포트, 설정). 메시지는 Supabase에 직접 쓰고 Realtime으로 받는다. 입력이 0.5초 멈추면 엔진에 힌트를 요청한다 | 말투 판단, 모델·서비스 키 보관 |
-| Supabase | 로그인, Postgres, RLS 권한, 메시지 실시간 전달, 새 메시지를 엔진에 알리는 DB 웹훅 | 모델 호출 |
-| AI 엔진 (`engine`) | `/v1/hint`, `/v1/detail`, `/v1/feedback`, `/v1/stats/me`, `/hooks/message`. 하네스, 전문가 레지스트리, 집계기, 작업 큐, trace 기록 | 메시지 저장·전달, 로그인 |
+| 앱 (`apps/mobile`) | 화면 11개(시작·동의, 로그인, 대화 목록, 대화방, 살펴보기 시트, 털어놓기 시트, 방 만들기·초대, 방 정보, 거울, 리포트, 설정). 하단 탭은 대화 · 거울 · 리포트 · 설정. 메시지·공감·읽음·사진은 Supabase에 직접 쓰고 Realtime으로 받는다. 입력 중 표시는 Presence로만 한다. 입력이 0.5초 멈추면 엔진에 힌트를 요청한다 | 말투 판단, 모델·서비스 키 보관 |
+| Supabase | 로그인, Postgres, RLS 권한, 메시지 실시간 전달, 입력 중 표시(Presence), 사진 저장(Storage), 새 메시지를 엔진에 알리는 DB 웹훅 | 모델 호출 |
+| AI 엔진 (`engine`) | `/v1/hint`, `/v1/detail`, `/v1/feedback`, `/v1/mirror/*`, `/v1/stats/me`, `/hooks/message`. 하네스, 전문가 레지스트리, 집계기, 작업 큐, 푸시(Expo · 웹), trace 기록 | 메시지 저장·전달, 로그인 |
 | 모델 공급자 | OpenAI 호환 `/chat/completions` | 상태 저장 |
 
 **경계 규칙**
 - 채팅은 엔진 없이 돈다. 엔진이 죽어도 메시지는 오간다.
 - 엔진은 앱이 보낸 맥락을 믿지 않는다. 최근 대화는 엔진이 DB에서 직접 읽는다.
 - `tone` 스키마는 API에 공개하지 않는다. 엔진만 서비스 키로 접근한다.
+- 사진은 모델에 보내지 않는다. 판정은 텍스트만 한다.
+- Gemini는 대조 세트·상황 카드 같은 합성 문장 평가에만 쓴다. 실제 대화 문장이 지나가는 경로(실시간·상세·털어놓기·거울)와 폴백 목록에는 넣지 않는다.
 
 ---
 
@@ -59,39 +62,55 @@ flowchart LR
 tone-chat/
   ARCHITECTURE.md
   CLAUDE.md
-  docs/tasks.md
+  README.md
+  .env.example            변수 이름만 (값은 .env, git 밖)
+  docs/
+    tasks.md
+    COLLAB.md             두 계정 협업 (claim · land)
+    superpowers/          설계 보완(specs), 단계별 계획(plans)
+  scripts/                claim, land, check
   apps/mobile/            Expo (expo-router, TypeScript strict)
     app/                  화면
     lib/supabase.ts
     lib/engine.ts         엔진 호출 (OpenAPI에서 생성한 타입 사용)
+    lib/tokens.json       디자인 토큰 (D-01)
     lib/types/            생성된 타입 (손으로 고치지 않음)
   engine/                 Python 3.11+, FastAPI
     app/                  main.py, routes/, auth.py, contracts.py, db.py, settings.py
     harness/              router.py, providers.py, schemas.py, korean.py, pii.py, prompts.py
     experts/              base.py(인터페이스), registry.py, llm.py, classifier.py
     layers/               gate.py, aggregate.py, guard.py, rewrite.py
-    pipeline.py           realtime / detail / feedback 경로
+    pipeline.py           realtime / detail / feedback / mirror 경로
     jobs/                 queue.py, feedback.py, baseline.py, push.py, eval.py
     config/models.yaml    공급자 · 전문가 · 경로 · 집계 설정
+    content/mirror_cards.yaml  거울 상황 카드
     prompts/*.md
     tests/
   supabase/
-    migrations/           표 · RLS · 함수 · 웹훅
+    migrations/           표 · RLS · 함수 · 웹훅 (이름에 _platform이 붙은 파일은 실제 Supabase에서만)
+    tests/                PGlite로 RLS 테스트 (Docker 없이)
     seed.sql
   eval/
     contrast_set.jsonl
     run_eval.py
+    baseline.json         land 평가 게이트 기준
+  design-system/tone-chat/MASTER.md  디자인 규칙
+  design/                 HTML 목업, 대비 검사
   prototype/tone-harness/ 참고용 기존 프로토타입 (수정하지 않음)
+  .coord/                 작업 잡기 · 잠금 · 기록 (git 밖, 같은 맥에서 공유)
 ```
+
+저장소는 `~/Projects/tone-chat`에 둔다. Desktop은 iCloud 동기화 중이라 node_modules·.venv를 두면 동기화가 엉킨다. 작업용 worktree는 `~/Projects/tone-chat-wt/<브랜치>`에 생긴다(`docs/COLLAB.md`).
 
 ---
 
 ## 3. 주요 흐름
 
 ### 3-1. 메시지 보내기
-1. 앱이 `public.messages`에 insert한다. RLS가 방 참여자인지, `sender_id = auth.uid()`인지 확인한다.
-2. Realtime(`postgres_changes`, `room_id` 필터)이 상대 앱에 전달한다. 구독자마다 RLS가 다시 확인된다.
-3. DB 웹훅이 `POST /hooks/message`를 부른다. 엔진은 작업 큐에 기준선 갱신과 상대에게 보낼 Expo 푸시를 넣는다.
+1. 앱이 `public.messages`에 insert한다. RLS가 방 멤버인지(`is_member(room_id)`), `sender_id = auth.uid()`인지 확인한다. 답장이면 `reply_to`가 같은 방 메시지여야 한다. 사진은 먼저 Storage `chat-images/<room_id>/…`에 올리고 `image_path`를 넣는다.
+2. Realtime(`postgres_changes`, `room_id` 필터)이 다른 멤버 앱에 전달한다. 구독자마다 RLS가 다시 확인된다. 공감(`reactions`)과 읽음(`room_members.last_read_at`)도 같은 방식으로 받는다.
+3. DB 웹훅이 `POST /hooks/message`를 부른다. 엔진은 작업 큐에 기준선 갱신과 푸시를 넣는다. 푸시는 방 멤버 전원(보낸 사람·알림 끈 사람 제외)에게, `push_tokens.platform`에 따라 Expo Push(안드로이드) 또는 웹 푸시(`pywebpush`, VAPID)로 보낸다.
+4. 입력 중 표시는 Realtime Presence(방 채널)로만 하고 DB에 남기지 않는다.
 
 ### 3-2. 입력 중 힌트 (실시간 경로)
 
@@ -102,8 +121,9 @@ sequenceDiagram
   participant DB as Supabase DB
   participant Experts as 전문가들
   App->>Engine: POST /v1/hint (room_id, text, seq) + Bearer 토큰
-  Engine->>Engine: 토큰 검증(JWKS) · 방 참여 확인
-  Engine->>DB: 최근 대화 8개, 관계 패턴, 기준선
+  Engine->>Engine: 토큰 검증(JWKS) · 방 멤버 확인(room_members)
+  Engine->>DB: 최근 대화 8개, 보낸 사람 패턴, 기준선
+  Engine->>Engine: pii.mask (초안 · 최근 대화, 참여자 이름 포함)
   Engine->>Engine: L0 거르기 (위험 낮으면 hint=null로 끝)
   Engine->>Experts: 맥락 · 말투 전문가 동시 호출 (1.2초)
   Experts-->>Engine: JSON 결과 (늦은 것은 버림)
@@ -114,6 +134,8 @@ sequenceDiagram
 - 앱은 0.5초 디바운스로 보내고, 새 입력이 오면 `AbortController`로 이전 요청을 취소한다. 응답은 최신 `seq`만 표시한다.
 - 전체 1.5초(디바운스 제외)를 넘기면 엔진은 `hint=null`을 돌려준다.
 - 힌트가 떠 있어도 보내기는 막지 않는다.
+- 최근 대화 8개에는 화자 표시(나 / 상대1 / 상대2…)를 붙인다. 입력 중인 문장이 답장이면 원문 메시지를 맥락 맨 앞에 넣는다.
+- 그룹방 판정 기준은 "이 방 사람들이 읽을 때"다. 관계는 방 단위 하나다.
 
 | 구간 | 목표 |
 |---|---|
@@ -127,15 +149,47 @@ sequenceDiagram
 
 ### 3-3. 살펴보기 (상세 경로, 8초)
 1. `POST /v1/detail`.
-2. 큰 맥락 전문가 + 말투 전문가 여러 개 → 집계. 의견 차이가 크면 심판 전문가.
-3. 위험하면 고쳐 쓰기 후보 2개 → 세 가지 확인(의도 유지, 존댓말·반말 유지, 실제로 덜 부정적) → 통과한 것만 보낸다.
+2. 큰 맥락 전문가 + 말투 전문가 여러 개 → 집계. 의견 차이가 크면 심판 전문가. 이 판정 단계에는 의도(`intent`)를 넣지 않는다.
+3. 위험하면 고쳐 쓰기 후보 2개(의도는 여기에만 넣는다) → 세 가지 확인(의도 유지, 존댓말·반말 유지, 실제로 덜 부정적) → 통과한 것만 보낸다.
 4. 점수 계산 근거(`reason`, 가중치)는 응답에 넣지 않는다.
 
+**의도 칩과 바뀐 곳 강조**
+- 시트 맨 위에 "단호하게 / 미안하게 / 가볍게" 칩이 있다. 고르지 않아도 된다.
+- 시트가 열린 뒤 칩을 누르면 `/v1/detail`을 `intent`만 바꿔 다시 부른다. 판정 전문가 입력에는 의도가 없으므로 라우터 캐시(같은 전문가, 같은 입력)에 걸리고 고쳐 쓰기만 새로 돈다. 별도 API는 없다.
+- 어긋남 표시는 가장 많이 읽힌 뜻(`top_reading`)이 아래 표에 해당할 때만 한 줄 띄운다. 단호한 거절이 "차갑게" 읽히는 것은 어긋남으로 보지 않는다(단호함을 지키는 것도 사용자의 선택이다).
+
+| 의도 칩 | 어긋남으로 보는 읽힘 |
+|---|---|
+| 단호하게 | 화나게, 성의없게 |
+| 미안하게 | 차갑게, 화나게, 성의없게 |
+| 가볍게 | 차갑게, 화나게 |
+
+- 후보 문장은 원문과 달라진 어절만 강조한다. 비교는 앱에서 어절(띄어쓰기) 단위로 한다.
+
 ### 3-4. 털어놓기 (비동기)
-1. 받은 메시지의 "⋯" → `POST /v1/feedback (room_id, message_id, text)`.
+1. 받은 메시지의 "⋯" → `POST /v1/feedback (room_id, message_id, text)`. 1:1 방과 그룹방 모두에 있다.
 2. 엔진은 그 메시지가 요청자가 **받은** 메시지인지 확인하고, 큐에 넣은 뒤 202와 안내 문구를 바로 돌려준다.
-3. 큐: 메시지 내용 + 하소연 → L4 피드백 전문가 → 패턴 태그 → `tone.pair_patterns`, `tone.global_patterns` 갱신, `tone.feedback_log` 기록.
+3. 큐: 메시지 내용 + 하소연(`pii.mask` 거침) → L4 피드백 전문가 → 패턴 태그 → 아래 반영 규칙대로 `tone.sender_patterns`, `tone.global_patterns` 갱신, `tone.feedback_log` 기록.
 4. 하소연 원문은 메모리에서만 쓰고 버린다. 무엇이 추출됐는지는 털어놓은 사람에게도 보여 주지 않는다.
+
+**반영 규칙** (누가 털어놓았는지는 3명 이상 방에서만 감출 수 있다)
+- 패턴의 주인은 털어놓기 대상 메시지를 **보낸 사람**이다. 키는 (보낸 사람, 관계, 신호)다. 그 사람이 같은 관계의 어느 방에서 쓰든 적용하고, 털어놓은 사람의 문장에는 적용하지 않는다.
+- 그룹방(3명 이상)에서 나온 하소연만 `tone.sender_patterns`에 넣는다. `active_from`은 다음 날 0시다. 관계별 주간 상한은 그대로 둔다.
+- 1:1 방에서 나온 하소연은 `tone.global_patterns`(신호별 전체 수)에만 더한다.
+- 반영은 L0 사전점수와 L3 `pattern` 항으로만 하고, `global_patterns[trigger] ≥ global_min_obs`일 때만 한다. 원래 패널이 낼 법한 경고만 강해지고, 없던 경고를 새로 만들지 않는다.
+
+### 3-5. 거울 세션 (하루 2분, 카드 3장)
+`POST /v1/mirror/today`로 오늘의 카드 3장을 받고, 카드마다 `POST /v1/mirror/answer`로 답한다.
+
+1. **역할극**: AI 인물(예: 팀원 민지)이 상황 메시지를 먼저 보낸다 → 내가 평소처럼 답한다 → "받았을 때 속마음" 한 줄, 읽힘(자주/가끔/드물어요), If case(그대로 / A / 직접 고치기).
+2. **되돌려 받기**: 내가 예전에 보낸 문장을 AI 인물이 보낸 것처럼 보여 준다 → "받으면 얼마나 차갑게 느껴지나요" 1~5점 → 공개("이건 지난주 목요일에 당신이 팀원에게 보낸 문장이에요"). 보낸 문장이 아직 없으면 상황 카드 문장으로 대신한다.
+3. **예측 맞히기**: 내 문장과 관계("선배라면?")를 보여 주고 "얼마나 부정적으로 읽을까" 1~5점을 먼저 고르게 한다. 패널의 부정 확률(차갑게 + 성의없게 + 화나게)을 0.2 간격으로 1~5칸에 나눠 비교한다. `gap = |예측 칸 − 패널 칸|`이 자기객관화 점수다. 되돌려 받기 점수도 같은 방식으로 gap을 낸다.
+
+- 문장 출처: 본인이 보낸 메시지(엔진이 서비스 키로 읽음)와 `engine/content/mirror_cards.yaml`(팀플 상황 카드: 일정 조율, 역할 요청, 거절, 마감 독촉. 20장부터 시작).
+- `card_id`는 엔진이 서명한 값이다. 앱이 문장 출처를 위조할 수 없다.
+- 실제 대화에서 뽑은 카드도 `pii.mask`를 거치고, Gemini에 보내지 않는다.
+- 피드백은 문장에만 한다. 점수는 "예측과 한 칸 차이"처럼 차이로만 보여 준다. 점수 폭죽, 연속 출석 압박은 없다.
+- 결과는 `public.mirror_attempts`에 남긴다. 문장 원문은 넣지 않는다.
 
 ---
 
@@ -148,12 +202,16 @@ sequenceDiagram
 | POST | `/v1/hint` | `{room_id, text(1~500자), seq}` | `{seq, hint: {title, detail} \| null, trace_id}` |
 | POST | `/v1/detail` | `{room_id, text, intent?}` | `{alert, top_reading, readings: {읽힘: "자주"\|"가끔"\|"드물어요"}, why: [str], options: [{label, text, keep, change}], footnote, trace_id}` |
 | POST | `/v1/feedback` | `{room_id, message_id, text(1~1000자)}` | 202 `{ack}` |
-| GET | `/v1/stats/me` | 없음 | `{hints, details, fixed, fix_rate}` |
+| POST | `/v1/mirror/today` | 없음 | `{cards: [{card_id, kind: "roleplay"\|"receive"\|"predict", persona, relation, situation, message}]}` |
+| POST | `/v1/mirror/answer` | `{card_id, reply?, score?, predicted?}` | `{readings, inner_voice?, reveal?, options?, gap?}` |
+| GET | `/v1/stats/me` | 없음 | `{hints, details, fixed, fix_rate, predict_gap_trend, hints_by_week}` |
 | POST | `/hooks/message` | Supabase 웹훅 페이로드 `{type, table, schema, record, old_record}` + `X-Hook-Secret` 헤더 | 202 |
 | GET | `/health` | 없음 | `{ok, models: {id: "up"\|"down"}}` |
 
-- 오류: 401(토큰), 403(방 참여자 아님 / 받은 메시지 아님), 422(형식), 429(사용자별 요청 한도).
+- 오류: 401(토큰), 403(방 멤버 아님 / 받은 메시지 아님), 422(형식), 429(사용자별 요청 한도).
+- 방 멤버 확인은 `room_members`로 한다.
 - 읽힘 키는 `차갑게, 성의없게, 화나게, 무난하게, 따뜻하게` 다섯 개로 고정.
+- `intent`는 의도 칩 `단호하게, 미안하게, 가볍게` 중 하나다. 고쳐 쓰기에만 들어간다(3-3).
 - 요청·응답 모델은 `engine/app/contracts.py`의 pydantic이 원본이다. 앱 타입은 OpenAPI에서 `openapi-typescript`로, DB 타입은 `supabase gen types typescript`로 생성한다.
 
 ---
@@ -162,21 +220,29 @@ sequenceDiagram
 
 | 표 | 칸 | 읽기 | 쓰기 |
 |---|---|---|---|
-| `public.profiles` | id(=auth.users.id), name, tone_hint_on, created_at | 본인, 대화 상대 | 본인 |
-| `public.invites` | code, inviter_id, used_by, expires_at | 초대한 사람 | `accept_invite(code)` 함수만 |
-| `public.rooms` | id, user_a, user_b, relation, created_at | 두 참여자 | `accept_invite` 함수만 |
-| `public.messages` | id, room_id, sender_id, text, created_at | 두 참여자 | 참여자, `sender_id = auth.uid()`만. 수정·삭제 없음 |
-| `public.push_tokens` | user_id, token, platform | 본인 | 본인 |
+| `public.profiles` | id(=auth.users.id), name, tone_hint_on, created_at | 본인, 같은 방 멤버 | 본인 |
+| `public.invites` | code, inviter_id, room_id(그룹 초대면 채움), relation, max_uses, uses, expires_at | 초대한 사람 | `create_invite`, `accept_invite` 함수만 |
+| `public.rooms` | id, kind(`direct`·`group`), title(그룹만), relation, created_by, created_at | 방 멤버 | `create_group`, `accept_invite` 함수만 |
+| `public.room_members` | room_id, user_id, joined_at, last_read_at, muted. PK(room_id, user_id) | 방 멤버 | 추가는 함수만. 본인 행의 last_read_at, muted만 수정 |
+| `public.messages` | id, room_id, sender_id, text, image_path, reply_to(같은 방), mentions(uuid[]), created_at | 방 멤버 | 멤버, `sender_id = auth.uid()`만. 수정·삭제 없음 |
+| `public.reactions` | message_id, user_id, emoji(고정 6개 중), created_at. PK(message_id, user_id) | 방 멤버 | 멤버, 본인 행만 |
+| `public.push_tokens` | user_id, token, platform(`ios`·`android`·`web`) | 본인 | 본인 |
 | `public.tone_events` | id, room_id, user_id, kind, risk, top_reading, signals(jsonb), choice, created_at | 본인 | 본인 행 insert만 |
+| `public.mirror_attempts` | id, user_id, kind(`roleplay`·`receive`·`predict`), card_ref, answer_score, predicted, panel_bin, gap, created_at | 본인 | 본인 행만 |
+| Storage `chat-images` | 경로 `<room_id>/…` | 방 멤버 | 방 멤버 |
 | `tone.feedback_log` | id, room_id, reporter_id, message_id, usable, pattern_count, created_at | 엔진 | 엔진 |
-| `tone.pair_patterns` | room_id, trigger, count, strength, feeling, updated_at | 엔진 | 엔진 |
+| `tone.sender_patterns` | sender_id, relation, trigger, count, strength, feeling, active_from, updated_at. PK(sender_id, relation, trigger) | 엔진 | 엔진 |
 | `tone.global_patterns` | trigger, count | 엔진 | 엔진 |
 | `tone.baselines` | user_id, avg_len, polite_rate, softener_rate, n | 엔진 | 엔진 |
 | `tone.analysis_traces` | trace_id, path, user_id, room_id, experts(jsonb), risk, alert, latency_ms, created_at | 엔진 | 엔진 |
 
+- RLS는 `is_member(room_id)` security definer 함수 하나로 통일한다. 방·초대는 함수(`create_group`, `create_invite`, `accept_invite`)로만 만든다. `accept_invite(code)`는 1:1 방을 만들거나 그룹에 참여시킨다.
+- 그룹방은 최대 8명이다.
+- `push_tokens.platform = 'web'`이면 token 칸에 웹 푸시 구독 JSON을 넣는다.
+- 입력 중 표시는 DB에 남기지 않는다(Realtime Presence).
 - `tone_events.kind`: `hint_shown`, `detail_opened`(엔진이 기록), `option_chosen`(choice: A/B/original), `sent_with_hint`, `sent_after_fix`.
-- 하소연 원문 칸은 어디에도 없다. `analysis_traces`에도 문장 원문은 넣지 않는다(겉 신호와 전문가 출력만).
-- 관계 ID는 `room_id`를 그대로 쓴다(1:1 방 = 관계 하나).
+- 하소연 원문 칸은 어디에도 없다. `analysis_traces`, `mirror_attempts`에도 문장 원문은 넣지 않는다(`analysis_traces`는 겉 신호와 전문가 출력만).
+- 관계는 방마다 하나다(`rooms.relation`: 친구, 팀원 등). 보낸 사람 패턴은 (보낸 사람, 관계) 단위라 같은 관계의 다른 방에도 적용된다(3-4).
 
 ---
 
@@ -186,12 +252,12 @@ sequenceDiagram
 
 | 단계 | 하는 일 | 구현 |
 |---|---|---|
-| L0 거르기 | 겉 신호(이유 없는 거절, 마침표, 짧은 답 등)와 상대 말의 무게, 기준선 이탈, 관계 패턴 일치로 사전점수 | 규칙 (`layers/gate.py`) |
+| L0 거르기 | 겉 신호(이유 없는 거절, 마침표, 짧은 답 등)와 상대 말의 무게, 기준선 이탈, 보낸 사람 패턴 일치로 사전점수 | 규칙 (`layers/gate.py`) |
 | L1 맥락 전문가 | 상대 직전 말의 의도, 상태, 기대할 답의 요소 | LLM |
 | L2 말투 전문가 | 다섯 가지 읽힘의 분포 + 근거 표현 | LLM 여러 개 + 분류기 |
 | L3 집계기 | 계산식 앙상블, 의견 차이, 기권 | 코드 (`layers/aggregate.py`) |
 | 심판 | 상세 경로에서 의견이 갈릴 때만 | LLM |
-| 고쳐 쓰기 | 최소 수정 후보 2개 + 세 가지 확인 | LLM + 코드 |
+| 고쳐 쓰기 | 최소 수정 후보 2개 + 세 가지 확인. 의도는 여기에만 넣는다 | LLM + 코드 |
 | 문구 검사 | 템플릿 + 금지어 | 코드 (`layers/guard.py`) |
 | L4 피드백 전문가 | 받은 메시지 + 하소연 → 패턴 태그 | LLM (비동기) |
 
@@ -203,7 +269,7 @@ sequenceDiagram
 class ExpertRequest(BaseModel):
     path: Literal["realtime", "detail"]
     draft: str                 # 개인정보 가린 상태
-    turns: list[Turn]          # 최근 8개, 개인정보 가린 상태
+    turns: list[Turn]          # 최근 8개(화자 표시, 답장이면 원문이 맨 앞), 개인정보 가린 상태
     relation: str
     signals: list[str]         # L0 결과
 
@@ -231,16 +297,16 @@ class Expert(Protocol):
 # engine/config/models.yaml (형식)
 providers:
   nvidia: {base_url: https://integrate.api.nvidia.com/v1, api_key_env: NVIDIA_API_KEY, rpm: 40}
-  gemini: {base_url: https://generativelanguage.googleapis.com/v1beta/openai, api_key_env: GEMINI_API_KEY, rpm: 15}
+  gemini: {base_url: https://generativelanguage.googleapis.com/v1beta/openai, api_key_env: GEMINI_API_KEY, rpm: 15}  # 합성 문장 평가만. experts·fallback에 넣지 않는다
   github: {base_url: https://models.github.ai/inference, api_key_env: GITHUB_TOKEN, rpm: 10}
-  local:  {base_url: http://localhost:8080/v1, api_key_env: LOCAL_API_KEY, rpm: 600}
+  local:  {base_url: http://localhost:11434/v1, api_key_env: LOCAL_API_KEY, rpm: 600}   # Ollama
   mock:   {}
 experts:
   - {id: ctx_fast,   role: context, model: nvidia:deepseek-ai/deepseek-v4.1-flash, prompt: context, paths: [realtime]}
   - {id: ctx_deep,   role: context, model: nvidia:moonshotai/kimi-k3,              prompt: context, paths: [detail]}
   - {id: tone_ds,    role: tone,    model: nvidia:deepseek-ai/deepseek-v4.1-flash, prompt: tone,    paths: [realtime, detail], weight: 1.0}
   - {id: tone_hcx,   role: tone,    model: local:HyperCLOVAX-SEED-Text-Instruct-1.5B, prompt: tone, paths: [realtime, detail], weight: 1.0, optional: true}
-  - {id: tone_gem,   role: tone,    model: gemini:gemini-flash-latest,             prompt: tone,    paths: [detail], weight: 1.0}
+  - {id: tone_nv2,   role: tone,    model: "nvidia:<다른 계열 모델 — 설정에서 정함>", prompt: tone, paths: [detail], weight: 1.0}
   - {id: tone_kce,   role: tone,    model: classifier:kcelectra-tone,              paths: [realtime], weight: 0.5, optional: true}
   - {id: judge,      role: judge,   model: nvidia:moonshotai/kimi-k3,              prompt: judge,   paths: [detail]}
   - {id: rewrite,    role: rewrite, model: nvidia:deepseek-ai/deepseek-v4.1-flash, prompt: rewrite, paths: [detail]}
@@ -261,6 +327,10 @@ aggregate:
 
 모델 ID는 2026-10 기준 build.nvidia.com 무료 엔드포인트다. 목록이 자주 바뀌므로 설정에서만 바꾼다.
 
+- Gemini는 실제 대화 문장이 지나가는 경로(실시간·상세·털어놓기·거울)의 전문가와 폴백 목록에 넣지 않는다. 대조 세트·상황 카드 같은 합성 문장 평가에만 쓴다.
+- 상세 경로의 두 번째 말투 전문가(`tone_nv2`)는 `tone_ds`와 다른 계열의 NVIDIA 모델로 고른다. 앙상블의 의견 차이·심판·전문가 비교(T-20)는 NVIDIA 두 계열 + 로컬 SEED로 한다.
+- `local`은 Ollama(GGUF 양자화)다. `optional: true`라 없어도 돈다.
+
 ### 6-3. 집계기
 
 ```
@@ -269,7 +339,7 @@ risk = sigmoid( w0 + w1·prior + w2·Σk(αk·negk)/Σk(αk) + w3·violation + w
 
 - `negk`: k번째 말투 전문가의 부정 읽힘(차갑게 + 성의없게 + 화나게) 확률. `αk = weight × confidence`.
 - `violation`: 맥락 전문가의 기대 요소 중 문장에 없는 비율.
-- `pattern`: 관계 패턴 일치 점수. `global_patterns[trigger] ≥ global_min_obs`일 때만 반영.
+- `pattern`: 보낸 사람 패턴(`tone.sender_patterns`, `active_from`이 지난 것) 일치 점수. `global_patterns[trigger] ≥ global_min_obs`일 때만 반영.
 - 의견 차이 = 말투 전문가 `neg`의 최대 − 최소. `max_disagreement`를 넘으면 실시간은 기권, 상세는 심판.
 - 시간 안에 못 온 전문가는 빼고 계산한다. 말투 전문가가 하나도 없으면 기권.
 - 가중치(w, α)는 평가 세트가 30쌍 이상 모이면 trace에서 학습한다(로지스틱 회귀). 기준값은 정밀도 0.8 이상이 되는 값.
@@ -279,10 +349,10 @@ risk = sigmoid( w0 + w1·prior + w2·Σk(αk·negk)/Σk(αk) + w3·violation + w
 - 역할별 전문가는 동시에 부른다(`asyncio.gather` + 전문가별 deadline).
 - 공급자·모델별 토큰 버킷. 한도에 걸리면 기다리지 않고 폴백.
 - 같은 모델 3회 연속 실패 → 60초 건너뜀.
-- 같은 (전문가, 입력) 결과는 캐시.
+- 같은 (전문가, 입력) 결과는 캐시. 의도 칩만 바꾼 상세 재호출에서는 판정 전문가가 여기 걸린다(3-3).
 - 출력은 `<think>…</think>` 제거 → 첫 JSON 객체 추출 → pydantic 검사. 실패하면 폴백.
 - 선택 기능: 실시간 경로에서 같은 역할의 빠른 모델 두 개에 동시에 보내고 먼저 온 유효한 답을 쓴다(지연 편차 감소, 호출 2배).
-- 외부로 보내기 전 `pii.mask`(전화번호, 이메일, 주민번호·계좌 모양 숫자).
+- `pii.mask`는 파이프라인 입구에서 한 번 하고, 모든 레이어는 가린 문장만 받는다. 가리는 것: 전화번호, 이메일, 주민번호·계좌 모양 숫자, 참여자 이름. 대상: 초안, 최근 대화, 의도, 하소연, 거울 카드 문장.
 
 ### 6-5. 문구 규칙
 - 제목 템플릿: "차갑게 / 성의 없게 / 화난 것처럼 느껴질 수도 있어요".
@@ -299,18 +369,26 @@ risk = sigmoid( w0 + w1·prior + w2·Σk(αk·negk)/Σk(αk) + w3·violation + w
 | 실시간 힌트 | 디바운스 후 1.5초 이내, 넘으면 표시 안 함 |
 | 알림 정밀도 | 대조 세트 기준 0.8 이상 (재현율보다 우선) |
 | 장애 시 | 엔진·모델 장애가 채팅을 막지 않음. 힌트만 사라짐 |
-| 개인정보 | 하소연 원문 미저장, 외부 전송 전 마스킹, 실제 대화는 Gemini 무료 등급 금지 |
+| 개인정보 | 하소연 원문 미저장, 파이프라인 입구에서 한 번 마스킹, 실제 대화(거울 카드 포함)는 Gemini 금지, 사진은 모델에 보내지 않음 |
 | 무료 한도 | 파일럿 30명 기준 NVIDIA 모델당 분당 40회 안에서 운영 (L0 통과율 10% 가정) |
 | Supabase 무료 플랜 | DB 500MB, Realtime 동시 연결 200, 1주 비활성 시 일시정지 |
 
 ---
 
-## 8. 환경 변수
+## 8. 환경 변수와 실행 환경
 
 | 위치 | 변수 |
 |---|---|
 | 앱 | `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`, `EXPO_PUBLIC_ENGINE_URL` |
-| 엔진 | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_DB_URL`, `HOOK_SECRET`, `NVIDIA_API_KEY`, `GEMINI_API_KEY`, `GITHUB_TOKEN`, `LOCAL_API_KEY`, `EXPO_ACCESS_TOKEN`(선택), `FORCE_MOCK` |
+| 엔진 | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_DB_URL`, `HOOK_SECRET`, `NVIDIA_API_KEY`, `GEMINI_API_KEY`(합성 문장 평가만), `GITHUB_TOKEN`, `LOCAL_API_KEY`, `EXPO_ACCESS_TOKEN`(선택), `FORCE_MOCK`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` |
+| 협업 스크립트 | `TONE_ACCOUNT`(`a`·`b`, 셸에서 설정) |
+
+- 이름 목록은 `.env.example`에 있다. 값은 `.env`(git 밖)에만 넣는다.
+- 웹 푸시 구독에는 앱도 `VAPID_PUBLIC_KEY`가 필요하다. 앱에 넘기는 방법은 T-28에서 정한다.
+- dev Supabase는 클라우드 프로젝트(서울 리전)다. 로컬 Supabase(Docker)는 쓰지 않는다. 8GB 맥의 메모리는 로컬 SEED 말투 전문가에 쓴다. DB 테스트는 PGlite로 한다(`supabase/tests`). pilot 프로젝트는 나중에 따로 만든다.
+- dev 웹훅은 `cloudflared` 임시 터널로 로컬 엔진에 닿게 한다. pilot은 T-29의 배포 서버로 보낸다.
+- 키가 없으면 `FORCE_MOCK`으로 엔진·평가·앱을 모두 돌린다.
+- 아이폰 참가자는 웹 빌드를 Safari '홈 화면에 추가'로 쓴다. 웹 푸시는 iOS 16.4 이상, 홈 화면에 추가한 경우만 동작한다.
 
 ---
 
@@ -320,9 +398,9 @@ risk = sigmoid( w0 + w1·prior + w2·Σk(αk·negk)/Σk(αk) + w3·violation + w
 |---|---|---|
 | `harness/router.py`, `providers.py`, `schemas.py`, `korean.py`, `pii.py`, `prompts.py`, `mock_rules.py` | `engine/harness/` | 역할 이름 대신 전문가 ID로 호출 |
 | `layers/gate.py` | `engine/layers/gate.py` | 그대로 |
-| `layers/judge.py` | `engine/layers/aggregate.py` | 전문가 N개, α 가중치 |
+| `layers/judge.py` | `engine/layers/aggregate.py` | 전문가 N개, α 가중치. 심판 호출(`arbitrate`)이 `pii.mask`를 빠뜨렸으니 입구에서 가린 문장을 받게 고친다 |
 | `layers/hint.py` | `engine/layers/guard.py` | 그대로 |
-| `layers/rewrite.py`, `context.py`, `tone.py`, `feedback.py` | `engine/experts/` + `pipeline.py` | 전문가 인터페이스로 감싸기 |
+| `layers/rewrite.py`, `context.py`, `tone.py`, `feedback.py` | `engine/experts/` + `pipeline.py` | 전문가 인터페이스로 감싸기. 레이어마다 하던 `pii.mask`는 파이프라인 입구 한 번으로 모은다(`rewrite.py`는 빠뜨렸다) |
 | `harness/store.py` | `engine/app/db.py` | JSON 파일 → `tone` 스키마 표 |
 | `prompts/*.md`, `eval/` | `engine/prompts/`, `eval/` | 그대로 |
 | `server/` (FastAPI 채팅), `server/static/index.html` | 쓰지 않음 | 채팅은 Supabase, 화면은 Expo |
@@ -340,3 +418,6 @@ risk = sigmoid( w0 + w1·prior + w2·Σk(αk·negk)/Σk(αk) + w3·violation + w
 | 전문가 플러그인 + 계산식 집계 | 모델 추가가 설정 한 줄, 결과 설명·학습 가능 | 모델 투표, 단일 대형 모델 |
 | 작업 큐는 엔진 안 asyncio | 서버 하나 | Redis + arq (재시작 시 작업 유실이 문제 되면 전환) |
 | Realtime은 postgres_changes | 설정 간단, 파일럿 규모에 충분 | Broadcast (구독자 수천 명 이상일 때) |
+| 그룹방 도입 (3~8명) | 누가 털어놓았는지는 3명 이상 방에서만 감출 수 있다. 파일럿의 팀플 상황 | 1:1 방만 |
+| Gemini는 실제 문장 경로에서 뺌 | 상세 경로의 `tone_gem`이 실제 대화를 Gemini 무료 등급에 보내지 않는 규칙(CLAUDE.md 9)과 충돌했다. 합성 문장 평가에만 쓴다 | 상세 경로의 두 번째 말투 전문가로 Gemini |
+| PR 대신 `scripts/land` | 원격 저장소가 없다. 같은 맥의 두 계정이 worktree와 잠금으로 나눠 일하고, land가 테스트와 평가 게이트를 돌린다 | GitHub PR (사람 팀원이 다른 컴퓨터에서 같이 쓰게 되면 전환) |
