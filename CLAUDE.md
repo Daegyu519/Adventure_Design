@@ -61,8 +61,8 @@
 
 | 용도 | 명령 |
 |---|---|
-| 엔진 실행 | (T-05) |
-| 엔진 테스트 | (T-05) |
+| 엔진 실행 | `cd engine && uv run uvicorn app.main:app --reload --env-file ../.env` |
+| 엔진 테스트 | `cd engine && uv run pytest -q` |
 | 앱 실행 | (T-04) |
 | 타입 생성 | (T-14, T-03a) |
 | 평가 | (T-17) |

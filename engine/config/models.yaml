@@ -1,0 +1,12 @@
+# 최소본. Task 5에서 전체 형식(experts, fallback, paths, aggregate)으로 교체한다.
+# 모델 이름은 코드에 없고 여기에만 둔다.
+providers:
+  nvidia:
+    base_url: https://integrate.api.nvidia.com/v1
+    api_key_env: NVIDIA_API_KEY
+    rpm: 40
+  mock: {}
+roles:
+  context_fast:
+    - nvidia:deepseek-ai/deepseek-v4.1-flash
+    - mock:context
