@@ -222,10 +222,10 @@ sequenceDiagram
 | 표 | 칸 | 읽기 | 쓰기 |
 |---|---|---|---|
 | `public.profiles` | id(=auth.users.id), name, tone_hint_on, created_at | 본인, 같은 방 멤버 | 본인 |
-| `public.invites` | code, inviter_id, room_id(그룹 초대면 채움), relation, max_uses, uses, expires_at | 초대한 사람 | `create_invite`, `accept_invite` 함수만 |
+| `public.invites` | code(8자 A–Z0–9), inviter_id, room_id(그룹 초대면 채움), relation, max_uses, uses, expires_at | 초대한 사람 | `create_invite`, `accept_invite` 함수만 |
 | `public.rooms` | id, kind(`direct`·`group`), title(그룹만), relation, created_by, created_at | 방 멤버 | `create_group`, `accept_invite` 함수만 |
 | `public.room_members` | room_id, user_id, joined_at, last_read_at, muted. PK(room_id, user_id) | 방 멤버 | 추가는 함수만. 본인 행의 last_read_at, muted만 수정 |
-| `public.messages` | id, room_id, sender_id, text, image_path, reply_to(같은 방), mentions(uuid[]), created_at | 방 멤버 | 멤버, `sender_id = auth.uid()`만. 수정·삭제 없음 |
+| `public.messages` | id(bigint), room_id, sender_id, text(≤2000자), image_path(`<room_id>/<이름>`), reply_to(bigint, 같은 방, 원문이 지워지면 null), mentions(uuid[], ≤8, 방 멤버만), created_at | 방 멤버 | 멤버, `sender_id = auth.uid()`만. 수정·삭제 없음 |
 | `public.reactions` | message_id, user_id, emoji(고정 6개 중), created_at. PK(message_id, user_id) | 방 멤버 | 멤버, 본인 행만 |
 | `public.push_tokens` | user_id, token, platform(`ios`·`android`·`web`) | 본인 | 본인 |
 | `public.tone_events` | id, room_id, user_id, kind, risk, top_reading, signals(jsonb), choice, created_at | 본인 | 본인 행 insert만 |
@@ -238,7 +238,9 @@ sequenceDiagram
 | `tone.analysis_traces` | trace_id, path, user_id, room_id, experts(jsonb), risk, alert, latency_ms, created_at | 엔진 | 엔진 |
 
 - RLS는 `is_member(room_id)` security definer 함수 하나로 통일한다. 방·초대는 함수(`create_group`, `create_invite`, `accept_invite`)로만 만든다. `accept_invite(code)`는 1:1 방을 만들거나 그룹에 참여시킨다.
-- 그룹방은 최대 8명이다.
+- 그룹방은 최대 8명(1:1은 2명)이다. 상한은 `room_members` insert 트리거가 방 행을 잠그고 센다(READ COMMITTED 전제).
+- 초대 코드는 8자(A–Z0–9), 72시간 유효. 1:1 초대는 `max_uses` 1, 그룹 초대는 7이고 그룹 멤버만 만든다. 이미 그 방 멤버(1:1은 이미 방이 있는 두 사람)가 다시 수락하면 만료·소진 여부와 관계없이 그 방을 돌려준다.
+- `messages.reply_to`는 `bigint references messages(id) on delete set null`이고 같은 방 메시지만 가리킨다. `image_path`는 `<room_id>/<이름>` 한 단계만 허용한다(이름은 `[A-Za-z0-9_-][A-Za-z0-9._-]*`, `..` 금지). `mentions`는 8개 이하, 그 방 멤버만. 셋 다 DB 제약·insert 트리거로 막는다.
 - `push_tokens.platform = 'web'`이면 token 칸에 웹 푸시 구독 JSON을 넣는다.
 - 입력 중 표시는 DB에 남기지 않는다(Realtime Presence).
 - `tone_events.kind`: `hint_shown`, `detail_opened`(엔진이 기록), `option_chosen`(choice: A/B/original), `sent_with_hint`, `sent_after_fix`.

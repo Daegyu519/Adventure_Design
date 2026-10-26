@@ -66,8 +66,8 @@
 | 앱 실행 | (T-04) |
 | 타입 생성 | (T-14, T-03a) |
 | 평가 | (T-17) |
-| 마이그레이션 | (T-03a) |
-| DB 테스트 | (T-03a) |
+| 마이그레이션 | `supabase/migrations/*.sql` (적용은 T-02 이후 `supabase db push`) |
+| DB 테스트 | `cd supabase && npm test` |
 | 작업 잡기 | `scripts/claim T-07 login` (마지막 줄이 worktree 경로) |
 | 합치기 | worktree 안에서 `scripts/land T-07` |
 | 검사 | `scripts/check` |
