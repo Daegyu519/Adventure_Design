@@ -70,6 +70,14 @@ def check(tokens: dict) -> list[str]:
 
 
 def _self_test() -> None:
+    # 상수가 바뀌면 바로 실패한다(기준 완화·쌍 삭제 방지)
+    assert MIN_RATIO == 4.5, f"MIN_RATIO가 바뀜: {MIN_RATIO}"
+    assert len(PAIRS) == 7 and set(PAIRS) == {
+        ("text", "background"), ("textMuted", "background"), ("onPrimary", "primary"),
+        ("onBubbleOther", "bubbleOther"), ("hintText", "hintBg"), ("onMirror", "mirror"),
+        ("danger", "background"),
+    }, f"PAIRS가 바뀜: {PAIRS}"
+
     assert round(contrast("#000000", "#FFFFFF"), 2) == 21.0
     assert contrast("#777777", "#777777") == 1.0
     assert is_yellow_brown("#FEE500")       # 카톡 노랑
@@ -77,6 +85,18 @@ def _self_test() -> None:
     assert is_yellow_brown("#8B5A2B")       # 갈색 (색상각 29°)
     assert not is_yellow_brown("#FFF7ED")   # 아주 옅은 배경은 제외
     assert not is_yellow_brown("#0F766E")   # 틸
+
+    # check() 자체: 통과하는 가짜 팔레트(흰 바탕에 검은 글자)를 망가뜨리면 오류가 나와야 한다
+    fg = {f for f, _ in PAIRS}
+    good = {k: "#000000" if k in fg else "#FFFFFF" for k in COLOR_KEYS}
+    assert check({"light": good, "dark": good}) == []
+    errs = check({"light": {**good, "textMuted": "#9AA5A3"}, "dark": good})
+    assert any(e.startswith("light: textMuted #9AA5A3 / background") for e in errs), errs
+    for mode in ("light", "dark"):
+        for key in COLOR_KEYS:
+            for bad in ("#FEE500", "#8B5A2B"):
+                t = {"light": good, "dark": good, mode: {**good, key: bad}}
+                assert f"{mode}: {key} {bad} 노란·갈색 계열" in check(t), (mode, key, bad)
 
 
 if __name__ == "__main__":
