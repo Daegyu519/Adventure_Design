@@ -14,10 +14,10 @@
 | T-00 | 협업 하네스: `docs/COLLAB.md`, `scripts/claim`·`land`·`check`, `.coord/`(git 밖) | 공통 | - | 두 계정이 같은 작업을 동시에 잡으면 하나만 성공, 루트가 더럽거나 check가 실패하면 land가 합치지 않음. 확인: `scripts/test_coord.sh` ALL PASS | 완료 |
 | T-01 | 모노레포 초기화: 폴더 구조(ARCHITECTURE 2장), `.gitignore`, `README`, `.env.example`, 프로토타입을 `prototype/`에 둠. 범위 보완(그룹방, 거울, 웹 푸시, land)을 기준 문서에 반영 | 공통 | T-00 | 폴더 구조가 ARCHITECTURE와 같다. 확인: `find . -path ./prototype -prune -o -type d -print`에 최상위 폴더 apps/mobile, engine, supabase/migrations, eval, docs, design이 모두 있고 prototype/tone-harness가 있음 | 완료 |
 | D-01 | 디자인 시스템 + HTML 목업 | 앱 | T-01 | MASTER.md, tokens.json 대비 검사 통과, 목업을 사용자가 승인 | 대기 |
-| T-02 | Supabase 프로젝트 2개(dev, pilot) 생성, Supabase CLI 연결 | DB | T-01 | `supabase link`로 dev 연결 | 대기 |
+| T-02 | Supabase dev 프로젝트(클라우드, 서울) 생성, Supabase CLI 연결. pilot 프로젝트는 나중에 따로 만든다(T-29에서 전환) | DB | T-01 | `supabase link`로 dev 연결 | 대기 |
 | T-03a | 채팅 스키마: `profiles`, `rooms`, `room_members`, `messages`, `reactions`, `invites`, 함수(`is_member`, `create_group`, `create_invite`, `accept_invite`), RLS | DB | T-01 | PGlite RLS 테스트 통과 | 대기 |
 | T-03b | `tone` 스키마(API 비공개), `tone_events`, `mirror_attempts`, `push_tokens`, Realtime·Storage(`chat-images`) platform 마이그레이션 | DB | T-03a | PGlite RLS 테스트 통과 | 대기 |
-| T-04 | Expo 앱 초기화: expo-router, TypeScript strict, Supabase 클라이언트, 환경 변수 | 앱 | T-01 | 웹·iOS·Android에서 빈 화면 실행 | 대기 |
+| T-04 | Expo 앱 초기화: expo-router, TypeScript strict, Supabase 클라이언트, 환경 변수 | 앱 | T-01, D-01 | 웹·iOS·Android에서 빈 화면 실행 | 대기 |
 | T-05 | 엔진 초기화: FastAPI, `settings.py`, `models.yaml` 로딩, `/health`, pytest | 엔진 | T-01 | `/health` 200, 테스트 1개 통과 | 대기 |
 | T-06 | 엔진 인증: Supabase JWKS로 토큰 검증하는 의존성, 방 멤버 확인 헬퍼(`room_members`) | 엔진 | T-05 | 정상·만료·위조 토큰, 비참여자 403 테스트 | 대기 |
 
@@ -25,10 +25,10 @@
 
 | ID | 작업 | 영역 | 선행 | 완료 기준 | 상태 |
 |---|---|---|---|---|---|
-| T-07 | 로그인 화면(이메일 OTP 또는 매직링크), 첫 로그인 시 `profiles` 생성 | 앱 | T-03a, T-04 | 웹과 폰에서 로그인 후 프로필 행 생성 | 대기 |
+| T-07 | 로그인 화면(이메일 OTP 또는 매직링크), 첫 로그인 시 `profiles` 생성 | 앱 | T-02, T-03a, T-04 | 웹과 폰에서 로그인 후 프로필 행 생성 | 대기 |
 | T-08 | 방 만들기·초대 화면: 초대 코드 만들기·입력, `accept_invite`로 1:1 방 생성 또는 그룹 참여, 그룹 만들기(3~8명), 관계(친구·팀원 등) 선택 | 앱, DB | T-07 | 두 계정이 초대 코드로 연결되어 1:1 방 1개 생성, 세 계정이 그룹방 하나에 참여 | 대기 |
 | T-09 | 대화 목록(1:1·그룹, 안 읽은 수) + 대화방, 메시지 보내기, Realtime 수신, 과거 메시지 불러오기. 답장, 공감, 읽음, 입력 중(Presence), 사진, 멘션, 방 정보 화면(멤버, 방 안 검색, 알림 끄기) | 앱 | T-08, T-03b | 두 기기에서 서로 보낸 메시지가 1초 안에 보임. 답장·공감·읽음·입력 중·사진·멘션·검색·알림 끄기가 1:1 방과 그룹방에서 동작 | 대기 |
-| T-10 | DB 웹훅 → `POST /hooks/message`, `X-Hook-Secret` 검증 | 엔진, DB | T-03a, T-05 | 메시지를 보내면 엔진 로그에 수신 기록, 비밀값 틀리면 401 | 대기 |
+| T-10 | DB 웹훅 → `POST /hooks/message`, `X-Hook-Secret` 검증 | 엔진, DB | T-02, T-03a, T-05 | 메시지를 보내면 엔진 로그에 수신 기록, 비밀값 틀리면 401 | 대기 |
 | T-34 | 첫 실행 동의 화면: 파일럿 동의, AI 데이터 처리(하소연 원문 미저장 등 개인정보 규칙), iOS 홈 화면 추가 안내(웹 푸시는 iOS 16.4 이상) | 앱 | T-04 | 첫 실행에만 뜨고, 동의해야 로그인으로 넘어감 | 대기 |
 
 ## 단계 2. AI 엔진 핵심 (실시간 힌트)
@@ -36,12 +36,12 @@
 | ID | 작업 | 영역 | 선행 | 완료 기준 | 상태 |
 |---|---|---|---|---|---|
 | T-11 | 프로토타입 하네스 이전: router, providers, schemas, korean, pii, prompts, mock_rules, gate, guard | 엔진 | T-05 | 프로토타입의 해당 테스트가 `engine`에서 통과 | 대기 |
-| T-12 | 전문가 인터페이스(`experts/base.py`), 레지스트리, `LLMExpert`. `models.yaml`의 `experts` 형식 | 엔진 | T-11 | 설정만 바꿔 전문가를 추가·제거할 수 있음을 테스트로 확인 | 대기 |
-| T-13 | 집계기: 말투 전문가 N개 가중 평균, 의견 차이, 늦은 전문가 제외, 기권, 관계 패턴 조건 | 엔진 | T-12 | 전문가 1개·2개·0개, 의견 갈림 케이스 테스트 | 대기 |
+| T-12 | 전문가 인터페이스(`experts/base.py`), 레지스트리, `LLMExpert`. `models.yaml`의 `experts` 형식. `pii.mask` 입구 한 곳 + 이름 복원 | 엔진 | T-11 | 설정만 바꿔 전문가를 추가·제거할 수 있음, 전문가에는 가린 문장만 가고 응답의 이름은 복원되며 대응표가 로그·trace에 없음을 테스트로 확인 | 대기 |
+| T-13 | 집계기: 말투 전문가 N개 가중 평균, 의견 차이, 늦은 전문가 제외, 기권, 보낸 사람 패턴 조건(`sender_patterns`, `active_from`, `global_min_obs`) | 엔진 | T-12 | 전문가 1개·2개·0개, 의견 갈림 케이스 테스트 | 대기 |
 | T-14 | `POST /v1/hint`: 토큰 → 방 확인 → 최근 대화 8개 → 실시간 경로 → 문구 검사. OpenAPI 타입 생성 | 엔진 | T-06, T-13 | mock으로 1.5초 안 응답, 시간 초과 시 `hint=null` | 대기 |
 | T-15 | 앱 입력 중 힌트: 0.5초 디바운스, seq, AbortController, 입력창 위 힌트 영역, `hint_shown`·`sent_with_hint`·`sent_after_fix` 기록 | 앱 | T-09, T-14, T-03b | 지은·민수 시나리오에서 힌트가 보낸 사람에게만 뜸 | 대기 |
 | T-16 | 대조 세트 30쌍 라벨링 (같은 문장, 다른 맥락). 팀원이 각자 블라인드로 라벨 후 합의 | 평가 | - | `eval/contrast_set.jsonl` 30쌍 이상, 라벨 일치율 기록 | 대기 |
-| T-17 | 평가 스크립트: 엔진 실시간·상세 경로로 정밀도·재현율·기권률·맥락 구분 계산. CI에서 mock으로 실행 | 평가 | T-14, T-16 | 실제 키로 1회 실행한 결과표 저장 | 대기 |
+| T-17 | 평가 스크립트: 엔진 실시간·상세 경로로 정밀도·재현율·기권률·맥락 구분 계산. `scripts/check`(land)에서 mock으로 실행, `eval/baseline.json` 생성 | 평가 | T-14, T-16 | 실제 키로 1회 실행한 결과표 저장, `eval/baseline.json` 있음 | 대기 |
 
 ## 단계 3. 앙상블과 살펴보기
 
@@ -72,7 +72,7 @@
 |---|---|---|---|---|---|
 | T-29 | 엔진 배포: Dockerfile, 서버(학교 서버 또는 VM), 공개 HTTPS(Cloudflare Tunnel 등), pilot Supabase로 전환 | 배포 | T-24 | 컨테이너 실행, 외부 네트워크에서 `/health` 200, 웹훅 수신 | 대기 |
 | T-30 | 웹 빌드 배포(`npx expo export --platform web`, HTTPS, 웹 푸시 서비스 워커 포함), Android APK 배포 | 배포 | T-22, T-28 | 참가자가 링크·APK로 접속, 아이폰은 홈 화면에 추가해서 실행 | 대기 |
-| T-31 | 파일럿: 동의서, 10~15쌍 모집, 1주 운영, 이벤트 집계(알림 수 변화, 고친 비율) | 공통 | T-29, T-30 | 집계표와 발표용 그래프 | 대기 |
+| T-31 | 파일럿: 동의서, 10~15쌍 + 팀 그룹방 모집, 1주 운영, 이벤트 집계(알림 수 변화, 고친 비율) | 공통 | T-29, T-30 | 집계표와 발표용 그래프 | 대기 |
 
 ## 선택
 

@@ -120,7 +120,7 @@ sequenceDiagram
   participant Engine
   participant DB as Supabase DB
   participant Experts as 전문가들
-  App->>Engine: POST /v1/hint (room_id, text, seq) + Bearer 토큰
+  App->>Engine: POST /v1/hint (room_id, text, seq, reply_to?) + Bearer 토큰
   Engine->>Engine: 토큰 검증(JWKS) · 방 멤버 확인(room_members)
   Engine->>DB: 최근 대화 8개, 보낸 사람 패턴, 기준선
   Engine->>Engine: pii.mask (초안 · 최근 대화, 참여자 이름 포함)
@@ -134,7 +134,7 @@ sequenceDiagram
 - 앱은 0.5초 디바운스로 보내고, 새 입력이 오면 `AbortController`로 이전 요청을 취소한다. 응답은 최신 `seq`만 표시한다.
 - 전체 1.5초(디바운스 제외)를 넘기면 엔진은 `hint=null`을 돌려준다.
 - 힌트가 떠 있어도 보내기는 막지 않는다.
-- 최근 대화 8개에는 화자 표시(나 / 상대1 / 상대2…)를 붙인다. 입력 중인 문장이 답장이면 원문 메시지를 맥락 맨 앞에 넣는다.
+- 최근 대화 8개에는 화자 표시(나 / 상대1 / 상대2…)를 붙인다. 입력 중인 문장이 답장이면(`reply_to`, 4장) 원문 메시지를 맥락 맨 앞에 넣는다.
 - 그룹방 판정 기준은 "이 방 사람들이 읽을 때"다. 관계는 방 단위 하나다.
 
 | 구간 | 목표 |
@@ -199,8 +199,8 @@ sequenceDiagram
 
 | 메서드 | 경로 | 요청 | 응답 |
 |---|---|---|---|
-| POST | `/v1/hint` | `{room_id, text(1~500자), seq}` | `{seq, hint: {title, detail} \| null, trace_id}` |
-| POST | `/v1/detail` | `{room_id, text, intent?}` | `{alert, top_reading, readings: {읽힘: "자주"\|"가끔"\|"드물어요"}, why: [str], options: [{label, text, keep, change}], footnote, trace_id}` |
+| POST | `/v1/hint` | `{room_id, text(1~500자), seq, reply_to?}` | `{seq, hint: {title, detail} \| null, trace_id}` |
+| POST | `/v1/detail` | `{room_id, text, intent?, reply_to?}` | `{alert, top_reading, readings: {읽힘: "자주"\|"가끔"\|"드물어요"}, why: [str], options: [{label, text, keep, change}], footnote, trace_id}` |
 | POST | `/v1/feedback` | `{room_id, message_id, text(1~1000자)}` | 202 `{ack}` |
 | POST | `/v1/mirror/today` | 없음 | `{cards: [{card_id, kind: "roleplay"\|"receive"\|"predict", persona, relation, situation, message}]}` |
 | POST | `/v1/mirror/answer` | `{card_id, reply?, score?, predicted?}` | `{readings, inner_voice?, reveal?, options?, gap?}` |
@@ -210,6 +210,7 @@ sequenceDiagram
 
 - 오류: 401(토큰), 403(방 멤버 아님 / 받은 메시지 아님), 422(형식), 429(사용자별 요청 한도).
 - 방 멤버 확인은 `room_members`로 한다.
+- `reply_to`는 답장 대상 메시지 id다. 엔진은 같은 방 메시지인지 확인하고(아니면 거부), 그 문장은 DB에서 읽는다. 앱이 보낸 문장은 믿지 않는다. 이 메시지를 맥락 맨 앞에 넣는다.
 - 읽힘 키는 `차갑게, 성의없게, 화나게, 무난하게, 따뜻하게` 다섯 개로 고정.
 - `intent`는 의도 칩 `단호하게, 미안하게, 가볍게` 중 하나다. 고쳐 쓰기에만 들어간다(3-3).
 - 요청·응답 모델은 `engine/app/contracts.py`의 pydantic이 원본이다. 앱 타입은 OpenAPI에서 `openapi-typescript`로, DB 타입은 `supabase gen types typescript`로 생성한다.
@@ -267,11 +268,12 @@ sequenceDiagram
 
 ```python
 class ExpertRequest(BaseModel):
-    path: Literal["realtime", "detail"]
+    path: Literal["realtime", "detail", "mirror"]
     draft: str                 # 개인정보 가린 상태
     turns: list[Turn]          # 최근 8개(화자 표시, 답장이면 원문이 맨 앞), 개인정보 가린 상태
     relation: str
     signals: list[str]         # L0 결과
+    intent: str | None         # 고쳐 쓰기 요청에만. 판정 전문가는 None이라 캐시에 걸린다
 
 class ExpertResult(BaseModel):
     expert_id: str
@@ -353,6 +355,7 @@ risk = sigmoid( w0 + w1·prior + w2·Σk(αk·negk)/Σk(αk) + w3·violation + w
 - 출력은 `<think>…</think>` 제거 → 첫 JSON 객체 추출 → pydantic 검사. 실패하면 폴백.
 - 선택 기능: 실시간 경로에서 같은 역할의 빠른 모델 두 개에 동시에 보내고 먼저 온 유효한 답을 쓴다(지연 편차 감소, 호출 2배).
 - `pii.mask`는 파이프라인 입구에서 한 번 하고, 모든 레이어는 가린 문장만 받는다. 가리는 것: 전화번호, 이메일, 주민번호·계좌 모양 숫자, 참여자 이름. 대상: 초안, 최근 대화, 의도, 하소연, 거울 카드 문장.
+- 고쳐 쓰기 후보(거울 `options` 포함)의 이름 자리표시는 엔진이 응답 직전에 원래 이름으로 되돌린다. 자리표시→이름 대응표는 그 요청의 메모리에만 두고 로그·trace에 남기지 않는다. 자리표시는 이름마다 다르게 붙인다(프로토타입은 모두 `[이름]`이라 되돌릴 수 없다).
 
 ### 6-5. 문구 규칙
 - 제목 템플릿: "차갑게 / 성의 없게 / 화난 것처럼 느껴질 수도 있어요".
@@ -379,12 +382,12 @@ risk = sigmoid( w0 + w1·prior + w2·Σk(αk·negk)/Σk(αk) + w3·violation + w
 
 | 위치 | 변수 |
 |---|---|
-| 앱 | `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`, `EXPO_PUBLIC_ENGINE_URL` |
-| 엔진 | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_DB_URL`, `HOOK_SECRET`, `NVIDIA_API_KEY`, `GEMINI_API_KEY`(합성 문장 평가만), `GITHUB_TOKEN`, `LOCAL_API_KEY`, `EXPO_ACCESS_TOKEN`(선택), `FORCE_MOCK`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` |
+| 앱 | `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`, `EXPO_PUBLIC_ENGINE_URL`, `EXPO_PUBLIC_VAPID_PUBLIC_KEY` |
+| 엔진 | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_DB_URL`, `HOOK_SECRET`, `NVIDIA_API_KEY`, `GEMINI_API_KEY`(합성 문장 평가만), `GITHUB_TOKEN`, `LOCAL_API_KEY`, `EXPO_ACCESS_TOKEN`(선택), `FORCE_MOCK`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` |
 | 협업 스크립트 | `TONE_ACCOUNT`(`a`·`b`, 셸에서 설정) |
 
 - 이름 목록은 `.env.example`에 있다. 값은 `.env`(git 밖)에만 넣는다.
-- 웹 푸시 구독에는 앱도 `VAPID_PUBLIC_KEY`가 필요하다. 앱에 넘기는 방법은 T-28에서 정한다.
+- 웹 푸시 공개키는 앱이 `EXPO_PUBLIC_VAPID_PUBLIC_KEY`로 받아 구독에 쓴다. 개인키(`VAPID_PRIVATE_KEY`)와 `VAPID_SUBJECT`는 엔진에만 둔다.
 - dev Supabase는 클라우드 프로젝트(서울 리전)다. 로컬 Supabase(Docker)는 쓰지 않는다. 8GB 맥의 메모리는 로컬 SEED 말투 전문가에 쓴다. DB 테스트는 PGlite로 한다(`supabase/tests`). pilot 프로젝트는 나중에 따로 만든다.
 - dev 웹훅은 `cloudflared` 임시 터널로 로컬 엔진에 닿게 한다. pilot은 T-29의 배포 서버로 보낸다.
 - 키가 없으면 `FORCE_MOCK`으로 엔진·평가·앱을 모두 돌린다.
