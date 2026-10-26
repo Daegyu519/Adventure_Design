@@ -1,69 +1,78 @@
 # 작업 목록
 
-지시는 ID로 한다(예: "T-14 해줘"). 상태는 `대기 / 진행 / 완료`. 영역: 앱, 엔진, DB, 평가, 배포, 공통.
+지시는 ID로 한다(예: "T-14 해줘"). 상태는 `대기 / 진행 / 완료 / 보류`. 영역: 앱, 엔진, DB, 평가, 배포, 공통.
 
-순서는 단계 0 → 5지만, 선행 작업만 끝나 있으면 영역이 다른 작업은 동시에 해도 된다. 1~2달 기준으로 단계 0~1은 1~2주, 2는 3~4주, 3은 5주, 4는 6주, 5는 7~8주 차를 목표로 한다.
+- 끝나면 상태를 `완료`로 바꾸고, 완료 기준 칸 끝에 `확인:`으로 어떻게 확인했는지 한 줄 붙인다. 칸은 늘리지 않는다(`scripts/land`가 첫 칸 ID와 마지막 칸 `완료`를 본다).
+- `보류`는 하려다 뺀 기능이다. 작업 칸에 이유를 적는다.
+
+순서는 단계 0 → 5지만, 선행 작업만 끝나 있으면 영역이 다른 작업은 동시에 해도 된다. 날짜는 정하지 않는다. 우선순위(채팅 기본 → 실시간 힌트 → 살펴보기 → 털어놓기 → 거울 → 리포트) 순서로 만들고, 하다가 안 될 것 같은 기능은 그때 빼서 `보류`로 남긴다.
 
 ## 단계 0. 기반
 
 | ID | 작업 | 영역 | 선행 | 완료 기준 | 상태 |
 |---|---|---|---|---|---|
-| T-01 | 모노레포 초기화: 폴더 구조(ARCHITECTURE 2장), `.gitignore`, `README`, `.env.example`, 프로토타입을 `prototype/`에 둠 | 공통 | - | 폴더 구조가 ARCHITECTURE와 같다 | 대기 |
-| T-02 | Supabase 프로젝트 2개(dev, pilot) 생성, Supabase CLI 연결 | DB | T-01 | `supabase link`로 dev 연결 | 대기 |
-| T-03 | 마이그레이션: `public` 표 + RLS, `tone` 스키마(API 비공개), `accept_invite(code)` 함수, `messages` Realtime 켜기 | DB | T-02 | 비참여자로 조회하면 0건, 남의 `sender_id`로 insert하면 거부 | 대기 |
-| T-04 | Expo 앱 초기화: expo-router, TypeScript strict, Supabase 클라이언트, 환경 변수 | 앱 | T-01 | 웹·iOS·Android에서 빈 화면 실행 | 대기 |
-| T-05 | 엔진 초기화: FastAPI, `settings.py`, `models.yaml` 로딩, `/health`, Dockerfile, pytest | 엔진 | T-01 | `/health` 200, 컨테이너 실행, 테스트 1개 통과 | 대기 |
-| T-06 | 엔진 인증: Supabase JWKS로 토큰 검증하는 의존성, 방 참여 확인 헬퍼 | 엔진 | T-05 | 정상·만료·위조 토큰, 비참여자 403 테스트 | 대기 |
+| T-00 | 협업 하네스: `docs/COLLAB.md`, `scripts/claim`·`land`·`check`, `.coord/`(git 밖) | 공통 | - | 두 계정이 같은 작업을 동시에 잡으면 하나만 성공, 루트가 더럽거나 check가 실패하면 land가 합치지 않음. 확인: `scripts/test_coord.sh` ALL PASS | 완료 |
+| T-01 | 모노레포 초기화: 폴더 구조(ARCHITECTURE 2장), `.gitignore`, `README`, `.env.example`, 프로토타입을 `prototype/`에 둠. 범위 보완(그룹방, 거울, 웹 푸시, land)을 기준 문서에 반영 | 공통 | T-00 | 폴더 구조가 ARCHITECTURE와 같다. 확인: `find . -path ./prototype -prune -o -type d -print`에 최상위 폴더 apps/mobile, engine, supabase/migrations, eval, docs, design이 모두 있고 prototype/tone-harness가 있음 | 완료 |
+| D-01 | 디자인 시스템 + HTML 목업 | 앱 | T-01 | MASTER.md, tokens.json 대비 검사 통과, 목업을 사용자가 승인 | 대기 |
+| T-02 | Supabase dev 프로젝트(클라우드, 서울) 생성, Supabase CLI 연결. pilot 프로젝트는 나중에 따로 만든다(T-29에서 전환) | DB | T-01 | `supabase link`로 dev 연결 | 대기 |
+| T-03a | 채팅 스키마: `profiles`, `rooms`, `room_members`, `messages`, `reactions`, `invites`, 함수(`is_member`, `create_group`, `create_invite`, `accept_invite`), RLS | DB | T-01 | PGlite RLS 테스트 통과 | 대기 |
+| T-03b | `tone` 스키마(API 비공개), `tone_events`, `mirror_attempts`, `push_tokens`, Realtime·Storage(`chat-images`) platform 마이그레이션 | DB | T-03a | PGlite RLS 테스트 통과 | 대기 |
+| T-04 | Expo 앱 초기화: expo-router, TypeScript strict, Supabase 클라이언트, 환경 변수 | 앱 | T-01, D-01 | 웹·iOS·Android에서 빈 화면 실행 | 대기 |
+| T-05 | 엔진 초기화: FastAPI, `settings.py`, `models.yaml` 로딩, `/health`, pytest | 엔진 | T-01 | `/health` 200, 테스트 1개 통과 | 대기 |
+| T-06 | 엔진 인증: Supabase JWKS로 토큰 검증하는 의존성, 방 멤버 확인 헬퍼(`room_members`) | 엔진 | T-05 | 정상·만료·위조 토큰, 비참여자 403 테스트 | 대기 |
 
 ## 단계 1. 채팅
 
 | ID | 작업 | 영역 | 선행 | 완료 기준 | 상태 |
 |---|---|---|---|---|---|
-| T-07 | 로그인 화면(이메일 OTP 또는 매직링크), 첫 로그인 시 `profiles` 생성 | 앱 | T-03, T-04 | 웹과 폰에서 로그인 후 프로필 행 생성 | 대기 |
-| T-08 | 초대 코드 만들기·입력 화면, `accept_invite`로 1:1 방 생성, 관계(친구·팀원 등) 선택 | 앱, DB | T-07 | 두 계정이 초대 코드로 연결되어 방 1개 생성 | 대기 |
-| T-09 | 대화 목록 + 1:1 대화 화면, 메시지 보내기, Realtime 수신, 과거 메시지 불러오기 | 앱 | T-08 | 두 기기에서 서로 보낸 메시지가 1초 안에 보임 | 대기 |
-| T-10 | DB 웹훅 → `POST /hooks/message`, `X-Hook-Secret` 검증 | 엔진, DB | T-03, T-05 | 메시지를 보내면 엔진 로그에 수신 기록, 비밀값 틀리면 401 | 대기 |
+| T-07 | 로그인 화면(이메일 OTP 또는 매직링크), 첫 로그인 시 `profiles` 생성 | 앱 | T-02, T-03a, T-04 | 웹과 폰에서 로그인 후 프로필 행 생성 | 대기 |
+| T-08 | 방 만들기·초대 화면: 초대 코드 만들기·입력, `accept_invite`로 1:1 방 생성 또는 그룹 참여, 그룹 만들기(3~8명), 관계(친구·팀원 등) 선택 | 앱, DB | T-07 | 두 계정이 초대 코드로 연결되어 1:1 방 1개 생성, 세 계정이 그룹방 하나에 참여 | 대기 |
+| T-09 | 대화 목록(1:1·그룹, 안 읽은 수) + 대화방, 메시지 보내기, Realtime 수신, 과거 메시지 불러오기. 답장, 공감, 읽음, 입력 중(Presence), 사진, 멘션, 방 정보 화면(멤버, 방 안 검색, 알림 끄기) | 앱 | T-08, T-03b | 두 기기에서 서로 보낸 메시지가 1초 안에 보임. 답장·공감·읽음·입력 중·사진·멘션·검색·알림 끄기가 1:1 방과 그룹방에서 동작 | 대기 |
+| T-10 | DB 웹훅 → `POST /hooks/message`, `X-Hook-Secret` 검증 | 엔진, DB | T-02, T-03a, T-05 | 메시지를 보내면 엔진 로그에 수신 기록, 비밀값 틀리면 401 | 대기 |
+| T-34 | 첫 실행 동의 화면: 파일럿 동의, AI 데이터 처리(하소연 원문 미저장 등 개인정보 규칙), iOS 홈 화면 추가 안내(웹 푸시는 iOS 16.4 이상) | 앱 | T-04 | 첫 실행에만 뜨고, 동의해야 로그인으로 넘어감 | 대기 |
 
 ## 단계 2. AI 엔진 핵심 (실시간 힌트)
 
 | ID | 작업 | 영역 | 선행 | 완료 기준 | 상태 |
 |---|---|---|---|---|---|
 | T-11 | 프로토타입 하네스 이전: router, providers, schemas, korean, pii, prompts, mock_rules, gate, guard | 엔진 | T-05 | 프로토타입의 해당 테스트가 `engine`에서 통과 | 대기 |
-| T-12 | 전문가 인터페이스(`experts/base.py`), 레지스트리, `LLMExpert`. `models.yaml`의 `experts` 형식 | 엔진 | T-11 | 설정만 바꿔 전문가를 추가·제거할 수 있음을 테스트로 확인 | 대기 |
-| T-13 | 집계기: 말투 전문가 N개 가중 평균, 의견 차이, 늦은 전문가 제외, 기권, 관계 패턴 조건 | 엔진 | T-12 | 전문가 1개·2개·0개, 의견 갈림 케이스 테스트 | 대기 |
+| T-12 | 전문가 인터페이스(`experts/base.py`), 레지스트리, `LLMExpert`. `models.yaml`의 `experts` 형식. `pii.mask` 입구 한 곳 + 이름 복원 | 엔진 | T-11 | 설정만 바꿔 전문가를 추가·제거할 수 있음, 전문가에는 가린 문장만 가고 응답의 이름은 복원되며 대응표가 로그·trace에 없음을 테스트로 확인 | 대기 |
+| T-13 | 집계기: 말투 전문가 N개 가중 평균, 의견 차이, 늦은 전문가 제외, 기권, 보낸 사람 패턴 조건(`sender_patterns`, `active_from`, `global_min_obs`) | 엔진 | T-12 | 전문가 1개·2개·0개, 의견 갈림 케이스 테스트 | 대기 |
 | T-14 | `POST /v1/hint`: 토큰 → 방 확인 → 최근 대화 8개 → 실시간 경로 → 문구 검사. OpenAPI 타입 생성 | 엔진 | T-06, T-13 | mock으로 1.5초 안 응답, 시간 초과 시 `hint=null` | 대기 |
-| T-15 | 앱 입력 중 힌트: 0.5초 디바운스, seq, AbortController, 입력창 위 힌트 영역, `hint_shown`·`sent_with_hint`·`sent_after_fix` 기록 | 앱 | T-09, T-14 | 지은·민수 시나리오에서 힌트가 보낸 사람에게만 뜸 | 대기 |
+| T-15 | 앱 입력 중 힌트: 0.5초 디바운스, seq, AbortController, 입력창 위 힌트 영역, `hint_shown`·`sent_with_hint`·`sent_after_fix` 기록 | 앱 | T-09, T-14, T-03b | 지은·민수 시나리오에서 힌트가 보낸 사람에게만 뜸 | 대기 |
 | T-16 | 대조 세트 30쌍 라벨링 (같은 문장, 다른 맥락). 팀원이 각자 블라인드로 라벨 후 합의 | 평가 | - | `eval/contrast_set.jsonl` 30쌍 이상, 라벨 일치율 기록 | 대기 |
-| T-17 | 평가 스크립트: 엔진 실시간·상세 경로로 정밀도·재현율·기권률·맥락 구분 계산. CI에서 mock으로 실행 | 평가 | T-14, T-16 | 실제 키로 1회 실행한 결과표 저장 | 대기 |
+| T-17 | 평가 스크립트: 엔진 실시간·상세 경로로 정밀도·재현율·기권률·맥락 구분 계산. `scripts/check`(land)에서 mock으로 실행, `eval/baseline.json` 생성 | 평가 | T-14, T-16 | 실제 키로 1회 실행한 결과표 저장, `eval/baseline.json` 있음 | 대기 |
 
 ## 단계 3. 앙상블과 살펴보기
 
 | ID | 작업 | 영역 | 선행 | 완료 기준 | 상태 |
 |---|---|---|---|---|---|
-| T-18 | 전문가 추가: Gemini 말투 전문가, 로컬 SEED 1.5B(MLX·Ollama·vLLM 중 하나), 선택으로 KcELECTRA 분류기 | 엔진 | T-12 | 각 전문가가 단독으로 대조 세트를 돌릴 수 있음 | 대기 |
+| T-18 | 전문가 추가: 상세 경로의 두 번째 말투 전문가(NVIDIA 다른 계열 모델, Gemini 아님), 로컬 SEED 1.5B(Ollama), 선택으로 KcELECTRA 분류기 | 엔진 | T-12 | 각 전문가가 단독으로 대조 세트를 돌릴 수 있음 | 대기 |
 | T-19 | `tone.analysis_traces` 저장(문장 원문 제외) | 엔진 | T-14 | 힌트 요청마다 trace 1행 | 대기 |
 | T-20 | 가중치 학습: trace에서 특징을 뽑아 로지스틱 회귀, 정밀도 0.8 기준값. "전문가 하나 vs 앙상블" 비교표 | 평가, 엔진 | T-17, T-18, T-19 | 비교표와 학습된 가중치가 `models.yaml`에 반영 | 대기 |
-| T-21 | `POST /v1/detail`: 큰 맥락 전문가, 말투 전문가 여러 개, 심판, 고쳐 쓰기 + 세 가지 확인, `detail_opened` 기록 | 엔진 | T-13 | mock으로 8초 안 응답, 응답에 내부 점수 없음 | 대기 |
-| T-22 | 살펴보기 시트: 읽힘(자주/가끔/드물어요), 이유, A/B 문장, 그대로 두기, `option_chosen` 기록 | 앱 | T-15, T-21 | 시트에서 고른 문장이 입력창에 들어감 | 대기 |
+| T-21 | `POST /v1/detail`: 큰 맥락 전문가, 말투 전문가 여러 개, 심판, 고쳐 쓰기 + 세 가지 확인, `detail_opened` 기록. `intent`(의도 칩)는 고쳐 쓰기에만 넣음 | 엔진 | T-13 | mock으로 8초 안 응답, 응답에 내부 점수 없음, `intent`만 바꾼 재호출에서 판정 전문가는 캐시로 다시 불리지 않음 | 대기 |
+| T-22 | 살펴보기 시트: 의도 칩(단호하게/미안하게/가볍게, 어긋남 한 줄), 읽힘(자주/가끔/드물어요), 이유, A/B 문장(바뀐 어절 강조), 그대로 두기, 입력창에 적용, `option_chosen` 기록 | 앱 | T-15, T-21 | 시트에서 고른 문장이 입력창에 들어감, 칩을 바꾸면 후보 문장이 바뀜, 원문과 달라진 어절만 강조됨 | 대기 |
 
-## 단계 4. 털어놓기와 측정
+## 단계 4. 털어놓기, 거울, 측정
 
 | ID | 작업 | 영역 | 선행 | 완료 기준 | 상태 |
 |---|---|---|---|---|---|
 | T-23 | 작업 큐: asyncio 기반, Redis로 바꿀 수 있는 인터페이스 | 엔진 | T-05 | 작업 넣기·실패 재시도 테스트 | 대기 |
-| T-24 | `POST /v1/feedback` → 큐 → L4 → `pair_patterns`·`global_patterns`, `feedback_log`, 관계별 주간 상한 | 엔진 | T-12, T-23 | 원문이 어디에도 저장되지 않음을 테스트로 확인 | 대기 |
+| T-24 | `POST /v1/feedback` → 큐 → L4 → 그룹방(3명 이상) 하소연은 `sender_patterns`(보낸 사람·관계·신호, 다음 날 0시부터 반영), 1:1 하소연은 `global_patterns`에만. `feedback_log`, 관계별 주간 상한 | 엔진 | T-03b, T-12, T-23 | 원문이 어디에도 저장되지 않음, 1:1 하소연이 `sender_patterns`에 들어가지 않음을 테스트로 확인 | 대기 |
 | T-25 | 털어놓기 시트: 받은 메시지에만 "⋯", 안내 문구 표시 | 앱 | T-09, T-24 | 내가 보낸 메시지에는 버튼이 없음 | 대기 |
 | T-26 | 기준선 갱신: 웹훅 → 큐 → `tone.baselines`, L0에 반영 | 엔진 | T-10, T-23 | 메시지 10개 이후 기준선 이탈 신호가 동작 | 대기 |
-| T-27 | `GET /v1/stats/me` + 리포트 화면(알림 수, 살펴보기 수, 고친 비율) | 앱, 엔진 | T-15 | 이벤트 수와 화면 숫자가 일치 | 대기 |
-| T-28 | 푸시: `push_tokens` 등록, 웹훅 → Expo Push, Android 개발 빌드 | 앱, 엔진 | T-10, T-23 | 앱을 닫은 상태에서 새 메시지 알림 | 대기 |
+| T-27 | `GET /v1/stats/me` + 리포트 화면(알림 수, 살펴보기 수, 고친 비율, 예측 차이 추이, 주별 힌트 수) | 앱, 엔진 | T-15, T-35 | 이벤트 수와 화면 숫자가 일치, 예측 차이가 `mirror_attempts`와 일치 | 대기 |
+| T-28 | 푸시: `push_tokens` 등록, 웹훅 → 방 멤버(보낸 사람·알림 끈 사람 제외)에게 Expo Push(Android)와 웹 푸시(서비스 워커, VAPID, `pywebpush`), Android 개발 빌드 | 앱, 엔진 | T-03b, T-10, T-23 | 앱을 닫은 상태에서 새 메시지 알림(Android, 웹), 알림 끈 방은 오지 않음 | 대기 |
+| T-35 | 거울 엔진 API: `/v1/mirror/today`, `/v1/mirror/answer`, 엔진 서명 `card_id`, 상황 카드 20장(`engine/content/mirror_cards.yaml`) | 엔진 | T-03b, T-21 | mock 테스트 통과, 위조한 `card_id`는 거부, 실제 대화에서 뽑은 카드는 Gemini로 가지 않음 | 대기 |
+| T-36 | 거울 화면 3종: 역할극, 되돌려 받기, 예측 맞히기 | 앱 | T-07, T-35 | 카드 3장을 끝까지 풀 수 있고, 점수는 차이로만 보임("예측과 한 칸 차이"), `mirror_attempts`에 기록됨 | 대기 |
 
 ## 단계 5. 파일럿과 발표
 
 | ID | 작업 | 영역 | 선행 | 완료 기준 | 상태 |
 |---|---|---|---|---|---|
-| T-29 | 엔진 배포: Docker, 서버(학교 서버 또는 VM), 공개 HTTPS(Cloudflare Tunnel 등), pilot Supabase로 전환 | 배포 | T-24 | 외부 네트워크에서 `/health` 200, 웹훅 수신 | 대기 |
-| T-30 | 웹 빌드 배포(`npx expo export --platform web`), Android APK 배포 | 배포 | T-22 | 참가자가 링크·APK로 접속 | 대기 |
-| T-31 | 파일럿: 동의서, 10~15쌍 모집, 1주 운영, 이벤트 집계(알림 수 변화, 고친 비율) | 공통 | T-29, T-30 | 집계표와 발표용 그래프 | 대기 |
+| T-29 | 엔진 배포: Dockerfile, 서버(학교 서버 또는 VM), 공개 HTTPS(Cloudflare Tunnel 등), pilot Supabase로 전환 | 배포 | T-24 | 컨테이너 실행, 외부 네트워크에서 `/health` 200, 웹훅 수신 | 대기 |
+| T-30 | 웹 빌드 배포(`npx expo export --platform web`, HTTPS, 웹 푸시 서비스 워커 포함), Android APK 배포 | 배포 | T-22, T-28 | 참가자가 링크·APK로 접속, 아이폰은 홈 화면에 추가해서 실행 | 대기 |
+| T-31 | 파일럿: 동의서, 10~15쌍 + 팀 그룹방 모집, 1주 운영, 이벤트 집계(알림 수 변화, 고친 비율) | 공통 | T-29, T-30 | 집계표와 발표용 그래프 | 대기 |
 
 ## 선택
 
