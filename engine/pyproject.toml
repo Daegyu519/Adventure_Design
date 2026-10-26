@@ -12,7 +12,10 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = ["pytest>=8.0"]
+dev = [
+    "httpx2>=2.16.0",
+    "pytest>=8.0",
+]
 
 [tool.uv]
 package = false  # 앱이지 배포 패키지가 아니다

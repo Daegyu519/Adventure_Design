@@ -1,12 +1,33 @@
 import os
-from collections.abc import Mapping
+from collections.abc import AsyncIterator, Mapping
+from contextlib import asynccontextmanager
+from functools import lru_cache
+from typing import Literal
 
 import yaml
 from fastapi import FastAPI
+from pydantic import BaseModel
 
-from app.settings import Settings
+from app.settings import DEFAULT_MODELS_PATH
 
-app = FastAPI(title="tone-chat engine")
+
+@lru_cache
+def load_config() -> dict:
+    return yaml.safe_load(DEFAULT_MODELS_PATH.read_text(encoding="utf-8")) or {}
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    load_config()  # 파일이 없거나 깨졌으면 요청이 아니라 시작할 때 실패한다
+    yield
+
+
+app = FastAPI(title="tone-chat engine", lifespan=lifespan)
+
+
+class HealthResponse(BaseModel):
+    ok: bool
+    models: dict[str, Literal["up", "down"]]
 
 
 def model_status(cfg: dict, env: Mapping[str, str]) -> dict[str, str]:
@@ -23,6 +44,5 @@ def model_status(cfg: dict, env: Mapping[str, str]) -> dict[str, str]:
 
 
 @app.get("/health")
-def health() -> dict:
-    cfg = yaml.safe_load(Settings.from_env().models_path.read_text(encoding="utf-8")) or {}
-    return {"ok": True, "models": model_status(cfg, os.environ)}
+def health() -> HealthResponse:
+    return HealthResponse(ok=True, models=model_status(load_config(), os.environ))
