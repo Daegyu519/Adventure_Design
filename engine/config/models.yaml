@@ -1,0 +1,70 @@
+# 모델 배치 설정. 모델 이름은 코드에 없고 여기에만 있다.
+# 키가 없는 공급자는 자동으로 건너뛰고, 마지막엔 mock으로 떨어진다.
+
+providers:
+  nvidia:
+    base_url: https://integrate.api.nvidia.com/v1
+    api_key_env: NVIDIA_API_KEY
+    rpm: 40            # 모델마다 다름. build.nvidia.com 화면 오른쪽 위에서 확인
+  # 합성 문장 평가 전용. 실제 대화가 지나가는 roles에는 넣지 않는다(무료 등급 입력은 구글 학습에 쓰일 수 있음).
+  gemini:
+    base_url: https://generativelanguage.googleapis.com/v1beta/openai
+    api_key_env: GEMINI_API_KEY
+    rpm: 15
+  github:
+    base_url: https://models.github.ai/inference
+    api_key_env: GITHUB_TOKEN
+    rpm: 10            # 하루 50~150회, 요청당 입력 8K 토큰
+  local:
+    base_url: http://localhost:11434/v1  # Ollama. vLLM이면 http://localhost:8000/v1
+    api_key_env: LOCAL_API_KEY           # 비어 있어도 됨
+    rpm: 600
+    allow_no_key: true
+  mock:
+    rpm: 100000
+
+# 역할 → 시도 순서. 앞에서부터 쓰고, 실패·한도 초과·시간 초과면 다음으로.
+roles:
+  context_fast:
+    - nvidia:deepseek-ai/deepseek-v4.1-flash
+    - mock:context
+  context_deep:
+    - nvidia:moonshotai/kimi-k3
+    - nvidia:deepseek-ai/deepseek-v4.1-flash
+    - mock:context
+  tone_fast:
+    - local:naver-hyperclovax/HyperCLOVAX-SEED-Text-Instruct-1.5B
+    - nvidia:deepseek-ai/deepseek-v4.1-flash
+    - mock:tone
+  tone_deep:
+    - local:naver-hyperclovax/HyperCLOVAX-SEED-Think-14B
+    - nvidia:deepseek-ai/deepseek-v4.1-flash
+    - mock:tone
+  tone_second:            # 두 번째 의견은 다른 회사 모델로
+    - github:openai/gpt-4.1-mini   # 예시. GitHub Models 카탈로그에서 확인
+    - mock:tone_alt
+  judge:
+    - nvidia:moonshotai/kimi-k3
+    - mock:judge
+  rewrite:                # HyperCLOVA X는 생성에 쓰지 않음(라이선스)
+    - nvidia:deepseek-ai/deepseek-v4.1-flash
+    - mock:rewrite
+  feedback:
+    - nvidia:moonshotai/kimi-k3
+    - mock:feedback
+
+timeouts_ms:
+  realtime: 1500
+  detail: 8000
+  async: 60000
+
+judge:
+  # 처음엔 손으로 정한 값. 평가 세트가 모이면 eval/fit_weights로 다시 맞춘다.
+  weights: {bias: -2.2, prior: 1.6, neg: 2.4, violation: 1.4, pattern: 0.9}
+  alert_threshold: 0.6
+  max_disagreement: 0.35
+  min_confidence: 0.4
+  global_min_obs: 5      # 전체 패턴 관찰이 이 값 이상일 때만 관계 패턴 점수를 더함
+
+gate:
+  threshold: 0.3         # 이보다 낮으면 LLM을 부르지 않음
