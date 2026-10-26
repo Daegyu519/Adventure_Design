@@ -17,7 +17,7 @@ def model_status(cfg: dict, env: Mapping[str, str]) -> dict[str, str]:
         for ref in models:
             name = ref.split(":", 1)[0]
             p = providers.get(name) or {}
-            usable = name == "mock" or p.get("allow_no_key", False) or p.get("api_key_env", "") in env
+            usable = name == "mock" or p.get("allow_no_key", False) or bool(env.get(p.get("api_key_env", "")))  # 빈 값(.env의 `KEY=`)은 없는 것으로
             status[ref] = "up" if usable else "down"
     return status
 
