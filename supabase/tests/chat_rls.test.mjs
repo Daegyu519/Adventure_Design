@@ -213,6 +213,10 @@ test('message fields: image_path in own room, mentions of members only, at most 
   assert.ok((await ins(`${r1}/photo.jpg`, [b])).rows[0].id) // 같은 방 경로, 멤버 언급
   await assert.rejects(ins(`${r2}/photo.jpg`), /messages_image_path_room/) // 다른 방 경로
   await assert.rejects(ins('photo.jpg'), /messages_image_path_room/)
+  await assert.rejects(ins(`${r1}/../${r2}/x.jpg`), /messages_image_path_room/) // 경로 탈출
+  await assert.rejects(ins(`${r1}/a/../b.jpg`), /messages_image_path_room/)
+  await assert.rejects(ins(`${r1}/a/b.jpg`), /messages_image_path_room/) // 하위 폴더
+  assert.ok((await ins(`${r1}/abc-123.jpg`)).rows[0].id)
   await assert.rejects(ins(`${r1}/x.jpg`, [c]), /mention_not_member/) // 비멤버 언급
   await assert.rejects(ins(`${r1}/x.jpg`, Array(9).fill(b)), /messages_mentions_check/) // 9개
 })

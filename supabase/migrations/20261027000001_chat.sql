@@ -39,8 +39,9 @@ create table public.messages (
   mentions uuid[] not null default '{}' check (cardinality(mentions) <= 8),
   created_at timestamptz not null default now(),
   check (text <> '' or image_path is not null),
-  -- 사진은 Storage chat-images의 room_id/… 경로만
-  constraint messages_image_path_room check (image_path is null or image_path like room_id::text || '/%')
+  -- 사진은 Storage chat-images의 room_id/<파일 이름> 한 단계만. 하위 폴더·'..' 금지(경로 탈출 차단)
+  constraint messages_image_path_room check (image_path is null or (
+    image_path ~ ('^' || room_id::text || '/[A-Za-z0-9_-][A-Za-z0-9._-]*$') and image_path !~ '\.\.'))
 );
 create index on public.messages(room_id, id);
 
