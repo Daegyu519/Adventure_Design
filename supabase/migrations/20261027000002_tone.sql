@@ -49,6 +49,7 @@ create table tone.baselines (
 -- trace: 겉 신호와 전문가 출력만. 초안·최근 대화 문장 칸이 없고, experts는 크기를 제한한다.
 create table tone.analysis_traces (
   trace_id uuid primary key default gen_random_uuid(),
+  -- 털어놓기(feedback) 경로는 일부러 trace를 남기지 않는다(규칙 5: 하소연 흔적 금지). 결과는 feedback_log에만.
   path text not null check (path in ('hint', 'detail', 'mirror')),
   user_id uuid not null references public.profiles(id) on delete cascade,
   room_id uuid references public.rooms(id) on delete cascade, -- 거울 경로는 방이 없다
@@ -88,6 +89,16 @@ create table public.push_tokens (
       else true end)
 );
 
+-- updated_at은 서버 시계로만 정한다. 클라이언트가 값을 과거·미래로 넣어도 덮어쓴다(upsert의 DO UPDATE 포함).
+create function public.push_tokens_touch() returns trigger
+language plpgsql set search_path = public, pg_temp as $$
+begin
+  new.updated_at := now();
+  return new;
+end $$;
+create trigger push_tokens_touch before insert or update on public.push_tokens
+  for each row execute function public.push_tokens_touch();
+
 -- ── public.tone_events: 본인 행 insert(방 멤버일 때)·select만 ──────────
 
 create table public.tone_events (
@@ -122,9 +133,13 @@ create index on public.mirror_attempts(user_id, created_at);
 
 revoke all on public.push_tokens, public.tone_events, public.mirror_attempts from anon, authenticated;
 revoke all on sequence public.tone_events_id_seq, public.mirror_attempts_id_seq from anon, authenticated;
+-- 트리거 함수는 발화할 때 EXECUTE 권한을 보지 않으므로 직접 호출만 막으면 된다.
+revoke all on function public.push_tokens_touch() from public, anon, authenticated;
 
--- 갱신은 updated_at만(같은 토큰 upsert). token·platform을 바꾸려면 지우고 새로 넣는다.
-grant select, insert (user_id, token, platform), update (updated_at), delete on public.push_tokens to authenticated;
+-- supabase-js .upsert()는 PostgREST가 payload의 모든 칸을 `ON CONFLICT DO UPDATE SET`에 넣으므로
+-- 그 칸들의 UPDATE 권한이 있어야 첫 등록부터 된다. user_id를 남에게 옮기는 것은 update 정책의 with check가,
+-- 값 형식은 check 제약이 그대로 막는다.
+grant select, insert (user_id, token, platform), update (user_id, token, platform, updated_at), delete on public.push_tokens to authenticated;
 grant select, insert (room_id, user_id, kind, risk, top_reading, signals, choice) on public.tone_events to authenticated;
 grant select on public.mirror_attempts to authenticated; -- insert는 엔진(service_role)
 

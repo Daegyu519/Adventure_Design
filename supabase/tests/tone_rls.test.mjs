@@ -178,14 +178,70 @@ test('push_tokens: own rows only, platform web accepted', async () => {
   assert.equal(await count(db, a, 'select * from public.push_tokens'), 4)
   assert.equal(await count(db, b, 'select * from public.push_tokens'), 1)
   assert.equal((await as(db, b, 'delete from public.push_tokens where user_id = $1', [a])).affectedRows, 0)
-  // 갱신은 updated_at만(upsert로 시각 갱신). token·platform은 못 바꾼다.
+  // 갱신(upsert용): 본인 행만, 형식 제약은 그대로, 행을 남에게 넘길 수 없다
   assert.equal((await as(db, a, "update public.push_tokens set updated_at = now() where token = 'apns-token'")).affectedRows, 1)
   assert.equal((await as(db, b, "update public.push_tokens set updated_at = now() where token = 'apns-token'")).affectedRows, 0)
-  await assert.rejects(as(db, a, "update public.push_tokens set platform = 'web'"), /permission denied/)
-  await assert.rejects(as(db, a, "update public.push_tokens set token = 'x'"), /permission denied/)
+  await assert.rejects(as(db, a, "update public.push_tokens set platform = 'web' where token = 'apns-token'"),
+    /check constraint|invalid input syntax/) // web인데 JSON이 아님
+  await assert.rejects(as(db, a, "update public.push_tokens set user_id = $1 where token = 'apns-token'", [b]), /row-level security/)
+  assert.equal((await as(db, a, "update public.push_tokens set platform = 'android' where token = 'apns-token'")).affectedRows, 1)
   assert.equal((await as(db, a, "delete from public.push_tokens where token = 'apns-token'")).affectedRows, 1)
   // 엔진은 전부 읽는다
   assert.equal(await count(db, 'service', 'select * from public.push_tokens'), 4)
+})
+
+test('push_tokens: supabase-js upsert (merge-duplicates) works for the owner only', async () => {
+  const { db, a, b } = await abc()
+  // PostgREST는 payload의 모든 칸을 DO UPDATE SET에 넣는다. updated_at은 트리거가 채우므로 payload에 없다.
+  const upsert = (u, uid, token, platform) => as(db, u,
+    `insert into public.push_tokens(user_id, token, platform) values ($1, $2, $3)
+     on conflict (user_id, token) do update set user_id = excluded.user_id, token = excluded.token,
+       platform = excluded.platform, updated_at = excluded.updated_at`, [uid, token, platform])
+  assert.equal((await upsert(a, a, 'tok', 'android')).affectedRows, 1) // 첫 등록부터 된다
+  assert.equal((await upsert(a, a, 'tok', 'android')).affectedRows, 1) // 재등록
+  assert.equal((await upsert(a, a, 'tok', 'ios')).affectedRows, 1) // 플랫폼 바뀜
+  assert.equal((await one(as(db, a, 'select platform from public.push_tokens'))).platform, 'ios')
+  // 칸을 줄인 형태(platform, updated_at만)도 된다
+  assert.equal((await as(db, a,
+    `insert into public.push_tokens(user_id, token, platform) values ($1, 'tok', 'android')
+     on conflict (user_id, token) do update set platform = excluded.platform, updated_at = excluded.updated_at`, [a])).affectedRows, 1)
+  assert.equal(await count(db, a, 'select * from public.push_tokens'), 1)
+  // 남의 행: 남의 이름으로 넣는 것은 insert 정책이, 충돌한 행을 남에게 옮기는 것은 update 정책이 막는다
+  await assert.rejects(upsert(b, a, 'tok', 'web'), /row-level security/)
+  await assert.rejects(as(db, a,
+    `insert into public.push_tokens(user_id, token, platform) values ($1, 'tok', 'ios')
+     on conflict (user_id, token) do update set user_id = $2`, [a, b]), /row-level security/)
+  assert.deepEqual((await as(db, 'service', 'select user_id, platform from public.push_tokens')).rows, [{ user_id: a, platform: 'android' }])
+  // b가 같은 토큰 문자열을 올리면 b의 행이 따로 생긴다(PK가 (user_id, token)). a의 행은 그대로다.
+  await upsert(b, b, 'tok', 'ios')
+  assert.equal(await count(db, 'service', 'select * from public.push_tokens'), 2)
+  assert.equal(await count(db, b, 'select * from public.push_tokens'), 1)
+  // 형식 제약은 upsert에도 적용된다
+  await assert.rejects(upsert(a, a, 'not json', 'web'), /check constraint|invalid input syntax/)
+  await assert.rejects(upsert(a, a, 'tok', 'web'), /check constraint|invalid input syntax/)
+})
+
+test('push_tokens.updated_at is set by the server clock', async () => {
+  const { db, a } = await abc()
+  const fresh = async () => (await one(as(db, 'service',
+    "select updated_at between now() - interval '1 minute' and now() + interval '1 minute' as ok from public.push_tokens where token = 'tok'"))).ok
+  // insert에는 updated_at을 넣을 권한이 없다
+  await assert.rejects(as(db, a,
+    "insert into public.push_tokens(user_id, token, platform, updated_at) values ($1, 'tok', 'ios', '2000-01-01')", [a]), /permission denied/)
+  await as(db, a, "insert into public.push_tokens(user_id, token, platform) values ($1, 'tok', 'ios')", [a])
+  assert.ok(await fresh())
+  // update로 과거·미래 시각을 넣어도 서버 시계로 덮인다 (service_role도 같다)
+  for (const [who, t] of [[a, '2000-01-01'], [a, '2999-01-01'], ['service', '2000-01-01'], ['service', '2999-01-01']]) {
+    await as(db, who, `update public.push_tokens set updated_at = '${t}' where token = 'tok'`)
+    assert.ok(await fresh(), `${who} ${t}`)
+  }
+  // 갱신하면 시각이 앞으로 간다
+  const ts = async () => (await one(as(db, 'service', "select updated_at as t from public.push_tokens where token = 'tok'"))).t.getTime()
+  const before = await ts()
+  await as(db, a, "update public.push_tokens set platform = 'android' where token = 'tok'")
+  assert.ok(await ts() > before)
+  // 트리거 함수는 직접 부를 수 없다
+  await assert.rejects(as(db, a, 'select public.push_tokens_touch()'), /permission denied/)
 })
 
 test('no column stores raw complaint text', async () => {
