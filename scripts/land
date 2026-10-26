@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# 사용법: (작업 worktree 안에서) scripts/land <TASK_ID>
+# check 통과 + tasks.md 상태 완료 + 루트가 깨끗한 main 이면 main에 --no-ff로 합치고 정리한다.
+set -euo pipefail
+
+ID="${1:-}"
+[[ "$ID" =~ ^[A-Za-z0-9-]+$ ]] || { echo "usage: scripts/land <TASK_ID>" >&2; exit 1; }
+ACCT="${TONE_ACCOUNT:-a}"
+[[ "$ACCT" == a || "$ACCT" == b ]] || { echo "TONE_ACCOUNT must be a or b" >&2; exit 1; }
+
+ROOT="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"
+WT="$(git rev-parse --show-toplevel)"
+cd "$WT"
+BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+CLAIM="$ROOT/.coord/claims/$ID"
+fail() { echo "land: $*" >&2; exit 1; }
+
+[ "$(cat "$CLAIM/branch" 2>/dev/null)" = "$BRANCH" ] || fail "$ID is not claimed for branch $BRANCH (run inside its worktree)"
+[ -z "$(git status --porcelain)" ] || fail "worktree has uncommitted changes"
+
+"$WT/scripts/check" || fail "scripts/check failed"
+
+# tasks.md 표에서 첫 칸이 ID, 마지막 칸이 완료인 행
+# LC_ALL=C 필수: macOS awk는 로케일 정렬(strcoll)로 비교해서 한글 "대기"=="완료"가 참이 된다.
+LC_ALL=C awk -F'|' -v id="$ID" '
+  { a = $2; z = $(NF-1); gsub(/^ +| +$/, "", a); gsub(/^ +| +$/, "", z) }
+  a == id && z == "완료" { found = 1 }
+  END { exit !found }' docs/tasks.md || fail "$ID is not 완료 in docs/tasks.md"
+
+# 한 번에 한 계정만 합친다. 1초 간격 최대 60회.
+LOCK="$ROOT/.coord/merge.lock"
+for i in $(seq 60); do mkdir "$LOCK" 2>/dev/null && break; [ "$i" -lt 60 ] && sleep 1; done
+[ -d "$LOCK" ] || fail "could not get $LOCK (stale? rmdir it)"
+trap 'rmdir "$LOCK" 2>/dev/null' EXIT
+trap 'exit 1' INT TERM
+
+[ "$(git -C "$ROOT" rev-parse --abbrev-ref HEAD)" = main ] || fail "root checkout is not on main"
+[ -z "$(git -C "$ROOT" status --porcelain)" ] || fail "root checkout is not clean"
+
+git -C "$ROOT" merge --no-ff -q -m "land $ID ($BRANCH)" "$BRANCH" || { git -C "$ROOT" merge --abort 2>/dev/null; fail "merge failed, nothing merged"; }
+
+echo "$(date +%Y-%m-%dT%H:%M:%S%z) | $ACCT | $ID | landed | $BRANCH | merged into main" >> "$ROOT/.coord/log.md"
+cd "$ROOT"
+rm -rf "$CLAIM"
+git worktree remove --force "$WT"
+git branch -d "$BRANCH" >/dev/null
+echo "landed $ID. cd $ROOT"

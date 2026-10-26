@@ -1,0 +1,10 @@
+.coord/
+node_modules/
+.venv/
+__pycache__/
+.pytest_cache/
+.env
+.expo/
+dist/
+web-build/
+.DS_Store

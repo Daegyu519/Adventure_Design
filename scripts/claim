@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# 사용법: scripts/claim <TASK_ID> <slug>   예) scripts/claim T-07 login
+# 작업을 잡고 worktree를 만든다. 마지막 줄에 worktree 경로를 출력한다.
+set -euo pipefail
+
+ID="${1:-}"; SLUG="${2:-}"
+[[ "$ID" =~ ^[A-Za-z0-9-]+$ && "$SLUG" =~ ^[a-z0-9-]+$ ]] || { echo "usage: scripts/claim <TASK_ID> <slug>" >&2; exit 1; }
+ACCT="${TONE_ACCOUNT:-a}"
+[[ "$ACCT" == a || "$ACCT" == b ]] || { echo "TONE_ACCOUNT must be a or b" >&2; exit 1; }
+
+ROOT="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"
+BRANCH="$(echo "$ID" | tr 'A-Z' 'a-z' | tr -cd 'a-z0-9')-$SLUG"
+WT="${TONE_WT_ROOT:-$HOME/Projects/tone-chat-wt}/$BRANCH"
+CLAIM="$ROOT/.coord/claims/$ID"
+
+mkdir -p "$ROOT/.coord/claims"
+# mkdir은 원자적이라 동시에 잡아도 하나만 성공한다.
+if ! mkdir "$CLAIM" 2>/dev/null; then
+  echo "$ID taken by $(cat "$CLAIM/owner" 2>/dev/null || echo '?')" >&2
+  exit 1
+fi
+NOW="$(date +%Y-%m-%dT%H:%M:%S%z)"
+echo "$ACCT" > "$CLAIM/owner"; echo "$BRANCH" > "$CLAIM/branch"; echo "$NOW" > "$CLAIM/started"
+
+if ! git -C "$ROOT" worktree add -q -b "$BRANCH" "$WT" main; then
+  rm -rf "$CLAIM"   # worktree를 못 만들면 잡은 것도 취소
+  exit 1
+fi
+echo "$NOW | $ACCT | $ID | claimed | $BRANCH | $SLUG" >> "$ROOT/.coord/log.md"
+echo "$WT"
