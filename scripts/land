@@ -29,7 +29,9 @@ rc=0; CHECK_OUT="$("$WT/scripts/check" 2>&1)" || rc=$?
 
 # tasks.md 표에서 첫 칸이 ID, 마지막 칸이 완료인 행
 # LC_ALL=C 필수: macOS awk는 로케일 정렬(strcoll)로 비교해서 한글 "대기"=="완료"가 참이 된다.
+# 표 행(| 로 시작, 칸 2개 이상)만 본다. 빈 줄은 NF=0이라 $(NF-1)에서 macOS awk가 죽는다.
 LC_ALL=C awk -F'|' -v id="$ID" '
+  !/^\|/ || NF < 3 { next }
   { a = $2; z = $(NF-1); gsub(/^ +| +$/, "", a); gsub(/^ +| +$/, "", z) }
   a == id && z == "완료" { found = 1 }
   END { exit !found }' docs/tasks.md || fail "$ID is not 완료 in docs/tasks.md"
