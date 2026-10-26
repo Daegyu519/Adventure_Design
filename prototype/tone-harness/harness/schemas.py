@@ -1,0 +1,119 @@
+"""레이어 사이에 오가는 데이터 형태. LLM 출력은 전부 여기서 검사한다."""
+from __future__ import annotations
+
+from typing import Literal
+
+from pydantic import BaseModel, Field, field_validator
+
+READINGS = ("차갑게", "성의없게", "화나게", "무난하게", "따뜻하게")
+NEGATIVE = ("차갑게", "성의없게", "화나게")
+
+
+class Turn(BaseModel):
+    speaker: Literal["me", "them"]
+    text: str
+
+
+class Conversation(BaseModel):
+    pair_id: str                      # 관계 ID (두 사람 조합)
+    relation: str = "친구"            # 친구, 동기, 선배, 팀원 등
+    turns: list[Turn] = Field(default_factory=list)
+
+    def last_them(self) -> str:
+        for t in reversed(self.turns):
+            if t.speaker == "them":
+                return t.text
+        return ""
+
+
+# ---------- L0 ----------
+class GateResult(BaseModel):
+    prior: float                      # 0~1, LLM을 부를지 판단하는 사전점수
+    signals: list[str]                # 예: "이유 없는 거절", "마침표로 끝남"
+    passed: bool
+
+
+# ---------- L1 ----------
+class ContextReading(BaseModel):
+    prev_act: Literal["질문", "부탁", "제안", "공유", "감정표현", "사과", "인사", "기타"] = "기타"
+    partner_state: Literal["평온", "기대", "서운", "바쁨", "불확실"] = "불확실"
+    expectation_points: list[str] = Field(default_factory=list)   # 예: "이유 설명", "공감 한마디"
+    shared_context: list[str] = Field(default_factory=list)       # 둘만 아는 맥락 신호
+    confidence: float = 0.5
+
+
+# ---------- L2 ----------
+class ToneReading(BaseModel):
+    readings: dict[str, float]        # 읽힘 → 확률
+    cues: list[str] = Field(default_factory=list)                 # 근거가 된 표현
+    has_reason: bool = False
+    confidence: float = 0.5
+    model: str = ""
+
+    @field_validator("readings")
+    @classmethod
+    def normalize(cls, v: dict[str, float]) -> dict[str, float]:
+        v = {k: max(0.0, float(v.get(k, 0.0))) for k in READINGS}
+        s = sum(v.values()) or 1.0
+        return {k: round(x / s, 3) for k, x in v.items()}
+
+    @property
+    def negative(self) -> float:
+        return sum(self.readings[k] for k in NEGATIVE)
+
+    @property
+    def top(self) -> str:
+        return max(self.readings, key=self.readings.get)
+
+
+# ---------- L3 ----------
+class Verdict(BaseModel):
+    risk: float
+    top_reading: str
+    signals: list[str]
+    disagreement: float
+    confidence: float
+    abstain: bool
+    alert: bool
+    pattern_used: bool = False
+    reason: str = ""                  # 기록용. 사용자에게는 안 보임
+
+
+# ---------- 고쳐 쓰기 ----------
+class RewriteOption(BaseModel):
+    label: str                        # "덜 차갑게", "가장 부드럽게"
+    text: str
+    keep: list[str] = Field(default_factory=list)     # 지킨 것 (의도, 말투)
+    change: list[str] = Field(default_factory=list)   # 바꾼 것
+
+
+class RewriteSet(BaseModel):
+    options: list[RewriteOption]
+
+
+# ---------- L4 ----------
+class FeedbackPattern(BaseModel):
+    trigger: str                      # 패턴 태그. 예: "이유 없는 거절"
+    feeling: str                      # 예: "차갑게"
+    strength: int = Field(ge=1, le=3, default=1)
+
+
+class FeedbackResult(BaseModel):
+    usable: bool
+    patterns: list[FeedbackPattern] = Field(default_factory=list)
+    dropped_reason: str | None = None  # 욕설, 인신공격, 무관한 내용
+
+
+# ---------- 출력 ----------
+class Hint(BaseModel):
+    title: str
+    detail: str
+    action: str = "살펴보기"
+
+
+class DetailReport(BaseModel):
+    verdict: Verdict
+    readings: dict[str, str]          # 읽힘 → "자주/가끔/드물어요"
+    why: list[str]
+    options: list[RewriteOption]
+    footnote: str

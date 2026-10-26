@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>말투 알림 채팅 데모</title>
+<style>
+  :root {
+    --bg: #EEF2F5; --surface: #FFFFFF; --ink: #17202C; --muted: #5A6575; --line: #D5DCE3;
+    --cold: #2F64D6; --cold-tint: #E8EFFC; --ok: #177258; --ok-tint: #E3F3EC; --mark: #FFE38A;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #D9E0E6; color: var(--ink);
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif; }
+  .app { max-width: 420px; height: 100%; margin: 0 auto; background: var(--bg); display: flex; flex-direction: column; position: relative; }
+  header { padding: 14px 16px; background: var(--surface); border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 12px; }
+  .avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--cold-tint); color: var(--cold); display: grid; place-items: center; font-weight: 700; }
+  header .who { flex: 1; } header .who b { display: block; font-size: 16px; } header .who span { color: var(--muted); font-size: 13px; }
+  header a { color: var(--cold); font-size: 13px; text-decoration: none; }
+  #list { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+  .row { display: flex; align-items: flex-end; gap: 6px; }
+  .row.me { justify-content: flex-end; }
+  .bubble { max-width: 75%; padding: 9px 13px; border-radius: 16px; background: var(--surface); white-space: pre-wrap; word-break: break-word; }
+  .me .bubble { background: var(--ink); color: #fff; border-bottom-right-radius: 6px; }
+  .them .bubble { border-bottom-left-radius: 6px; border: 1px solid var(--line); }
+  .more { border: 0; background: none; color: var(--muted); font-size: 18px; cursor: pointer; min-width: 32px; min-height: 32px; border-radius: 8px; }
+  .more:hover { background: #E1E7ED; }
+  .hint { margin: 0 12px 8px; padding: 12px 14px; border-radius: 14px; background: var(--cold-tint); border: 1px solid #C9D8F7; display: none; }
+  .hint.on { display: block; }
+  .hint b { color: var(--cold); display: block; } .hint p { margin: 2px 0 8px; color: var(--muted); font-size: 14px; }
+  .composer { display: flex; gap: 8px; padding: 10px 12px 16px; background: var(--surface); border-top: 1px solid var(--line); }
+  .composer textarea { flex: 1; resize: none; height: 44px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 22px; font: inherit; }
+  .composer textarea:focus { outline: 2px solid var(--cold); border-color: transparent; }
+  button.primary { min-height: 44px; padding: 0 18px; border: 0; border-radius: 22px; background: var(--ink); color: #fff; font: inherit; font-weight: 600; cursor: pointer; }
+  button.ghost { min-height: 36px; padding: 0 12px; border: 1px solid var(--cold); border-radius: 18px; background: transparent; color: var(--cold); font: inherit; font-size: 14px; cursor: pointer; }
+  .dim { position: absolute; inset: 0; background: rgba(23, 32, 44, .4); display: none; align-items: flex-end; }
+  .dim.on { display: flex; }
+  .sheet { width: 100%; max-height: 85%; overflow-y: auto; background: var(--surface); border-radius: 20px 20px 0 0; padding: 20px 18px 24px; }
+  .sheet h2 { margin: 0 0 4px; font-size: 18px; } .sheet .sub { color: var(--muted); font-size: 14px; margin: 0 0 14px; }
+  .meter { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #EEF1F4; }
+  .meter em { font-style: normal; color: var(--muted); } .meter em.often { color: var(--cold); font-weight: 600; }
+  .why { margin: 12px 0; padding-left: 18px; color: var(--muted); font-size: 14px; }
+  .opt { border: 1px solid var(--line); border-radius: 14px; padding: 12px; margin: 8px 0; }
+  .opt small { color: var(--ok); font-weight: 600; } .opt div { margin: 4px 0 8px; }
+  .foot { color: var(--muted); font-size: 12px; margin-top: 14px; }
+  .quote { background: var(--bg); border-radius: 12px; padding: 10px 12px; margin-bottom: 10px; }
+  .sheet textarea { width: 100%; height: 96px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; font: inherit; resize: vertical; }
+  .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
+  .toast { position: absolute; left: 16px; right: 16px; bottom: 90px; background: var(--ok-tint); color: var(--ok); border-radius: 12px; padding: 12px 14px; font-size: 14px; display: none; }
+  .toast.on { display: block; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="avatar" id="initial"></div>
+    <div class="who"><b id="otherName">불러오는 중</b><span id="relation"></span></div>
+    <a id="switch" target="_blank" rel="noopener"></a>
+  </header>
+  <div id="list" aria-live="polite"></div>
+  <div class="hint" id="hint" role="status">
+    <b id="hintTitle"></b><p id="hintDetail"></p>
+    <button class="ghost" id="openDetail">살펴보기</button>
+  </div>
+  <div class="composer">
+    <textarea id="input" placeholder="메시지 입력" aria-label="메시지 입력"></textarea>
+    <button class="primary" id="send">보내기</button>
+  </div>
+  <div class="toast" id="toast"></div>
+
+  <div class="dim" id="detailDim"><div class="sheet" role="dialog" aria-label="살펴보기">
+    <h2 id="dTitle">이렇게 느껴질 수도 있어요</h2><p class="sub">이 대화에서는 특히 그럴 수 있어요</p>
+    <div id="dMeters"></div><ul class="why" id="dWhy"></ul><div id="dOpts"></div>
+    <div class="actions"><button class="ghost" id="keep">그대로 둘게요</button></div>
+    <p class="foot" id="dFoot"></p>
+  </div></div>
+
+  <div class="dim" id="ventDim"><div class="sheet" role="dialog" aria-label="AI에게 털어놓기">
+    <h2>AI에게만 털어놓기</h2><p class="sub">상대에게는 보이지 않아요. 누가 남겼는지도 드러나지 않아요.</p>
+    <div class="quote" id="ventQuote"></div>
+    <textarea id="ventText" placeholder="어떤 점이 서운했는지 편하게 적어 주세요"></textarea>
+    <div class="actions"><button class="ghost" id="ventCancel">닫기</button><button class="primary" id="ventSend">남기기</button></div>
+  </div></div>
+</div>
+<script>
+const params = new URLSearchParams(location.search);
+const me = params.get("user") || "minsu";
+const ROOM = params.get("room") || "minsu-jieun";
+const $ = (id) => document.getElementById(id);
+let ws, seq = 0, timer = null, currentHint = null, hintShownThisDraft = false, ventTarget = null;
+
+function post(path, body) {
+  return fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }).then(r => r.json());
+}
+function logEvent(kind, extra = {}) { post("/api/events", { room_id: ROOM, user_id: me, kind, ...extra }); }
+function toast(text) { $("toast").textContent = text; $("toast").classList.add("on"); setTimeout(() => $("toast").classList.remove("on"), 3500); }
+
+function addMessage(m) {
+  const mine = m.sender_id === me;
+  const row = document.createElement("div");
+  row.className = "row " + (mine ? "me" : "them");
+  const b = document.createElement("div");
+  b.className = "bubble"; b.textContent = m.text;
+  row.appendChild(b);
+  if (!mine) {                                   // 받은 메시지만 털어놓기 가능
+    const more = document.createElement("button");
+    more.className = "more"; more.textContent = "⋯"; more.title = "AI에게만 털어놓기";
+    more.setAttribute("aria-label", "이 메시지에 대해 AI에게만 털어놓기");
+    more.onclick = () => openVent(m);
+    row.appendChild(more);
+  }
+  $("list").appendChild(row);
+  $("list").scrollTop = $("list").scrollHeight;
+}
+
+function showHint(h, meta) {
+  if (!h) { $("hint").classList.remove("on"); currentHint = null; return; }
+  const isNew = !currentHint || currentHint.title !== h.title;
+  currentHint = { ...h, meta };
+  $("hintTitle").textContent = h.title; $("hintDetail").textContent = h.detail;
+  $("hint").classList.add("on");
+  if (isNew) { hintShownThisDraft = true; logEvent("hint_shown", meta || {}); }
+}
+
+function connect() {
+  ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws/" + me);
+  ws.onmessage = (e) => {
+    const d = JSON.parse(e.data);
+    if (d.type === "message" && d.message.room_id === ROOM) addMessage(d.message);
+    if (d.type === "hint" && d.room_id === ROOM && d.seq === seq) showHint(d.hint, d.meta);
+  };
+  ws.onclose = () => setTimeout(connect, 1500);
+}
+
+$("input").addEventListener("input", () => {
+  clearTimeout(timer);
+  const text = $("input").value;
+  seq += 1;
+  if (!text.trim()) { showHint(null); return; }
+  const mySeq = seq;
+  timer = setTimeout(() => ws.readyState === 1 && ws.send(JSON.stringify({ type: "draft", room_id: ROOM, text, seq: mySeq })), 500);
+});
+$("input").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); } });
+$("send").onclick = send;
+
+function send() {
+  const text = $("input").value.trim();
+  if (!text) return;
+  if (currentHint) logEvent("sent_with_hint", currentHint.meta || {});
+  else if (hintShownThisDraft) logEvent("sent_after_fix");
+  ws.send(JSON.stringify({ type: "send", room_id: ROOM, text, client_id: Date.now() }));
+  $("input").value = ""; seq += 1; hintShownThisDraft = false; showHint(null);
+}
+
+$("openDetail").onclick = async () => {
+  const text = $("input").value;
+  $("detailDim").classList.add("on");
+  $("dMeters").textContent = "살펴보는 중…"; $("dWhy").innerHTML = ""; $("dOpts").innerHTML = "";
+  const res = await post("/api/tone/detail", { room_id: ROOM, user_id: me, text });
+  const r = res.report;
+  if (!r) { $("dMeters").textContent = "지금은 살펴보기 어려워요. 잠시 뒤 다시 해 주세요."; return; }
+  $("dTitle").textContent = currentHint ? currentHint.title : "이렇게 느껴질 수도 있어요";
+  $("dMeters").innerHTML = "";
+  for (const [k, v] of Object.entries(r.readings)) {
+    const row = document.createElement("div"); row.className = "meter";
+    row.innerHTML = `<span>${k}</span><em class="${v === "자주" ? "often" : ""}">${v}</em>`;
+    $("dMeters").appendChild(row);
+  }
+  r.why.forEach(w => { const li = document.createElement("li"); li.textContent = w; $("dWhy").appendChild(li); });
+  r.options.forEach((o, i) => {
+    const box = document.createElement("div"); box.className = "opt";
+    const label = document.createElement("small"); label.textContent = o.label;
+    const body = document.createElement("div"); body.textContent = o.text;
+    const pick = document.createElement("button"); pick.className = "ghost"; pick.textContent = "이걸로 바꾸기";
+    pick.onclick = () => { $("input").value = o.text; logEvent("option_chosen", { choice: i === 0 ? "A" : "B" });
+      $("detailDim").classList.remove("on"); $("input").dispatchEvent(new Event("input")); $("input").focus(); };
+    box.append(label, body, pick); $("dOpts").appendChild(box);
+  });
+  $("dFoot").textContent = r.footnote;
+};
+$("keep").onclick = () => { logEvent("option_chosen", { choice: "original" }); $("detailDim").classList.remove("on"); };
+$("detailDim").onclick = (e) => { if (e.target.id === "detailDim") $("detailDim").classList.remove("on"); };
+
+function openVent(m) { ventTarget = m; $("ventQuote").textContent = m.text; $("ventText").value = ""; $("ventDim").classList.add("on"); $("ventText").focus(); }
+$("ventCancel").onclick = () => $("ventDim").classList.remove("on");
+$("ventSend").onclick = async () => {
+  const text = $("ventText").value.trim();
+  if (!text) return;
+  $("ventDim").classList.remove("on");
+  const res = await post("/api/feedback", { room_id: ROOM, user_id: me, message_id: ventTarget.id, text });
+  toast(res.ack || "남겼어요");
+};
+
+(async function init() {
+  const rooms = await fetch(`/api/rooms?user_id=${me}`).then(r => r.json());
+  const room = rooms.find(r => r.id === ROOM) || rooms[0];
+  $("otherName").textContent = room.other_name; $("initial").textContent = room.other_name[0];
+  $("relation").textContent = room.relation + " · 1:1 대화";
+  const other = room.user_a === me ? room.user_b : room.user_a;
+  $("switch").href = `/?user=${other}&room=${ROOM}`; $("switch").textContent = `${room.other_name} 화면 열기`;
+  (await fetch(`/api/rooms/${ROOM}/messages?user_id=${me}`).then(r => r.json())).forEach(addMessage);
+  connect();
+})();
+</script>
+</body>
+</html>
