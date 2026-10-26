@@ -15,7 +15,25 @@ assert() { if ! eval "$1"; then echo "FAIL: $2"; exit 1; fi; }
 mkdir "$TMP/repo" && cd "$TMP/repo"
 git init -q -b main
 git config user.email t@t && git config user.name t
-mkdir docs && printf '| ID | 작업 | 영역 | 선행 | 완료 기준 | 상태 |\n|---|---|---|---|---|---|\n| T-99 | 테스트 | 공통 | - | 기준 | 대기 |\n| T-98 | 게이트 | 공통 | - | 기준 | 완료 |\n' > docs/tasks.md
+mkdir docs && cat > docs/tasks.md <<'MD'
+# 작업 목록
+
+지시는 ID로 한다. 상태는 `대기 / 진행 / 완료 / 보류`. | 가 들어간 설명 줄 | 도 있다.
+
+## 단계 0. 기반
+
+| ID | 작업 | 영역 | 선행 | 완료 기준 | 상태 |
+|---|---|---|---|---|---|
+| T-98 | 게이트 | 공통 | - | 기준 | 완료 |
+| T-99 | 테스트 | 공통 | - | 기준 | 대기 |
+| T-99a | 접두어 | 공통 | - | 기준 | 완료 |
+
+## 단계 1. 채팅
+
+| ID | 작업 | 영역 | 선행 | 완료 기준 | 상태 |
+|---|---|---|---|---|---|
+| T-97 | 다른 작업 | 앱 | T-98 | 기준 | 완료 |
+MD
 echo '.coord/' > .gitignore
 cp -R "$SRC" scripts
 git add -A && git commit -qm init
