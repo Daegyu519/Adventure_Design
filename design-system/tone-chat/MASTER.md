@@ -32,13 +32,14 @@
 | `textMuted` | `--text-muted` | `#5B6B68` | `#94A3A0` | 시간, 미리보기, 보조 설명 |
 | `border` | `--border` | `#E2E8E6` | `#26332F` | 구분선, 테두리 |
 | `hintBg` | `--hint-bg` | `#FFF7ED` | `#2A1E12` | 힌트 줄 바탕 (힌트에만) |
-| `hintText` | `--hint-text` | `#9A3412` | `#FDBA74` | 힌트 글자·앰버 점 (힌트에만) |
+| `hintText` | `--hint-text` | `#9A3412` | `#FEE7CF` | 힌트 글자·앰버 점 (힌트에만) |
 | `mirror` | `--mirror` | `#7C3AED` | `#A78BFA` | 거울 탭 강조 (거울에만) |
 | `onMirror` | `--on-mirror` | `#FFFFFF` | `#1E1B2E` | mirror 위 글자 |
 | `danger` | `--danger` | `#DC2626` | `#F87171` | 전송 실패·오류 (힌트에 쓰지 않음) |
 
-- **대비 (검사 대상, 두 모드 모두 4.5:1 이상)**: text/background, textMuted/background, onPrimary/primary, onBubbleOther/bubbleOther, hintText/hintBg, onMirror/mirror, danger/background. 스펙 7장 시작 값이 그대로 통과했다(보정 없음).
-- **노란·갈색 금지 (검사)**: HSL 색상각 35°~65°이면서 채도 > 0.5인 색은 쓰지 않는다. 명도 > 0.9인 아주 옅은 바탕만 예외. 힌트 앰버(`#9A3412`, `#FDBA74`)는 색상각 15°·31°로 주황 쪽이다.
+- **대비 (검사 대상, 두 모드 모두 4.5:1 이상)**: text/background, textMuted/background, onPrimary/primary, onBubbleOther/bubbleOther, hintText/hintBg, onMirror/mirror, danger/background. 스펙 7장 시작 값이 대비는 모두 통과했다.
+- **노란·갈색 금지 (검사)**: HSL 색상각 20°~65°(갈색~노랑)이면서 채도 > 0.5, 명도 < 0.9인 색은 쓰지 않는다. 명도 0.9 이상인 아주 옅은 색만 예외. 라이트 힌트 글자 `#9A3412`는 색상각 15°라 범위 밖이다.
+- **보정 1건**: 다크 `hintText`는 스펙 시작 값 `#FDBA74`(색상각 31°, 채도 0.97, 명도 0.72)가 갈색 범위에 걸려, 색상각·채도는 두고 명도만 0.90으로 올려 `#FEE7CF`로 바꿨다(hintBg 위 대비 13.6). 다크 힌트는 진한 따뜻한 바탕 위 옅은 크림색 글자로 보인다.
 - **파생 색은 하나만**: 시트 뒤 가림막 `--scrim` = 라이트 `color-mix(text 32%, transparent)`, 다크 `color-mix(background 72%, transparent)`. 그 밖에 토큰에 없는 색을 만들지 않는다. 그림자도 쓰지 않고 `border`로 층을 나눈다.
 - 다크 모드는 시스템 설정을 따르고 설정 화면에서 바꿀 수 있다.
 

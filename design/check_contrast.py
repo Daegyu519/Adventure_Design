@@ -46,9 +46,9 @@ def contrast(a: str, b: str) -> float:
 
 
 def is_yellow_brown(hex_color: str) -> bool:
-    """HSL 색상각 35°~65° + 채도 > 0.5. 명도 > 0.9인 아주 옅은 배경은 제외."""
+    """HSL 색상각 20°~65°(갈색~노랑) + 채도 > 0.5 + 명도 < 0.9. 명도 0.9 이상인 아주 옅은 색은 제외."""
     h, l, s = colorsys.rgb_to_hls(*rgb(hex_color))
-    return 35 <= h * 360 <= 65 and s > 0.5 and l <= 0.9
+    return 20 <= h * 360 <= 65 and s > 0.5 and l < 0.9
 
 
 def check(tokens: dict) -> list[str]:
@@ -74,6 +74,7 @@ def _self_test() -> None:
     assert contrast("#777777", "#777777") == 1.0
     assert is_yellow_brown("#FEE500")       # 카톡 노랑
     assert is_yellow_brown("#A16207")       # 갈색 쪽 노랑
+    assert is_yellow_brown("#8B5A2B")       # 갈색 (색상각 29°)
     assert not is_yellow_brown("#FFF7ED")   # 아주 옅은 배경은 제외
     assert not is_yellow_brown("#0F766E")   # 틸
 
