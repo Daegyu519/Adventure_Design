@@ -35,7 +35,7 @@
 
 | ID | 작업 | 영역 | 선행 | 완료 기준 | 상태 |
 |---|---|---|---|---|---|
-| T-11 | 프로토타입 하네스 이전: router, providers, schemas, korean, pii, prompts, mock_rules, gate, guard | 엔진 | T-05 | 프로토타입의 해당 테스트가 `engine`에서 통과 | 대기 |
+| T-11 | 프로토타입 하네스 이전: router, providers, schemas, korean, pii, prompts, mock_rules, gate, guard | 엔진 | T-05 | 프로토타입의 해당 테스트가 `engine`에서 통과. 확인: uv run pytest -q 12 passed, 1 skipped(경고 없음) — 프로토타입 test_basic 5개 + Gemini 금지 테스트 + health 6개. 6번째(단일 신고 부스트 없음)는 judge가 T-13에서 `layers/aggregate.py`로 옮겨질 때 켜지도록 importorskip 처리(judge.py를 임시로 두면 13 passed 확인) | 완료 |
 | T-12 | 전문가 인터페이스(`experts/base.py`), 레지스트리, `LLMExpert`. `models.yaml`의 `experts` 형식. `pii.mask` 입구 한 곳 + 이름 복원 | 엔진 | T-11 | 설정만 바꿔 전문가를 추가·제거할 수 있음, 전문가에는 가린 문장만 가고 응답의 이름은 복원되며 대응표가 로그·trace에 없음을 테스트로 확인 | 대기 |
 | T-13 | 집계기: 말투 전문가 N개 가중 평균, 의견 차이, 늦은 전문가 제외, 기권, 보낸 사람 패턴 조건(`sender_patterns`, `active_from`, `global_min_obs`) | 엔진 | T-12 | 전문가 1개·2개·0개, 의견 갈림 케이스 테스트 | 대기 |
 | T-14 | `POST /v1/hint`: 토큰 → 방 확인 → 최근 대화 8개 → 실시간 경로 → 문구 검사. OpenAPI 타입 생성 | 엔진 | T-06, T-13 | mock으로 1.5초 안 응답, 시간 초과 시 `hint=null` | 대기 |
