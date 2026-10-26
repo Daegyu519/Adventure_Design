@@ -35,10 +35,12 @@ create table public.messages (
   sender_id uuid not null references public.profiles(id) on delete cascade,
   text text not null default '' check (char_length(text) <= 2000),
   image_path text,
-  reply_to bigint references public.messages(id),
-  mentions uuid[] not null default '{}',
+  reply_to bigint references public.messages(id) on delete set null,
+  mentions uuid[] not null default '{}' check (cardinality(mentions) <= 8),
   created_at timestamptz not null default now(),
-  check (text <> '' or image_path is not null)
+  check (text <> '' or image_path is not null),
+  -- 사진은 Storage chat-images의 room_id/… 경로만
+  constraint messages_image_path_room check (image_path is null or image_path like room_id::text || '/%')
 );
 create index on public.messages(room_id, id);
 
@@ -99,11 +101,18 @@ begin
     select r.relation into rel from public.rooms r where r.id = room and r.kind = 'group';
     if not found then raise exception 'not_group'; end if;
   end if;
+  -- ponytail: 8자(36^8 ≈ 2.8조) 길이만으로 추측을 막는다. 사용자별 시도 횟수 제한은 없다.
+  -- 수업 밖으로 가입을 열기 전에 accept_invite에 시도 카운터를 넣을 것.
   loop
-    -- gen_random_uuid()는 강한 난수(pg_strong_random). 앞 6바이트는 버전 비트가 없다.
+    -- gen_random_uuid()는 강한 난수(pg_strong_random). 6·8번 바이트는 버전·변형 비트라 뺀다.
+    -- 252(=36×7) 이상인 바이트는 버려서 % 36의 나머지 편향을 없앤다.
     b := uuid_send(gen_random_uuid());
     select string_agg(substr('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', get_byte(b, i) % 36 + 1, 1), '' order by i)
-      into c from generate_series(0, 5) i;
+      into c from (
+        select i from generate_series(0, 15) i
+        where i not in (6, 8) and get_byte(b, i) < 252 order by i limit 8
+      ) s;
+    continue when coalesce(length(c), 0) < 8;
     begin
       insert into public.invites(code, inviter_id, room_id, relation, max_uses, expires_at)
         values (c, me, room, rel, case when room is null then 1 else 7 end, now() + interval '72 hours');
@@ -125,7 +134,6 @@ begin
   -- 행을 잠가 동시 수락이 uses를 넘기지 못하게 한다
   select * into inv from public.invites i where i.code = upper(btrim(accept_invite.code)) for update;
   if not found then raise exception 'invite_not_found'; end if;
-  if inv.expires_at <= now() then raise exception 'invite_expired'; end if;
 
   if inv.room_id is null then
     if inv.inviter_id = me then raise exception 'invite_self'; end if;
@@ -135,17 +143,20 @@ begin
       join public.room_members a on a.room_id = r.id and a.user_id = inv.inviter_id
       join public.room_members b on b.room_id = r.id and b.user_id = me
       where r.kind = 'direct' limit 1;
-    if found then return rid; end if; -- 이미 있는 1:1 방
-    if inv.uses >= inv.max_uses then raise exception 'invite_used'; end if;
+  elsif exists (select 1 from public.room_members m where m.room_id = inv.room_id and m.user_id = me) then
+    rid := inv.room_id;
+  end if;
+  -- 이미 그 방에 있으면 만료·소진된 코드여도 방을 돌려준다(새로 생기는 권한이 없다)
+  if rid is not null then return rid; end if;
+
+  if inv.expires_at <= now() then raise exception 'invite_expired'; end if;
+  if inv.uses >= inv.max_uses then raise exception 'invite_used'; end if;
+  if inv.room_id is null then
     insert into public.rooms(kind, relation, created_by)
       values ('direct', inv.relation, inv.inviter_id) returning id into rid;
     insert into public.room_members(room_id, user_id) values (rid, inv.inviter_id), (rid, me);
   else
     rid := inv.room_id;
-    if exists (select 1 from public.room_members m where m.room_id = rid and m.user_id = me) then
-      return rid;
-    end if;
-    if inv.uses >= inv.max_uses then raise exception 'invite_used'; end if;
     insert into public.room_members(room_id, user_id) values (rid, me); -- 인원 상한은 트리거
   end if;
 
@@ -154,14 +165,16 @@ begin
 end $$;
 
 -- 인원 상한(1:1 2명, 그룹 8명). 어느 경로로 넣든 걸리게 트리거로 둔다.
--- 방 행을 잠가 동시 참여가 상한을 넘지 못하게 한다.
+-- 방 행을 잠가 동시 참여를 한 줄로 세운다. for no key update라 메시지·반응 insert의
+-- FK 검사(KEY SHARE)는 막지 않는다. READ COMMITTED(Supabase 기본)에 기댄다: 잠금을 얻은 뒤
+-- count가 새 스냅숏으로 돌아 먼저 커밋된 참여를 본다. REPEATABLE READ 이상이면 상한이 샐 수 있다.
 create function public.room_members_cap() returns trigger
 language plpgsql set search_path = public, pg_temp as $$
 declare
   k text;
   n int;
 begin
-  select r.kind into k from public.rooms r where r.id = new.room_id for update;
+  select r.kind into k from public.rooms r where r.id = new.room_id for no key update;
   select count(*) into n from public.room_members m where m.room_id = new.room_id;
   if n >= (case k when 'direct' then 2 else 8 end) then raise exception 'room_full'; end if;
   return new;
@@ -169,9 +182,9 @@ end $$;
 create trigger room_members_cap before insert on public.room_members
   for each row execute function public.room_members_cap();
 
--- reply_to는 같은 방 메시지만. 호출자 권한으로 돈다(security definer 아님):
--- RLS 때문에 보낸 사람이 볼 수 있는 메시지만 찾으므로 다른 방 메시지 존재 여부가 새지 않는다.
-create function public.check_reply_to() returns trigger
+-- reply_to는 같은 방 메시지만, mentions는 그 방 멤버만. 호출자 권한으로 돈다(security definer 아님):
+-- RLS 때문에 보낸 사람이 볼 수 있는 메시지·멤버만 찾으므로 다른 방 정보가 새지 않는다.
+create function public.check_message() returns trigger
 language plpgsql set search_path = public, pg_temp as $$
 begin
   if new.reply_to is not null and not exists (
@@ -179,10 +192,13 @@ begin
   ) then
     raise exception 'reply_to_other_room';
   end if;
+  if not new.mentions <@ array(select m.user_id from public.room_members m where m.room_id = new.room_id) then
+    raise exception 'mention_not_member';
+  end if;
   return new;
 end $$;
-create trigger check_reply_to before insert on public.messages
-  for each row execute function public.check_reply_to();
+create trigger check_message before insert on public.messages
+  for each row execute function public.check_message();
 
 -- ── 권한: 기본 grant all을 걷고 필요한 것만 다시 준다 ──────────
 
@@ -199,7 +215,7 @@ grant select, insert (message_id, user_id, emoji), update (emoji), delete on pub
 
 revoke all on function public.is_member(uuid), public.create_group(text, text),
   public.create_invite(uuid, text), public.accept_invite(text),
-  public.room_members_cap(), public.check_reply_to() from public, anon, authenticated;
+  public.room_members_cap(), public.check_message() from public, anon, authenticated;
 grant execute on function public.is_member(uuid), public.create_group(text, text),
   public.create_invite(uuid, text), public.accept_invite(text) to authenticated, service_role;
 -- 트리거 함수는 발화할 때 EXECUTE 권한을 보지 않으므로 다시 줄 필요가 없다.

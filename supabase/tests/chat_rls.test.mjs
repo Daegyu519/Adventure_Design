@@ -30,7 +30,9 @@ test('non-member sees no messages', async () => {
   assert.equal(await count(db, c, 'select * from public.room_members'), 0)
   // anon은 표도 함수도 못 쓴다
   await assert.rejects(as(db, 'anon', 'select * from public.messages'), /permission denied/)
-  await assert.rejects(as(db, 'anon', "select public.accept_invite('AAAAAA')"), /permission denied/)
+  await assert.rejects(as(db, 'anon', "select public.accept_invite('AAAAAAAA')"), /permission denied/)
+  await assert.rejects(as(db, 'anon', "select public.create_group('g', '친구')"), /permission denied/)
+  await assert.rejects(as(db, 'anon', 'select public.create_invite()'), /permission denied/)
   await assert.rejects(as(db, 'anon', 'select public.is_member($1)', [room]), /permission denied/)
 })
 
@@ -72,7 +74,7 @@ test('messages cannot be updated or deleted', async () => {
 test('direct invite: accept creates room with both', async () => {
   const { db, a, b } = await abc()
   const code = await invite(db, a, null, '팀원')
-  assert.match(code, /^[A-Z0-9]{6}$/)
+  assert.match(code, /^[A-Z0-9]{8}$/)
   const inv = await one(as(db, a, "select max_uses, expires_at > now() + interval '71 hours' and expires_at <= now() + interval '72 hours' as ttl from public.invites"))
   assert.deepEqual(inv, { max_uses: 1, ttl: true })
   const room = await accept(db, b, code)
@@ -96,7 +98,7 @@ test('expired invite rejected', async () => {
   const code = await invite(db, a)
   await as(db, 'service', "update public.invites set expires_at = now() - interval '1 minute' where code = $1", [code])
   await assert.rejects(accept(db, b, code), /invite_expired/)
-  await assert.rejects(accept(db, b, 'ZZZZZZ'), /invite_not_found/)
+  await assert.rejects(accept(db, b, 'ZZZZZZZZ'), /invite_not_found/)
 })
 
 test('re-accepting returns same room, no duplicates', async () => {
@@ -108,6 +110,15 @@ test('re-accepting returns same room, no duplicates', async () => {
   assert.equal(await direct(db, b, a), room) // 반대 방향도
   assert.equal(await count(db, 'service', 'select * from public.rooms'), 1)
   assert.equal(await count(db, 'service', 'select * from public.room_members'), 2)
+  // 이미 그 방에 있으면 만료·소진된 코드여도 방을 돌려받는다
+  const g = (await one(as(db, a, "select public.create_group('g', '친구') as g"))).g
+  const gcode = await invite(db, a, g)
+  await accept(db, b, gcode)
+  await as(db, 'service', "update public.invites set expires_at = now() - interval '1 minute', uses = max_uses")
+  assert.equal(await accept(db, b, code), room)
+  assert.equal(await accept(db, b, gcode), g)
+  const c = await newUser(db, 'C')
+  await assert.rejects(accept(db, c, gcode), /invite_expired/) // 남에게는 여전히 거절
 })
 
 test('group: 9th member rejected', async () => {
@@ -153,6 +164,10 @@ test('room_members: can update own last_read_at/muted only', async () => {
   await assert.rejects(upd(a, "joined_at = now() - interval '1 day'", a), /permission denied/)
   await assert.rejects(upd(a, 'user_id = $2', a), /permission denied/)
   await assert.rejects(as(db, a, 'delete from public.room_members where user_id = $1', [a]), /permission denied/)
+  const c = await newUser(db, 'C')
+  const ins = (u, who) => as(db, u, 'insert into public.room_members(room_id, user_id) values ($1, $2)', [room, who])
+  await assert.rejects(ins(c, c), /permission denied/) // 자기 자신을 남의 방에
+  await assert.rejects(ins(a, c), /permission denied/) // 멤버가 남을 직접
   const rows = (await as(db, 'service', 'select user_id, muted from public.room_members where room_id = $1', [room])).rows
   assert.deepEqual(Object.fromEntries(rows.map((r) => [r.user_id, r.muted])), { [a]: true, [b]: false })
 })
@@ -165,4 +180,39 @@ test('profiles visible to self and co-members only', async () => {
   assert.deepEqual(await names(c), ['C'])
   assert.equal((await as(db, a, "update public.profiles set name = 'X' where id = $1", [b])).affectedRows, 0)
   assert.equal((await as(db, a, "update public.profiles set name = 'A2' where id = $1", [a])).affectedRows, 1)
+})
+
+test('rooms and invites are written only through functions', async () => {
+  const { db, a, b } = await abc()
+  const room = await direct(db, a, b)
+  await assert.rejects(as(db, a, "insert into public.rooms(kind, relation) values ('group', '친구')"), /permission denied/)
+  await assert.rejects(as(db, a,
+    "insert into public.invites(code, inviter_id, relation, max_uses, expires_at) values ('AAAAAAAA', $1, '친구', 99, now() + interval '1 year')",
+    [a]), /permission denied/)
+  await assert.rejects(as(db, a, 'update public.invites set uses = 0'), /permission denied/)
+  await assert.rejects(invite(db, a, room), /not_group/) // 1:1 방에는 초대 못 함
+})
+
+test('deleting a replied-to user keeps replies with reply_to null', async () => {
+  const { db, a, b } = await abc()
+  const room = await direct(db, a, b)
+  const m = await send(db, a, room, 'from A')
+  const r = await send(db, b, room, 'reply from B', m)
+  await db.query('delete from auth.users where id = $1', [a])
+  const rows = (await as(db, 'service', 'select id, reply_to from public.messages')).rows
+  assert.deepEqual(rows, [{ id: r, reply_to: null }])
+})
+
+test('message fields: image_path in own room, mentions of members only, at most 8', async () => {
+  const { db, a, b, c } = await abc()
+  const r1 = await direct(db, a, b)
+  const r2 = await direct(db, a, c)
+  const ins = (img, mentions = []) => as(db, a,
+    'insert into public.messages(room_id, sender_id, image_path, mentions) values ($1, $2, $3, $4) returning id',
+    [r1, a, img, mentions])
+  assert.ok((await ins(`${r1}/photo.jpg`, [b])).rows[0].id) // 같은 방 경로, 멤버 언급
+  await assert.rejects(ins(`${r2}/photo.jpg`), /messages_image_path_room/) // 다른 방 경로
+  await assert.rejects(ins('photo.jpg'), /messages_image_path_room/)
+  await assert.rejects(ins(`${r1}/x.jpg`, [c]), /mention_not_member/) // 비멤버 언급
+  await assert.rejects(ins(`${r1}/x.jpg`, Array(9).fill(b)), /messages_mentions_check/) // 9개
 })
