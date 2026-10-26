@@ -195,6 +195,9 @@ test('no column stores raw complaint text', async () => {
   // trace에는 겉 신호와 전문가 출력만 — 초안 문장 칸 없음
   assert.deepEqual(await columns(db, 'tone', 'analysis_traces'),
     ['trace_id', 'path', 'user_id', 'room_id', 'experts', 'risk', 'alert', 'latency_ms', 'created_at'])
+  // 엔진 계획이 real을 전제한다(이동 평균이라 정수가 아님)
+  assert.equal((await db.query(
+    "select data_type from information_schema.columns where table_schema = 'tone' and table_name = 'sender_patterns' and column_name = 'strength'")).rows[0].data_type, 'real')
   assert.deepEqual(await columns(db, 'public', 'mirror_attempts'),
     ['id', 'user_id', 'kind', 'card_ref', 'answer_score', 'predicted', 'panel_bin', 'gap', 'created_at'])
   // tone 스키마의 문자열 칸은 짧은 라벨뿐이어야 한다. 자유 문장 칸이 늘면 여기서 걸린다.

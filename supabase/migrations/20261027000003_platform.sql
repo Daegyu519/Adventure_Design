@@ -29,3 +29,23 @@ create policy chat_images_insert on storage.objects for insert to authenticated
       then public.is_member(((storage.foldername(name))[1])::uuid)
       else false end
   );
+
+-- 입력 중 표시: Realtime private 채널 `typing:<room_id>`(Presence·Broadcast)는 방 멤버만 듣고 보낼 수 있다.
+-- 앱은 `{config: {private: true}}`로 입장한다. realtime.messages RLS가 private 채널의 인가 계층이다.
+-- 채널 이름 모양이 틀리면(uuid가 아니면) 변환 오류 없이 거절한다: uuid 변환은 case 안에서만 돈다.
+-- 프로젝트 설정에서 Realtime의 "Allow public access"를 꺼야 public 채널로 우회하지 못한다(대시보드 설정, SQL 아님).
+create policy typing_select on realtime.messages for select to authenticated
+  using (
+    realtime.topic() like 'typing:%'
+    and case when realtime.topic() ~ '^typing:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      then public.is_member(split_part(realtime.topic(), ':', 2)::uuid)
+      else false end
+  );
+
+create policy typing_insert on realtime.messages for insert to authenticated
+  with check (
+    realtime.topic() like 'typing:%'
+    and case when realtime.topic() ~ '^typing:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+      then public.is_member(split_part(realtime.topic(), ':', 2)::uuid)
+      else false end
+  );
