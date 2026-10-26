@@ -28,7 +28,8 @@ MIN_RATIO = 4.5
 def rgb(hex_color: str) -> tuple[float, float, float]:
     h = hex_color.lstrip("#")
     assert len(h) == 6, f"#RRGGBB 형식이 아님: {hex_color}"
-    return tuple(int(h[i:i + 2], 16) / 255 for i in (0, 2, 4))  # type: ignore[return-value]
+    r, g, b = (int(h[i:i + 2], 16) / 255 for i in (0, 2, 4))
+    return r, g, b
 
 
 def luminance(hex_color: str) -> float:
