@@ -29,8 +29,14 @@ class Signer:
             serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo)
 
     def token(self, sub: UUID, *, exp_in: float = 3600, aud: str = "authenticated",
-              iss: str = ISSUER, kid: str | None = None) -> str:
+              iss: str = ISSUER, kid: str | None = None, role: str | None = "authenticated",
+              is_anonymous: bool | None = None) -> str:
+        """Supabase 로그인 사용자 토큰 모양. `role=None`이면 role claim을 뺀다. `is_anonymous`는 None이면 뺀다."""
         claims = {"sub": str(sub), "aud": aud, "iss": iss, "exp": int(time.time() + exp_in)}
+        if role is not None:
+            claims["role"] = role
+        if is_anonymous is not None:
+            claims["is_anonymous"] = is_anonymous
         return jwt.encode(claims, self.private_key, algorithm="ES256", headers={"kid": kid or self.kid})
 
 

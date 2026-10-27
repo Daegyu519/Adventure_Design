@@ -24,10 +24,19 @@ JWKS_TIMEOUT_S = 1.0
 # 비대칭 알고리즘만 받는다. HS256(공개키를 비밀로 쓰는 혼동 공격)과 none은 여기서 걸러진다.
 ALGORITHMS = ("ES256", "RS256")
 REQUIRED_CLAIMS = ["exp", "sub", "aud", "iss"]
+USER_ROLE = "authenticated"  # anon·service_role 토큰과 익명 로그인(is_anonymous)은 사용자로 보지 않는다
 
 
 class AuthError(Exception):
     """토큰을 믿을 수 없다. 메시지는 고정 문구(토큰 내용 금지)."""
+
+
+class AuthUnavailable(AuthError):
+    """키를 얻을 수 없어 검증하지 못했다(JWKS 장애·빈 키 집합). 토큰이 나쁜 게 아니라서 401이 아니라 503으로 답한다."""
+
+
+class NoUsableKeys(Exception):
+    """JWKS 응답에 쓸 수 있는 키가 하나도 없다."""
 
 
 class TokenVerifier:
@@ -39,6 +48,7 @@ class TokenVerifier:
         audience: str = "authenticated",
         ttl_s: float = 600.0,
         refetch_gap_s: float = 60.0,
+        failure_backoff_s: float = 3.0,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._issuer = issuer
@@ -46,9 +56,12 @@ class TokenVerifier:
         self._audience = audience
         self._ttl = ttl_s
         self._gap = refetch_gap_s
+        self._backoff = failure_backoff_s
         self._clock = clock
         self._keys: dict[str, jwt.PyJWK] = {}
-        self._fetched_at: float | None = None  # 마지막으로 성공해서 받은 시각
+        self._fetched_at: float | None = None  # 마지막으로 키를 성공해서 받은 시각(빈 응답은 성공이 아니다)
+        self._failed: tuple[str, float] | None = None  # 마지막 시도가 실패했으면 (예외 종류, 시각)
+        self._gen = 0  # 끝난 받기 시도 수. 기다리는 사이 시도가 끝났으면 그 결과를 같이 쓴다
         self._lock = asyncio.Lock()  # 동시 요청이 JWKS 서버를 한꺼번에 두드리지 않게
 
     async def verify(self, token: str) -> UUID:
@@ -70,16 +83,20 @@ class TokenVerifier:
                 options={"require": REQUIRED_CLAIMS}, leeway=10)
         except jwt.PyJWTError as e:
             raise AuthError(type(e).__name__) from None
+        if claims.get("role") != USER_ROLE or claims.get("is_anonymous") not in (None, False):
+            raise AuthError("not a user token")
         try:
             return UUID(claims["sub"])
         except (ValueError, TypeError, AttributeError):
             raise AuthError("invalid sub") from None
 
     async def warm(self) -> None:
-        """서버가 뜰 때 키를 미리 받아 둔다(첫 요청이 JWKS 받기를 기다리지 않게). 실패해도 시작을 막지 않는다."""
+        """서버가 뜰 때 키를 미리 받아 둔다(첫 요청이 JWKS 받기를 기다리지 않게). 실패해도 시작을 막지 않는다.
+        실패해도 backoff는 걸지 않는다: 첫 요청이 바로 다시 받는다."""
         try:
             async with self._lock:
                 await self._refresh()
+                self._gen += 1
         except Exception as e:  # noqa: BLE001 - 예외 종류만 남긴다(메시지에 URL·응답이 섞일 수 있다)
             log.warning("jwks warm failed: %s", type(e).__name__)
 
@@ -92,38 +109,54 @@ class TokenVerifier:
         age = self._age()
         return self._keys.get(kid) if age is not None and age < self._ttl else None
 
-    def _may_refetch(self) -> bool:
+    def _recent_failure(self) -> str | None:
+        """backoff 안에 실패한 시도가 있으면 그 예외 종류."""
+        if self._failed and self._clock() - self._failed[1] < self._backoff:
+            return self._failed[0]
+        return None
+
+    def _may_attempt(self) -> bool:
+        if self._recent_failure() is not None:
+            return False
         age = self._age()
         return age is None or age >= min(self._gap, self._ttl)
 
     async def _key(self, kid: str) -> jwt.PyJWK:
         key = self._cached(kid)
         if key is None:
+            seen = self._gen
             async with self._lock:
                 key = self._cached(kid)  # 기다리는 사이 다른 요청이 받아 왔을 수 있다
-                if key is None and self._may_refetch():
+                # 기다리는 사이 시도가 한 번이라도 끝났으면(성공이든 실패든) 그 결과를 같이 쓴다
+                if key is None and self._gen == seen and self._may_attempt():
                     try:
                         await self._refresh()
+                        self._failed = None
                     except Exception as e:  # noqa: BLE001
-                        raise AuthError(f"jwks unavailable: {type(e).__name__}") from None
+                        self._failed = (type(e).__name__, self._clock())
+                    self._gen += 1
                     key = self._cached(kid)
-        if key is None:
-            raise AuthError("unknown kid")
+            if key is None:
+                if (why := self._recent_failure()) is not None:
+                    raise AuthUnavailable(f"jwks unavailable: {why}")
+                raise AuthError("unknown kid")
         return key
 
     async def _refresh(self) -> None:
+        """JWKS를 받아 캐시를 바꾼다. 실패(빈 키 집합 포함)는 예외이고, 그땐 캐시와 시각을 건드리지 않는다."""
         jwks = await self._fetch()
         try:
             found = jwt.PyJWKSet.from_dict(jwks).keys
         except (jwt.PyJWTError, TypeError, AttributeError):
-            found = []  # 빈 집합·깨진 집합: 아무 키도 믿지 않는다
-        self._keys = {
+            found = []  # 깨진 집합: 아무 키도 믿지 않는다
+        keys = {
             k.key_id: k for k in found
             if k.key_id and k.algorithm_name in ALGORITHMS and k.public_key_use in (None, "sig")
         }
+        if not keys:
+            raise NoUsableKeys
+        self._keys = keys
         self._fetched_at = self._clock()
-        if not self._keys:
-            log.warning("jwks has no usable keys")
 
 
 @lru_cache
@@ -135,10 +168,12 @@ def get_verifier() -> TokenVerifier:
         return TokenVerifier("", fetch)
 
     async def fetch() -> dict:
-        async with httpx.AsyncClient(timeout=JWKS_TIMEOUT_S) as c:
-            r = await c.get(f"{base}/auth/v1/.well-known/jwks.json")
-            r.raise_for_status()
-            return r.json()
+        # httpx timeout은 연결·읽기 단계별이라 조금씩 흘려 주는 서버는 못 막는다: 전체를 한 번에 자른다.
+        async with asyncio.timeout(JWKS_TIMEOUT_S):
+            async with httpx.AsyncClient(timeout=JWKS_TIMEOUT_S) as c:
+                r = await c.get(f"{base}/auth/v1/.well-known/jwks.json")
+                r.raise_for_status()
+                return r.json()
 
     return TokenVerifier(f"{base}/auth/v1", fetch)
 
@@ -157,6 +192,9 @@ async def current_user(
         raise _unauthorized()
     try:
         return await verifier.verify(token)
+    except AuthUnavailable as e:  # 토큰이 아니라 우리 쪽 문제: 앱이 다시 시도하게 503
+        log.warning("auth unavailable: %s", e)  # 예외 종류 이름만(토큰·응답 본문 없음)
+        raise HTTPException(status_code=503, detail="auth_unavailable") from None
     except AuthError as e:
         log.info("auth rejected: %s", e)
         raise _unauthorized() from None
