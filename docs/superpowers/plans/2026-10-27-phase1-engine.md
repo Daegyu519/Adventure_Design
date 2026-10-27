@@ -18,7 +18,7 @@
 
 - 모델 이름과 키는 `engine/config/models.yaml`과 환경 변수에만 둔다. 코드에 직접 쓰지 않는다.
 - 실제 대화 문장이 지나가는 경로(실시간·상세·털어놓기·거울)의 전문가와 폴백 목록에는 `gemini:`가 없다. Gemini 공급자 정의는 합성 문장 평가용으로만 남긴다.
-- 외부 모델로 가는 문장(초안, 최근 대화, 답장 대상, 의도, 하소연, 거울 카드)은 `pipeline.py` 입구에서 한 번 `Masker`(참여자 이름 포함)를 거친다. 전문가와 레이어는 가린 문장만 받는다. 고쳐 쓰기 후보(거울 `options` 포함)의 자리표시는 응답 직전에 되돌린다. 대응표는 그 요청의 메모리에만 두고 로그, trace, 큐 인자에 넣지 않는다. 그 위에 `Router.call`이 `local`·`mock`이 아닌 공급자로 보내기 직전에 패턴 가리기를 한 번 더 한다(안전망).
+- 외부 모델로 가는 문장(초안, 최근 대화, 답장 대상, 의도, 하소연, 거울 카드)은 `pipeline.py` 입구에서 한 번 `Masker`(참여자 이름 포함)를 거친다. 전문가와 레이어는 가린 문장만 받는다. 고쳐 쓰기 후보(거울 `options` 포함)의 자리표시는 응답 직전에 되돌린다. 대응표는 그 요청의 메모리에만 두고 로그, trace, 큐 인자에 넣지 않는다. 그 위에 `Router.call`이 mock이 아닌 모든 공급자(`local` 포함. 로컬 주소가 원격을 가리킬 수 있다)로 보내기 직전에 패턴 가리기를 한 번 더 한다(안전망).
 - LLM 출력은 pydantic 검사를 통과한 것만 쓴다. 실패하면 폴백, 모두 실패하면 그 전문가를 빼고, 말투 전문가가 0개면 기권한다.
 - 사용자에게 보이는 엔진 문구(힌트 제목·이유, 어긋남 줄, 옵션 라벨·keep·change, 거울 속마음·공개 문구, 털어놓기 안내)는 고정 템플릿과 `guard.guard`를 통과한 것만 내보낸다. 한국어로, "~수도 있어요"처럼 쓴다.
 - 하소연 원문은 DB, 로그, trace, 큐 실패 로그 어디에도 남지 않는다.
@@ -38,7 +38,8 @@
 - 고쳐 쓰기 후보나 거울 `options`에 `[이름1]`·`[전화번호1]`이 남은 채 입력창으로 들어갈 수 있다. 엔진이 원래 값으로 되돌려야 한다(Task 2 `test_name_survives_rewrite_round_trip`, Task 9 `test_rewrite_restores_masked_values`).
 - 같은 사람이 같은 메시지나 같은 신호로 털어놓기를 되풀이할 수 있다. 한 번만 세야 하고, 전체 패턴 수는 서로 다른 신고자 수여야 한다(Task 1 `test_apply_feedback`, Task 10 `test_same_reporter_repeats_count_once`).
 - 서버 시계가 UTC여도 한국 자정과 주 경계가 맞아야 한다. `active_from`, 주간 상한, 주별 힌트 수는 Asia/Seoul 기준이다(Task 1 `test_mirror_and_stats`, Task 10 `test_kst_boundaries`).
-- L4가 `trigger`·`feeling` 자리에 문장 조각을 내놓을 수 있다. 고정 목록 밖의 값은 저장하지 않는다(Task 10 `test_unknown_trigger_or_feeling_not_stored`, `test_apply_feedback_rejects_unknown_trigger`).
+- L4가 `trigger`·`feeling` 자리에 문장 조각을 내놓을 수 있다. 고정 목록 밖의 값은 저장하지 않는다(Task 10 `test_unknown_trigger_or_feeling_not_stored`, `test_apply_feedback_rejects_bad_values`, `test_bad_pattern_error_has_no_value`).
+- 같은 보낸 사람·관계·신호의 재신고가 이미 켜진 패턴을 다시 "다음 날부터"로 밀어 숨길 수 있다. 활성 시각별 행으로 막는다(Task 10 `test_rereport_keeps_active_pattern`, `test_rereport_next_day_keeps_yesterdays_pattern`). 또 `apply_feedback`는 보낸 사람·관계를 호출자에게 받지 않고, 그룹(3명 이상) 판정도 SQL에서 한 번 더 한다(Task 10 `test_apply_feedback_group_rule_in_sql`).
 - 웹 푸시 구독 하나가 만료되거나 실패할 수 있다. 다른 수신자는 계속 받아야 하고, 재시도 때문에 알림이 겹치면 안 된다(Task 8 `test_one_bad_subscription_does_not_block_others`). 만료(404·410)된 구독은 지운다(`test_dead_web_subscription_deleted`).
 - 웹 푸시 구독 JSON은 사용자가 `push_tokens`에 쓴 값이라 `endpoint`가 내부 주소일 수 있다. 알려진 푸시 서비스 호스트가 아니면 부르지 않는다(Task 8 `test_web_endpoint_allowlist`, `test_disallowed_endpoint_not_sent`).
 - 첫 `/v1/hint`가 JWKS 받기를 기다리면 1.5초 예산을 먹는다. 시작 때 미리 받아 둔다(Task 3 `test_lifespan_warms_jwks`, Task 7 `test_first_hint_after_startup_has_no_jwks_fetch`).
@@ -49,7 +50,7 @@
 1. **DB 접근:** asyncpg 풀 하나(`SUPABASE_DB_URL`)를 쓴다. 대시보드 Connect의 Session pooler URI를 쓴다(무료 플랜 직접 연결은 IPv6 전용). `statement_cache_size=0`이라 transaction pooler에서도 돈다. SQL은 모두 `app/db.py`의 `PgRepo`에만 둔다. 라우트와 작업은 `Repo` Protocol만 안다. 테스트는 `tests/fakes.FakeRepo`와 `PgRepo`에 **같은 계약 테스트**를 돌린다. Postgres 쪽은 `brew install postgresql@16`의 initdb로 세션마다 임시 클러스터를 띄우고, `supabase/tests/shim.sql`과 `supabase/migrations`(`_platform` 제외)를 적용한다. postgres가 없으면 pg 쪽만 건너뛴다. ORM과 Supabase REST는 쓰지 않는다(`tone`은 API 비공개).
 2. **상세 경로 두 번째 말투 전문가:** `nvidia:moonshotai/kimi-k3`(`mock: tone_alt`)다. 거울은 상세 경로 전문가를 그대로 쓴다(`paths: [detail, mirror]`).
 3. **`reply_to`:** `/v1/hint`와 `/v1/detail`이 선택 값으로 받는다. 엔진이 DB에서 같은 방인지 확인한다. 없거나 다른 방이면 422다. 답장 대상은 맥락 맨 앞에 둔다.
-4. **"그룹방 하소연":** `rooms.kind = 'group'`이고 멤버가 3명 이상인 방이다. `global_patterns.count`는 신호별 서로 다른 신고자 수다(`tone.pattern_reporters`). 같은 (신고자, 메시지)는 DB unique로 한 번만 받는다. 기존 `sender_patterns` 행이 갱신되면 그 행은 다음 날 0시부터 다시 반영된다(익명성 쪽을 택함).
+4. **"그룹방 하소연":** `rooms.kind = 'group'`이고 멤버가 3명 이상인 방이다. `global_patterns.count`는 신호별 서로 다른 신고자 수다(`tone.pattern_reporters`). 같은 (신고자, 메시지)는 DB unique로 한 번만 받는다. `sender_patterns`는 활성 시각(`active_from`)별 행으로 쌓는다(기본 키에 `active_from` 포함, T-24 마이그레이션). 재신고는 자기 `active_from`(다음 KST 자정) 행만 올리므로 이미 켜진 패턴은 꺼지지 않고, 새 증가분만 다음 날 0시부터 보인다(익명성 유지).
 5. **고쳐 쓰기:** `alert`이거나 의도 어긋남이 있을 때 돈다. 옵션 라벨은 고정(`조금만 바꾼 문장` / `가장 부드럽게 바꾼 문장`)이다. `detail_opened`는 `intent` 없는 첫 호출만 기록하고, `risk`는 `tone_events`(사용자가 읽을 수 있는 표)에 넣지 않는다.
 6. **거울:** 되돌려 받기와 예측은 맥락 없이 거울 경로 말투 전문가만 쓴다(`pipeline.panel`). `card_id`는 `MIRROR_SECRET` HMAC으로 서명한다(값이 없으면 프로세스마다 임의 키). 오늘과 어제 카드만 유효하다. 속마음은 읽힘별 고정 문구다.
 7. **리포트:** `fix_rate = sent_after_fix / (sent_after_fix + sent_with_hint)`이고, 분모가 0이면 0.0이다. 주는 KST 월요일 날짜 문자열(`YYYY-MM-DD`)로 최근 5주를 센다. `hint_shown`은 앱이 기록한다(`signals: {trace_id}`). `tone_events.signals`는 양쪽 모두 jsonb 객체다(앱 `{trace_id}`, 엔진 `{signals: […], trace_id}`). `mirror_attempts`는 엔진이 `/v1/mirror/answer` 안에서 서비스 권한(`SUPABASE_DB_URL` 직접 연결)으로 쓰고, 앱은 읽기만 한다(앱은 panel 칸을 모른다). 푸시 내용은 Expo·웹 모두 `{title, body, url: "/room/<room_id>"}`다. 앱 쪽 시간 제한은 1700ms(엔진 1.5초 + 네트워크)다.
@@ -135,7 +136,7 @@
       async def connect(cls, dsn: str) -> "PgRepo"   # asyncpg.create_pool(dsn, min_size=0, max_size=5, statement_cache_size=0, command_timeout=5)
       async def close(self) -> None
   ```
-  - `apply_feedback`가 usable일 때 하는 일은 셋이다. 패턴마다 `tone.pattern_reporters(trigger, reporter_id)`에 넣는다. 그 행이 새로 들어갔을 때만 `global_patterns.count + 1`을 한다. `to_sender`면 `sender_patterns`를 upsert한다(count + 1, strength는 누적 평균, feeling은 새 값, `active_from` = `fb.active_from`). usable이 아니면 `feedback_log`만 남긴다(`pattern_count` 0).
+  - `apply_feedback`가 usable일 때 하는 일은 셋이다. 패턴마다 `tone.pattern_reporters(trigger, reporter_id)`에 넣는다. 그 행이 새로 들어갔을 때만 `global_patterns.count + 1`을 한다. `to_sender`면 `sender_patterns`를 upsert한다(count + 1, strength는 누적 평균, feeling은 새 값, `active_from` = `fb.active_from`). 패턴은 `sorted(patterns, key=lambda p: p.trigger)` 순서로 처리한다(동시 신고가 같은 행을 반대 순서로 잠가 데드락 나는 것을 막는다). 이 Task 10(T-24)이 `sender_patterns` 키·`FeedbackWrite`·읽기 규칙을 바꾼다(Task 10 "`Repo.apply_feedback` 규칙"). usable이 아니면 `feedback_log`만 남긴다(`pattern_count` 0).
   - `app.deps.get_settings() -> Settings`(`lru_cache`, `Settings.from_env()`), `app.deps.get_repo(request: Request) -> Repo`(`request.app.state.repo`이 없으면 503).
   - `tests.fakes.FakeRepo`: `Repo` 구현에 동기 시드 메서드를 더한다. 시드 메서드는 `add_user(name) -> UUID`, `add_room(kind, relation, members, title=None) -> UUID`, `add_message(room_id, sender_id, text, *, image_path=None, reply_to=None, at=None) -> int`, `set_muted(room_id, user_id)`, `add_push_token(user_id, token, platform)`, `add_event(user_id, room_id, kind, *, at=None)`, `add_mirror_attempt(user_id, kind, card_ref, *, gap=None, at=None)`, `add_sender_pattern(sender_id, relation, trigger, *, count=1, strength=1.0, feeling="차갑게", active_from)`, `set_global(trigger, count)`, `rows(table: str) -> list[dict]`다. 상태는 공개 속성으로 둔다(`fake.traces`, `fake.events`, `fake.feedback_log`, …).
   - `tests.pg.PgSeeder(conn)`: 같은 이름의 시드 메서드를 async로 둔다.
@@ -252,7 +253,7 @@ git add -A && git commit -m "T-06a: engine Repo (asyncpg) with fake/pg contract 
   - `Router.timeout(path) -> float`: `paths.<path>.deadline_ms / 1000`
   - `Router.CACHE_MAX = 2048`: 넘으면 캐시를 통째로 비운다(`# ponytail: 전체 비우기, LRU 필요하면 교체`).
   - `Router.traces`: `deque(maxlen=1000)`
-  - 안전망: 공급자 이름이 `local`·`mock`이 아니면, 보내기 직전에 `user`와 `payload` 안의 모든 문자열(중첩 포함)에 `pii.mask(…)`(이름 없이 패턴만)를 쓴다.
+  - 안전망: 공급자 이름이 `mock`이 아니면(`local` 포함, 로컬 주소가 원격을 가리킬 수 있어 예외 없음), 보내기 직전에 `system`·`user`와 `payload` 안의 모든 문자열(중첩 포함)에 `pii.mask(…)`(이름 없이 패턴만)를 쓴다.
   - `harness.pii.Masker(names: Iterable[str] = ())`
     - 메서드: `__call__(text) -> str`, `turns(list[Turn]) -> list[Turn]`, `conversation(Conversation) -> Conversation`(turns·reply_to를 가린 복사본), `restore(text) -> str`
     - 자리표시: 같은 값은 같은 자리표시를 받는다. 종류별로 등장 순서대로 번호를 붙인다(`[전화번호1]`, `[이메일1]`, `[주민번호1]`, `[계좌번호1]`, `[긴 숫자1]`, `[이름1]`).
@@ -847,11 +848,11 @@ git add -A && git commit -m "T-21: /v1/detail with judge, intent-only rewrite, t
 ### Task 10: T-24 털어놓기 → 보낸 사람·전체 패턴
 
 **Files:**
-- Create: `engine/jobs/feedback.py`, `engine/app/routes/feedback.py`, `engine/tests/test_feedback.py`
-- Modify: `engine/pipeline.py`(`feedback`), `engine/layers/guard.py`(`ACK`), `engine/app/contracts.py`, `engine/app/main.py`, `engine/app/db.py`·`engine/tests/fakes.py`(`apply_feedback`의 trigger 검사), `engine/harness/store.py`, 앱 타입(생성), `ARCHITECTURE.md` 3-4·5장·9장
+- Create: `engine/jobs/feedback.py`, `engine/app/routes/feedback.py`, `engine/tests/test_feedback.py`, `supabase/migrations/20261028000002_sender_pattern_activations.sql`
+- Modify: `engine/pipeline.py`(`feedback`), `engine/layers/guard.py`(`ACK`), `engine/app/contracts.py`, `engine/app/main.py`, `engine/app/db.py`·`engine/tests/fakes.py`·`engine/tests/pg.py`·`engine/tests/test_db.py`(`FeedbackWrite`, `apply_feedback`, `sender_patterns`, 값 검사), `engine/harness/store.py`, 앱 타입(생성), `ARCHITECTURE.md` 3-4·5장·9장
 
 **Interfaces:**
-- Consumes: Task 1의 `Repo.apply_feedback`·`weekly_feedback_count`·`FeedbackWrite`·`KST`·`week_start`, Task 2의 `TRIGGERS`·`FeedbackResult`(중복 제거·3개 상한), Task 5 `get_queue`.
+- Consumes: Task 1의 `Repo.apply_feedback`·`sender_patterns`·`weekly_feedback_count`·`FeedbackWrite`·`KST`·`week_start`(이 Task가 앞의 셋을 바꾼다), Task 2의 `TRIGGERS`·`FeedbackResult`(중복 제거·3개 상한), Task 5 `get_queue`.
 - Produces:
   - `FeedbackIn(room_id: UUID, message_id: int, text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000)])`, `FeedbackOut(ack: str)`
   - `guard.ACK`: 프로토타입 `layers/feedback.py`의 `ACK` 문장 그대로
@@ -865,9 +866,14 @@ git add -A && git commit -m "T-21: /v1/detail with judge, intent-only rewrite, t
     2. `pipeline.feedback(…)`를 부른다.
     3. usable이면 `patterns = [p for p in result.patterns if p.trigger in TRIGGERS and p.feeling in NEGATIVE]`. `TRIGGERS`는 Task 2의 고정 어휘다(gate 신호 이름 7개를 모두 포함하고, 프롬프트 태그 3개를 더한다). L4가 `trigger` 자리에 문장 조각을 내놓아도 여기서 걸러져 `sender_patterns`·`global_patterns`에 못 들어간다. 걸러진 뒤 `patterns`가 비면 usable을 False로 둔다(쓸모 없는 신고가 주간 상한을 쓰지 않게).
     4. 패턴이 있어도 `weekly_feedback_count(sender, relation, since=datetime.combine(week_start(now), time(0), KST)) >= WEEKLY_CAP`이면 usable False, 패턴 []다. 주간 상한은 ISO (연, 주)의 KST 시작 시각부터 센다. 주 번호만으로 세지 않는다.
-    5. `to_sender = room.kind == "group" and room.member_count >= GROUP_MIN_MEMBERS`
-    6. `apply_feedback(FeedbackWrite(…, active_from=next_midnight_kst(now)))`. `PgRepo.apply_feedback`와 `FakeRepo.apply_feedback`는 맨 앞에서 `patterns` 중 `trigger not in TRIGGERS`가 하나라도 있으면 `ValueError("unknown trigger")`를 올리고 아무것도 쓰지 않는다(`run`을 거치지 않는 호출도 막는 두 번째 방어선).
+    5. `to_sender = room.kind == "group" and room.member_count >= GROUP_MIN_MEMBERS`. 호출자의 요청일 뿐이다. 최종 판정은 `apply_feedback`가 SQL에서 다시 한다.
+    6. `apply_feedback(FeedbackWrite(room_id, reporter_id, message_id, usable, patterns, to_sender, active_from=next_midnight_kst(now)))`. `sender_id`·`relation`은 넘기지 않는다(아래 규칙 2).
     7. complaint와 결과의 `dropped_reason`은 로그에 쓰지 않는다.
+  - **`Repo.apply_feedback`·`sender_patterns` 규칙 (필수. 이 Task가 T-06a 구현을 바꾼다. `PgRepo`와 `FakeRepo`가 같이 지킨다)**
+    1. **활성 시각별 행.** 마이그레이션 `20261028000002_sender_pattern_activations.sql`이 `tone.sender_patterns`의 기본 키를 `(sender_id, relation, trigger, active_from)`으로 바꾼다(`alter table tone.sender_patterns drop constraint sender_patterns_pkey; alter table tone.sender_patterns add primary key (sender_id, relation, trigger, active_from);`). 신고는 **자기 `active_from`(다음 KST 자정) 행만** upsert한다(`on conflict (sender_id, relation, trigger, active_from) do update`: count + 1, strength는 count 가중 누적 평균, feeling은 새 값). 이미 켜진 행(`active_from`이 지난 것)은 건드리지 않으므로 재신고가 켜진 패턴을 꺼 버리지 않는다. 같은 날 되풀이한 신고는 같은 행에 쌓인다. `Repo.sender_patterns(sender_id, relation, now)`는 `active_from <= now`인 행을 trigger별로 묶어 count는 합, strength는 count 가중 평균, feeling은 그중 `active_from`이 가장 늦은 행의 값으로 돌려준다(반환 모양이 그대로라 T-13 `aggregate`는 안 바뀐다). `FakeRepo`도 같은 키와 같은 읽기 규칙을 쓴다.
+    2. **보낸 사람·관계는 호출자가 안 준다.** `FeedbackWrite`에서 `sender_id`·`relation`을 뺀다(남는 칸: `room_id, reporter_id, message_id, usable, patterns, to_sender, active_from`). `apply_feedback`가 같은 트랜잭션 안에서 `messages`(`id = message_id and room_id = room_id`)에서 `sender_id`를, `rooms`에서 `relation`·`kind`를, `room_members` 행 수를 읽는다. 행이 없으면(없는 메시지, 다른 방) `ValueError("unknown message")`이고 아무것도 쓰지 않는다. `sender_patterns` upsert는 `fb.to_sender`이고 **SQL이 읽은** `kind = 'group'`이며 멤버 수가 `GROUP_MIN_MEMBERS` 이상일 때만 한다(규칙 14를 DB 쪽에서도 지킨다). 호출자가 `to_sender=True`를 넘겨도 1:1이나 2명 방이면 `sender_patterns`는 그대로고 `global_patterns`만 는다. `GROUP_MIN_MEMBERS = 3`은 `app.db`에 두고 `jobs.feedback`이 가져다 쓴다(두 곳이 어긋나지 않게).
+    3. **값 검사는 SQL보다 먼저, 값을 메시지에 싣지 않는다.** `app.db.check_patterns(patterns)`를 `apply_feedback` 맨 앞(첫 쿼리·트랜잭션 전)에서 부른다. `trigger not in TRIGGERS` → `ValueError("unknown trigger")`, `feeling not in READINGS`(`harness.schemas`의 다섯 읽힘) → `ValueError("unknown feeling")`, `strength`가 정수 1~3이 아니면 → `ValueError("bad strength")`. 메시지는 고정 문구이고 값·`repr(pattern)`을 넣지 않으며 `raise … from None`으로 쓴다. 검사를 SQL 앞에 두는 이유: DB check 위반이 나면 Postgres DETAIL(`Failing row contains (...)`)이 asyncpg 예외의 `str(exc)`에 들어가 행 값(L4가 trigger 자리에 흘린 하소연 조각)이 로그로 샌다. 큐는 이미 `type(e).__name__`만 남기지만(Task 5), 이 검사로 DB 예외가 아예 나지 않게 한다. `usable=False`여도 `patterns`가 있으면 검사한다.
+    4. **패턴은 `sorted(patterns, key=lambda p: p.trigger)` 순서로 쓴다.** 두 신고가 같은 `global_patterns`·`sender_patterns` 행을 반대 순서로 잠가 데드락 나는 것을 막는다. T-06a에서 이미 이 순서로 쓰게 했으니 여기서 다시 만들지 않고, 테스트로 고정만 한다.
   - `POST /v1/feedback` → 202 `FeedbackOut`
     - `ensure_member` 후 `msg = repo.message(id)`를 읽는다. `msg is None`이거나 `msg.room_id != room_id`이거나 `msg.sender_id == user`이면 403이다.
     - `queue.enqueue("feedback", jobs.feedback.run, repo, reg, room_id, user, message_id, body.text)`. False면 503이다.
@@ -888,24 +894,38 @@ def test_weekly_cap()                           # 같은 보낸 사람·관계�
 def test_same_reporter_repeats_count_once()     # 같은 (지은, 메시지) 두 번 → feedback_log 1행; 지은이 다른 메시지 5개로 "짧은 답" → global["짧은 답"] == 1
 def test_duplicate_triggers_in_one_report()     # canned feedback patterns ["짧은 답","짧은 답","마침표로 끝남","이유 없는 거절","짧은 답"] → 각 trigger 1번, 최대 3개
 def test_unknown_trigger_or_feeling_not_stored()  # canned trigger "민수가 안 된다고만 함", feeling "짜증" → sender_patterns·global_patterns 저장 0, feedback_log usable False·pattern_count 0
-def test_apply_feedback_rejects_unknown_trigger(world)  # FeedbackWrite.patterns에 trigger "민수가 안 된다고만 함" → ValueError, sender_patterns·global_patterns·pattern_reporters·feedback_log 모두 그대로(fake·pg 둘 다)
+def test_rereport_next_day_keeps_yesterdays_pattern(fake, registry)  # 그룹방, 날짜 D 10:00 KST에 지은이 "짧은 답"으로 신고 → D+1 10:00에 하늘이 같은 신호로 신고(run의 now 인자). now=D+1 10:00에서 sender_patterns(민수, 팀원)["짧은 답"].count == 1(어제 행이 그대로 켜져 있음), now=D+2 0:00에서 count == 2; rows 2개(active_from D+1 0:00, D+2 0:00)
+def test_same_day_rereport_stacks_in_one_row(fake, registry)  # 같은 날 두 사람 신고 → sender_patterns 행 1개, count 2, active_from 같음
+def test_caller_cannot_force_sender_pattern(fake, registry)  # run()이 아니라 repo.apply_feedback(FeedbackWrite(…, to_sender=True))를 1:1 방·2명 그룹방 메시지에 직접 호출 → sender_patterns 0행, global += 1 (test_db의 SQL 규칙 테스트와 별개로 fake 경로 확인)
+def test_bad_pattern_error_has_no_value(world, caplog)  # trigger/feeling 자리에 "보라색코끼리하소연"을 넣은 FeedbackPattern(model_construct) → ValueError, str(exc)·repr(exc)·caplog.text에 "보라색코끼리하소연" 없음, 네 표 모두 그대로
 def test_known_triggers_all_storable()          # gate의 신호 7개 이름이 모두 TRIGGERS에 있음(어휘가 gate와 어긋나지 않음)
 def test_kst_boundaries()                       # next_midnight_kst(2026-10-27T14:59Z) == 2026-10-28T00:00+09:00; (2026-10-27T15:01Z) == 2026-10-29T00:00+09:00; week_start(2027-01-01T01:00+09:00) == date(2026,12,28)
 def test_complaint_never_stored_or_logged(client, fake, queue, caplog, spy, registry)  # 하소연 "민수가 보라색코끼리하소연 너무 단답이야": run_all 뒤 repr(fake.__dict__)·caplog.text·str(list(registry.router.traces))에 "보라색코끼리하소연" 없음; spy.seen()에는 하소연이 가지만 멤버 이름 "민수"는 없음
 def test_complaint_never_persisted_pg(pg_dsn)   # PgRepo로 run() 뒤 public·tone·auth의 text/varchar/jsonb/배열 칸 전부 `c::text like '%보라색코끼리하소연%'` → 0행
 ```
 
+`tests/test_db.py`에 더한다(`world` 픽스처라 `FakeRepo`·`PgRepo` 둘 다 돈다). 그룹방 픽스처는 위와 같고, 시각은 KST 자정 기준으로 고정한다.
+```python
+def test_rereport_keeps_active_pattern(world)   # 어제 0시 활성 행(count 1, strength 2.0) 시드 → 같은 (민수, 팀원, "짧은 답")을 내일 0시 active_from으로 apply_feedback → rows 2개; sender_patterns(now=지금)는 count 1·strength 2.0 그대로; now=내일 0시면 count 2·strength는 count 가중 평균; 같은 날 한 번 더 → 내일 행만 count 3
+def test_sender_patterns_weighted_read(world)   # 행 (count 1, strength 1.0, 성의없게, 어제), (count 3, strength 3.0, 차갑게, 오늘 0시) → count 4, strength 2.5, feeling "차갑게"(가장 늦은 active_from); 내일 행은 제외
+def test_apply_feedback_derives_sender_and_relation(world)  # FeedbackWrite 칸에 sender_id·relation이 없다(dataclasses.fields); 친구 관계 그룹방의 민수 메시지 → 저장된 sender_patterns 행의 sender_id == 민수, relation == "친구"; 다른 방의 message_id → ValueError("unknown message")이고 네 표 모두 그대로
+def test_apply_feedback_group_rule_in_sql(world)  # to_sender=True로 직접 호출: 1:1 방, kind group이지만 멤버 2명인 방 → sender_patterns 0행, global_patterns += 1, feedback_log 1행; 멤버 3명 그룹방 → sender_patterns 1행
+@pytest.mark.parametrize("bad", ["trigger", "feeling", "strength0", "strength4"])
+def test_apply_feedback_rejects_bad_values(world, bad)  # trigger "민수가 안 된다고만 함" / feeling "짜증" / strength 0·4(FeedbackPattern.model_construct로 만듦) → ValueError, 메시지에 그 값이 없음, sender_patterns·global_patterns·pattern_reporters·feedback_log 모두 그대로; usable=False여도 같다
+def test_apply_feedback_processes_triggers_sorted(world)  # patterns를 역순으로 넘겨도 쓰기 순서가 sorted(trigger): FakeRepo는 기록한 순서, PgRepo는 pg_stat_statements 없이 `global_patterns`를 잠그는 두 연결을 반대 순서로 동시에 돌려 데드락 없이 둘 다 끝남
+```
+
 - [ ] **Step 3: 실패 확인** — `cd engine && uv run pytest -q tests/test_feedback.py` → FAIL
 
 - [ ] **Step 4: 구현**
 
-- [ ] **Step 5: 통과 확인 + 타입 생성** — `cd engine && uv run pytest -q` → 실패 0. 타입 생성 → 스냅숏 테스트 PASS.
+- [ ] **Step 5: 통과 확인 + 타입 생성** — `cd engine && uv run pytest -q` → 실패 0. `cd supabase && npm test` → 새 마이그레이션(기본 키 변경)과 함께 단계 0 테스트 그대로 통과. 타입 생성 → 스냅숏 테스트 PASS.
 
 - [ ] **Step 6: 문서 + 완료 처리 + commit**
 
 `ARCHITECTURE.md`를 고친다.
 - 3-4: `tone.pair_patterns`를 "그룹(3명 이상)은 `sender_patterns`(다음 날 0시부터), 1:1은 `global_patterns`만"으로 바꾼다.
-- 5장: `global_patterns.count` = 서로 다른 신고자 수, `pattern_reporters`.
+- 5장: `global_patterns.count` = 서로 다른 신고자 수, `pattern_reporters`. `tone.sender_patterns` 행의 PK를 `(sender_id, relation, trigger, active_from)`으로 고치고(3-4장의 같은 PK 표기도), "읽을 때 `active_from <= now`인 행의 count 합 · strength count 가중 평균"을 덧붙인다.
 - 9장: `harness/store.py` → `app/db.py` 줄을 "`harness/store.py`는 `app/context.py`가 요청마다 `app/db.Repo`에서 채우는 읽기 전용 스냅숏, 쓰기는 `app/db.py`"로 바꾼다.
 
 tasks.md T-24를 `완료`로 바꾼다. 확인 칸: 원문 미저장(fake·pg·로그), 1:1이 sender_patterns에 안 들어감.

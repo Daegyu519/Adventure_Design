@@ -24,6 +24,13 @@ def test_guard_never_confirms_or_reveals_source():
         guard.guard("확실히 차갑게 느껴져요")
 
 
+def test_guard_error_does_not_echo_text():
+    text = "민수 님이 말한 대로 확실히 차가워요"  # 복원된 실명이 들어 있을 수 있는 문장
+    with pytest.raises(ValueError) as e:
+        guard.guard(text)
+    assert "민수" not in str(e.value) and text not in str(e.value) and "확실히" not in repr(e.value)
+
+
 def test_gate_passes_short_reply_to_heavy_message_only():
     store = ProfileStore()
     light = Conversation(pair_id="p", turns=[Turn(speaker="them", text="내일 7시 맞지?")])
