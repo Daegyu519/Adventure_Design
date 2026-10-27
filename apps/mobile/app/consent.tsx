@@ -26,7 +26,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   const { space } = useTheme();
   return (
     <View style={{ gap: space[1] }}>
-      <AppText accessibilityRole="header" weight="600">
+      <AppText accessibilityRole="header" aria-level={2} weight="600">
         {title}
       </AppText>
       {children}
@@ -49,7 +49,7 @@ export default function Consent() {
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
       <ScrollView contentContainerStyle={{ padding: space[3], paddingBottom: space[6] }}>
         <View style={{ width: '100%', maxWidth: 560, alignSelf: 'center', gap: space[5] }}>
-          <AppText accessibilityRole="header" variant="title">
+          <AppText accessibilityRole="header" aria-level={1} variant="title">
             시작하기 전에
           </AppText>
 
@@ -82,8 +82,8 @@ export default function Consent() {
             // 웹(react-native-web)은 button 역할만 Space로 눌린다. 체크 상자는 Space로도 토글한다(Enter는 onPress가 받는다).
             onKeyDown={(e) => {
               if (e.nativeEvent.key === ' ') {
-                e.preventDefault();
-                setAgreed((v) => !v);
+                e.preventDefault(); // 페이지가 스크롤되지 않게
+                if (!e.nativeEvent.repeat) setAgreed((v) => !v); // 키를 누르고 있어도 한 번만 토글
               }
             }}
             accessibilityRole="checkbox"

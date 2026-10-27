@@ -36,7 +36,10 @@ export async function saveConsent(): Promise<void> {
 
 export function useConsented(): boolean | null {
   useEffect(() => {
-    void loadConsent().then(set);
+    // 읽는 동안 사용자가 동의(saveConsent)했다면 늦게 도착한 읽기 결과가 그 값을 덮어쓰지 않는다.
+    void loadConsent().then((v) => {
+      if (current === null) set(v);
+    });
   }, []);
   return useSyncExternalStore(subscribe, () => current);
 }

@@ -30,6 +30,7 @@ export function Button({ label, onPress, kind = 'primary', disabled = false, loa
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? label}
       accessibilityState={{ disabled: inactive, busy: loading }}
+      aria-busy={loading} // react-native-web은 accessibilityState를 aria-*로 옮기지 않는다
       style={({ pressed }) => ({
         minHeight: 44,
         minWidth: 44,
