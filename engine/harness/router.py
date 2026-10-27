@@ -1,8 +1,10 @@
 """전문가 ID로 모델을 골라 부르는 하네스의 중심.
 - 전문가의 사슬(모델 + fallback) 순서대로 부르고, 키 없음·한도·시간 초과·JSON 깨짐이면 다음 모델로 넘어간다.
 - 같은 모델이 연속으로 실패하면 잠시 건너뛴다(차단기).
-- 같은 입력은 캐시에서 돌려준다(상한을 넘으면 통째로 비운다).
-- local·mock이 아닌 공급자로 보내기 직전에 패턴 가리기를 한 번 더 한다(입구 Masker의 안전망).
+- 같은 입력은 캐시에서 돌려준다(상한을 넘으면 통째로 비운다). 넣을 때와 꺼낼 때 깊은 복사를 해서
+  한 요청이 결과를 고쳐도(이름 복원 등) 다른 요청에 새지 않는다.
+- mock이 아닌 공급자로 보내기 직전에 system·user·payload에 패턴 가리기를 한 번 더 한다(입구 Masker의 안전망).
+  local도 원격 주소를 가리킬 수 있으니 예외로 두지 않는다.
 - 호출마다 기록을 남기되 원문은 남기지 않는다."""
 from __future__ import annotations
 
@@ -105,7 +107,8 @@ class Router:
         """deadline은 time.monotonic() 기준 절대 시각. 남은 시간 안에서만 시도한다."""
         key = hashlib.sha256(json.dumps([expert_id, user, payload], ensure_ascii=False, sort_keys=True).encode()).hexdigest()
         if key in self.cache:
-            return self.cache[key]
+            cached, entry = self.cache[key]
+            return cached.model_copy(deep=True), entry
 
         errors = []
         for entry in self.chains[expert_id]:
@@ -122,17 +125,20 @@ class Router:
             remaining = deadline - time.monotonic()
             if remaining <= 0.05:
                 break
-            u, p = (user, payload) if provider_name in ("local", "mock") else (pii.mask(user), _scrub(payload))
+            if provider_name == "mock":
+                s, u, p = system, user, payload
+            else:
+                s, u, p = pii.mask(system), pii.mask(user), _scrub(payload)
             t0 = time.monotonic()
             try:
-                raw = await asyncio.wait_for(provider.complete(model, system, u, p, remaining), remaining)
+                raw = await asyncio.wait_for(provider.complete(model, s, u, p, remaining), remaining)
                 obj = schema.model_validate(extract_json(raw))
                 obj = _tag_model(obj, entry)
                 breaker.record(True)
                 self._trace(expert_id, entry, t0, True)
                 if len(self.cache) >= self.CACHE_MAX:
                     self.cache.clear()
-                self.cache[key] = (obj, entry)
+                self.cache[key] = (obj.model_copy(deep=True), entry)
                 return obj, entry
             except (ProviderError, asyncio.TimeoutError, ValueError, ValidationError) as e:
                 breaker.record(False)

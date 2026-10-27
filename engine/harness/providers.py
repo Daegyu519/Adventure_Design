@@ -74,16 +74,22 @@ class OpenAICompatProvider:
         try:
             r = await self._client.post(f"{self.base_url}/chat/completions", json=body,
                                         headers=headers, timeout=timeout_s)
-        except httpx.TimeoutException as e:
-            raise ProviderError(f"{self.name}:{model} 시간 초과") from e
+        except httpx.TimeoutException:
+            raise ProviderError(f"{self.name}:{model} 시간 초과") from None
         except httpx.HTTPError as e:
-            raise ProviderError(f"{self.name}:{model} 연결 실패: {e}") from e
+            raise ProviderError(f"{self.name}:{model} 연결 실패 ({type(e).__name__})") from None
+        # 오류 메시지에 요청·응답 본문을 넣지 않는다(가린 문장이라도 로그에 남기지 않음)
         if r.status_code == 429:
             raise RateLimited(f"{self.name}:{model} 한도 초과")
         if r.status_code >= 400:
-            raise ProviderError(f"{self.name}:{model} HTTP {r.status_code}: {r.text[:200]}")
-        msg = r.json()["choices"][0]["message"]
-        return msg.get("content") or ""
+            raise ProviderError(f"{self.name}:{model} HTTP {r.status_code}")
+        try:
+            content = r.json()["choices"][0]["message"].get("content") or ""
+            if not isinstance(content, str):
+                raise TypeError("content가 문자열이 아님")
+            return content
+        except (ValueError, KeyError, IndexError, TypeError, AttributeError) as e:
+            raise ProviderError(f"{self.name}:{model} 응답 형식 오류 ({type(e).__name__})") from None
 
 
 class MockProvider:

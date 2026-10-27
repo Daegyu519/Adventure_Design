@@ -16,13 +16,15 @@ from .base import Expert, ExpertRequest, ExpertResult
 from .llm import SCHEMAS, LLMExpert
 
 
-def _check(e: dict, chain: list[str]) -> None:
+def _check(e: dict, chain: list[str], providers: dict) -> None:
     if e.get("role") not in SCHEMAS:
         raise ValueError(f"{e['id']}: role은 {sorted(SCHEMAS)} 중 하나")
     if not (PROMPTS_DIR / f"{e.get('prompt')}.md").is_file():
         raise ValueError(f"{e['id']}: prompt 파일 없음 ({e.get('prompt')})")
     for m in chain:
-        provider, name = m.split(":", 1)
+        provider, _, name = m.partition(":")
+        if provider not in providers:
+            raise ValueError(f"{e['id']}: providers에 없는 공급자 ({provider})")
         if provider == "mock" and (name.startswith("_") or not callable(getattr(mock_rules, name, None))):
             raise ValueError(f"{e['id']}: mock_rules에 {name} 없음")
 
@@ -43,7 +45,7 @@ class Registry:
         experts: list[Expert] = []
         for e in router.config["experts"]:
             chain = router.chains[e["id"]]
-            _check(e, chain)
+            _check(e, chain, providers)
             if force_mock and not any(m.startswith("mock:") for m in chain):
                 continue
             first = chain[0].split(":", 1)[0]

@@ -22,7 +22,7 @@ class SpyProvider:
         self.calls: list[dict] = []
 
     async def complete(self, model: str, system: str, user: str, payload: dict, timeout_s: float) -> str:
-        self.calls.append({"model": model, "user": user, "payload": payload})
+        self.calls.append({"model": model, "system": system, "user": user, "payload": payload})
         if model in self.canned:
             await asyncio.sleep(self.delay)
             out = self.canned[model](payload)
