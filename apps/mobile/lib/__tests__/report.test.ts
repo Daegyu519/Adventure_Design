@@ -35,3 +35,11 @@ test('thisWeekCount: count of the KST week that contains today', () => {
   expect(thisWeekCount(byWeek, '2026-11-01')).toBe(5); // 일요일은 앞 주
 });
 test('thisWeekCount: this week missing → 0', () => expect(thisWeekCount([{ week: '2026-10-26', count: 5 }], '2026-11-09')).toBe(0));
+
+test('주 경계: 일요일 23:59:59.999 KST는 지난 주, 월요일 00:00:00 KST부터 새 주', () => {
+  const byWeek = [{ week: '2026-10-26', count: 5 }, { week: '2026-11-02', count: 4 }];
+  const sunday = kstDate(new Date('2026-11-01T14:59:59.999Z'));
+  const monday = kstDate(new Date('2026-11-01T15:00:00Z'));
+  expect([sunday, monday]).toEqual(['2026-11-01', '2026-11-02']);
+  expect([thisWeekCount(byWeek, sunday), thisWeekCount(byWeek, monday)]).toEqual([5, 4]);
+});

@@ -1,5 +1,5 @@
 import { useFocusEffect } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, RefreshControl, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -70,13 +70,18 @@ export default function Report() {
   const [refreshing, setRefreshing] = useState(false);
 
   // 화면이 포커스를 받을 때마다 새로 읽는다. 다른 탭으로 가면 진행 중인 요청을 끊는다.
+  // 요청이 겹치면(열 때 시작한 요청 + 당겨서 새로고침) 가장 나중에 시작한 요청의 결과만 쓴다.
+  const latest = useRef(0);
   const load = useCallback(async (signal?: AbortSignal) => {
+    const mine = ++latest.current;
     try {
       const s = await engine.stats({ signal });
+      if (mine !== latest.current) return;
       setStats(s);
       setFailed(false);
     } catch {
-      if (!signal?.aborted) setFailed(true); // 우리가 끊은 것은 실패가 아니다
+      if (mine !== latest.current || signal?.aborted) return; // 밀린 요청이나 우리가 끊은 것은 실패가 아니다
+      setFailed(true);
     }
   }, []);
 
@@ -109,13 +114,15 @@ export default function Report() {
             리포트
           </AppText>
 
-          {failed ? (
+          {failed && (
             <View accessibilityLiveRegion="polite" style={{ gap: space[3], alignItems: 'flex-start' }}>
               <AppText>지금은 불러오지 못했어요</AppText>
               <Button label="다시 시도" onPress={refresh} loading={refreshing} />
             </View>
-          ) : stats === null || gap === null ? (
-            <ActivityIndicator accessibilityLabel="불러오는 중" color={colors.primary} />
+          )}
+
+          {stats === null || gap === null ? (
+            !failed && <ActivityIndicator accessibilityLabel="불러오는 중" color={colors.primary} />
           ) : (
             <>
               <View style={{ flexDirection: 'row', gap: space[1] }}>
@@ -137,7 +144,7 @@ export default function Report() {
           )}
 
           <AppText variant="small" color="textMuted">
-            숫자는 나만 봐요. 사람을 평가하는 점수가 아니에요.
+            힌트 수는 점수가 아니에요. 보내기 전에 한 번 더 돌아본 횟수일 수 있어요.
           </AppText>
         </View>
       </ScrollView>

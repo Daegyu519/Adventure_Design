@@ -47,6 +47,18 @@ const bars = (root: { container: TestInstance }) => root.container.queryAll((n) 
 const barBox = (col: TestInstance) => col.queryAll((n) => StyleSheet.flatten(n.props.style)?.borderTopLeftRadius === 4)[0];
 const barColor = (col: TestInstance) => StyleSheet.flatten(barBox(col).props.style).backgroundColor;
 
+// 풀어 줄 때까지 멈춰 있는 응답(요청이 겹칠 때 도착 순서를 우리가 정한다).
+function deferred<T>() {
+  let resolve!: (v: T) => void;
+  const promise = new Promise<T>((r) => (resolve = r));
+  return { promise, resolve };
+}
+// 당겨서 새로고침(네이티브 RefreshControl)을 흉내 낸다.
+const pullToRefresh = (root: { container: TestInstance }) =>
+  act(async () => {
+    root.container.queryAll((n) => n.props.refreshControl != null)[0].props.refreshControl.props.onRefresh();
+  });
+
 async function setup() {
   const root = createRoot();
   await act(async () => {
@@ -92,11 +104,11 @@ test('report: 이번 주 막대는 primary, 지난 주 막대는 textMuted(색�
   expect(textOf(bars(root)[4])).toContain('6'); // 막대 위 값
 });
 
-test('report: 맨 아래에 평가하지 않는다는 안내가 있고, 예측 차이는 타일 하나로만 나온다', async () => {
+test('report: 맨 아래에 목업의 안내 문구가 있고, 예측 차이는 타일 하나로만 나온다', async () => {
   stats.mockResolvedValue(FIXTURE);
   const root = await setup();
   const text = textOf(root.container);
-  expect(text).toContain('숫자는 나만 봐요. 사람을 평가하는 점수가 아니에요.');
+  expect(text).toContain('힌트 수는 점수가 아니에요. 보내기 전에 한 번 더 돌아본 횟수일 수 있어요.');
   expect(text).not.toContain('예측과 평균'); // 따로 한 줄을 두지 않는다
 });
 
@@ -113,4 +125,36 @@ test('report: 불러오지 못하면 안내와 다시 시도 버튼이 뜨고, �
   expect(stats).toHaveBeenCalledTimes(2);
   expect(textOf(root.container)).not.toContain('지금은 불러오지 못했어요');
   expect(labels(root)).toContain('이번 주 힌트 6번');
+});
+
+test('report: 열 때 시작한 요청과 당겨서 새로고침이 겹치면, 늦게 도착한 옛 응답이 새 숫자를 덮지 않는다', async () => {
+  const first = deferred<StatsRes>();
+  const second = deferred<StatsRes>();
+  stats.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+  const root = await setup(); // 첫 요청이 아직 안 왔다
+  await pullToRefresh(root); // 두 번째 요청
+
+  await act(async () => second.resolve({ ...FIXTURE, fix_rate: 0.5 })); // 새 요청이 먼저 온다
+  expect(labels(root)).toContain('스스로 고친 비율 50%');
+  await act(async () => first.resolve({ ...FIXTURE, fix_rate: 0.33 })); // 옛 요청이 늦게 온다
+  expect(labels(root)).toContain('스스로 고친 비율 50%');
+  expect(labels(root)).not.toContain('스스로 고친 비율 33%');
+});
+
+test('report: 숫자가 이미 떠 있는데 다시 읽기가 실패하면 숫자는 그대로 두고 안내와 다시 시도를 그 위에 보여 준다', async () => {
+  stats.mockResolvedValueOnce(FIXTURE).mockRejectedValueOnce(new Error('engine down')).mockResolvedValueOnce({ ...FIXTURE, fix_rate: 0.5 });
+  const root = await setup();
+  expect(labels(root)).toContain('스스로 고친 비율 33%');
+
+  await pullToRefresh(root); // 실패
+  const text = textOf(root.container);
+  expect(labels(root)).toContain('스스로 고친 비율 33%'); // 옛 숫자가 사라지지 않는다
+  expect(text).toContain('지금은 불러오지 못했어요');
+  expect(text.indexOf('지금은 불러오지 못했어요')).toBeLessThan(text.indexOf('주별 힌트 수')); // 숫자 위
+  const retry = root.container.queryAll((n) => n.props.accessibilityRole === 'button' && n.props.accessibilityLabel === '다시 시도')[0];
+  expect(retry).toBeDefined();
+
+  await act(async () => retry.props.onClick({ stopPropagation() {}, nativeEvent: {} }));
+  expect(textOf(root.container)).not.toContain('지금은 불러오지 못했어요');
+  expect(labels(root)).toContain('스스로 고친 비율 50%');
 });
