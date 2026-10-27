@@ -4,12 +4,19 @@ from fastapi import HTTPException, Request
 
 from app.db import Repo
 from app.settings import Settings
+from experts.registry import Registry
 from jobs.queue import JobQueue
 
 
 @lru_cache
 def get_settings() -> Settings:
     return Settings.from_env()
+
+
+@lru_cache
+def get_registry() -> Registry:
+    s = get_settings()
+    return Registry.load(s.models_path, s.force_mock)
 
 
 def get_repo(request: Request) -> Repo:

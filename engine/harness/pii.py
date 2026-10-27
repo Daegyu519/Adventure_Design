@@ -10,11 +10,16 @@ from collections.abc import Iterable
 from .schemas import Conversation, Turn
 
 # 순서가 곧 우선순위다(같은 위치에서 앞 규칙이 이긴다). 카드는 주민번호보다 앞(16자리가 13자리로 잘리지 않게).
-RULES = [
+# 바꿀 문구가 None인 규칙은 가리지 않고 그대로 둔다: 날짜·시각은 말투 맥락이라 계좌 규칙보다 앞에서 뺀다.
+_MM, _DD = r"(?:0?[1-9]|1[0-2])", r"(?:0?[1-9]|[12]\d|3[01])"
+RULES: list[tuple[re.Pattern[str], str | None]] = [
     (re.compile(r"(?:\+82[-.\s]?0?|0)1[016789][-.\s]?\d{3,4}[-.\s]?\d{4}"), "[전화번호]"),
     (re.compile(r"[\w.+-]{1,64}[@＠][\w-]+\.[\w.]+"), "[이메일]"),
     (re.compile(r"(?<!\d)\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}(?!\d)"), "[카드번호]"),
     (re.compile(r"(?<!\d)\d{6}[-\s]?[1-8]\d{6}(?!\d)"), "[주민번호]"),   # 7번째 5~8은 외국인등록번호
+    # YYYY-MM-DD·YYYY.MM.DD·YYYY/MM/DD, MM/DD, 19:30
+    (re.compile(rf"(?<![\d/.-])(?:(?:19|20)\d\d[-./]{_MM}[-./]{_DD}|{_MM}/{_DD}|(?:[01]?\d|2[0-3]):[0-5]\d)(?![\d/.:-]?\d)"),
+     None),
     (re.compile(r"\d{2,6}[-\s]\d{2,6}[-\s]\d{2,8}"), "[계좌번호]"),
     (re.compile(r"\d{9,}"), "[긴 숫자]"),
 ]
@@ -24,7 +29,7 @@ _ALL = re.compile("|".join(f"(?P<g{i}>{pat.pattern})" for i, (pat, _) in enumera
 
 
 def mask(text: str, names: list[str] | None = None) -> str:
-    text = _ALL.sub(lambda m: RULES[int((m.lastgroup or "g0")[1:])][1], text)
+    text = _ALL.sub(lambda m: RULES[int((m.lastgroup or "g0")[1:])][1] or m.group(0), text)
     for n in names or []:
         if n:
             text = text.replace(n, "[이름]")
@@ -40,10 +45,10 @@ class Masker:
         full |= {n[1:] for n in full if re.fullmatch(r"[가-힣]{3}", n)}   # 성 빼고 이름만 부르는 경우
         alts = "|".join(map(re.escape, sorted(full, key=len, reverse=True)))
         parts = [("이름", f"(?i:{alts})")] if full else []     # 영문 이름은 대소문자 무시
-        parts += [(rep.strip("[]"), pat.pattern) for pat, rep in RULES]
+        parts += [(rep and rep.strip("[]"), pat.pattern) for pat, rep in RULES]
         # 한 번의 re.sub라 이미 바꾼 자리표시를 다시 건드리지 않는다
         self._re = re.compile("|".join(f"(?P<g{i}>{src})" for i, (_, src) in enumerate(parts)))
-        self._kind = {f"g{i}": kind for i, (kind, _) in enumerate(parts)}
+        self._kind: dict[str, str | None] = {f"g{i}": kind for i, (kind, _) in enumerate(parts)}
         self._tok: dict[str, str] = {}
         self._val: dict[str, str] = {}
         self._n: Counter[str] = Counter()
@@ -52,9 +57,10 @@ class Masker:
         return self._re.sub(self._sub, text)
 
     def _sub(self, m: re.Match[str]) -> str:
-        v = m.group(0)
+        v, kind = m.group(0), self._kind[m.lastgroup or ""]
+        if kind is None:   # 날짜·시각: 가리지 않는다
+            return v
         if v not in self._tok:
-            kind = self._kind[m.lastgroup or ""]
             self._n[kind] += 1
             tok = f"[{kind}{self._n[kind]}]"
             self._tok[v], self._val[tok] = tok, v
