@@ -63,7 +63,7 @@
 |---|---|
 | 엔진 실행 | `cd engine && uv run uvicorn app.main:app --reload --env-file ../.env` |
 | 엔진 테스트 | `cd engine && uv run pytest -q` |
-| 앱 실행 | (T-04) |
+| 앱 실행 | `cd apps/mobile && npx expo start` (앱 환경 변수는 `apps/mobile/.env`, 예시는 `apps/mobile/.env.example`. 루트 `.env`는 앱이 읽지 않는다) |
 | 타입 생성 | (T-14, T-03a) |
 | 평가 | (T-17) |
 | 마이그레이션 | `supabase/migrations/*.sql` (적용은 T-02 이후 `supabase db push`) |
