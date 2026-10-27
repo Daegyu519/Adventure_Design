@@ -14,6 +14,7 @@
 | T-00 | 협업 하네스: `docs/COLLAB.md`, `scripts/claim`·`land`·`check`, `.coord/`(git 밖) | 공통 | - | 두 계정이 같은 작업을 동시에 잡으면 하나만 성공, 루트가 더럽거나 check가 실패하면 land가 합치지 않음. 확인: `scripts/test_coord.sh` ALL PASS | 완료 |
 | T-01 | 모노레포 초기화: 폴더 구조(ARCHITECTURE 2장), `.gitignore`, `README`, `.env.example`, 프로토타입을 `prototype/`에 둠. 범위 보완(그룹방, 거울, 웹 푸시, land)을 기준 문서에 반영 | 공통 | T-00 | 폴더 구조가 ARCHITECTURE와 같다. 확인: `find . -path ./prototype -prune -o -type d -print`에 최상위 폴더 apps/mobile, engine, supabase/migrations, eval, docs, design이 모두 있고 prototype/tone-harness가 있음 | 완료 |
 | D-01 | 디자인 시스템 + HTML 목업 | 앱 | T-01 | MASTER.md, tokens.json 대비 검사 통과, 목업을 사용자가 승인. 확인: 대비 검사 통과(자가 검사 포함), 목업 사용자 승인 2026-10-27 | 완료 |
+| P-01 | 단계 1 계획 두 개(엔진·앱) 작성, 교차 검토 반영 | 공통 | T-01 | `docs/superpowers/plans/2026-10-27-phase1-{engine,app}.md`, 교차 검토 16건 반영 확인: 계획 작성 에이전트 2 + 교차 검토 1 + 수정 1, 앱은 네이티브 개발 빌드 기준 | 완료 |
 | T-02 | Supabase dev 프로젝트(클라우드, 서울) 생성, Supabase CLI 연결. pilot 프로젝트는 나중에 따로 만든다(T-29에서 전환) | DB | T-01 | `supabase link`로 dev 연결 | 대기 |
 | T-03a | 채팅 스키마: `profiles`, `rooms`, `room_members`, `messages`, `reactions`, `invites`, 함수(`is_member`, `create_group`, `create_invite`, `accept_invite`), RLS | DB | T-01 | PGlite RLS 테스트 통과. 확인: PGlite(node --test) 16 pass — RLS·초대·멤버 상한·메시지 제약. 동시성은 실제 Postgres에서 T-02 이후 재확인 | 완료 |
 | T-03b | `tone` 스키마(API 비공개), `tone_events`, `mirror_attempts`, `push_tokens`, Realtime·Storage(`chat-images`) platform 마이그레이션 | DB | T-03a | PGlite RLS 테스트 통과 | 대기 |
