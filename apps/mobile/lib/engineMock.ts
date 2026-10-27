@@ -1,8 +1,10 @@
 // EXPO_PUBLIC_ENGINE_URL이 없을 때 쓰는 가짜 엔진. 모양은 생성 타입 그대로, 값은 고정 예시다.
 import { abortError } from './abort';
 import type { DetailRes, Engine } from './engine';
+import { kstDate, weekStart } from './report';
 
 const MOCK_DELAY_MS = 300;
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 // 엔진 응답처럼 조금 늦게 돌려주되, 호출자가 끊으면 바로 AbortError.
 function wait(signal?: AbortSignal) {
@@ -32,20 +34,10 @@ const softer = (text: string, intent?: string | null) => ({
   change: ['다음을 약속하는 말을 더했어요'],
 });
 
-function ymd(d: Date) {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-// 이번 주 월요일을 포함한 최근 5주(오래된 것부터)
+// 이번 주(KST) 월요일을 포함한 최근 5주(오래된 것부터). 기기 시간대와 무관하게 엔진과 같은 주를 쓴다.
 function lastFiveMondays() {
-  const monday = new Date();
-  monday.setHours(0, 0, 0, 0);
-  monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
-  return [4, 3, 2, 1, 0].map((i) => {
-    const d = new Date(monday);
-    d.setDate(d.getDate() - 7 * i);
-    return ymd(d);
-  });
+  const thisMonday = Date.parse(`${weekStart(kstDate(new Date()))}T00:00:00Z`);
+  return [4, 3, 2, 1, 0].map((i) => new Date(thisMonday - i * WEEK_MS).toISOString().slice(0, 10));
 }
 
 export function createMockEngine(): Engine {
