@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 DEFAULT_MODELS_PATH = Path(__file__).resolve().parent.parent / "config" / "models.yaml"
+DEFAULT_CORS_ORIGINS = ("http://localhost:8081",)  # Expo 웹 개발 서버
 
 
 @dataclass(frozen=True)
@@ -17,6 +18,7 @@ class Settings:
     vapid_subject: str = ""      # mailto:<연락 이메일>
     force_mock: bool = False
     models_path: Path = DEFAULT_MODELS_PATH
+    cors_origins: tuple[str, ...] = DEFAULT_CORS_ORIGINS
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -31,4 +33,6 @@ class Settings:
             vapid_subject=os.environ.get("VAPID_SUBJECT", ""),
             force_mock=os.environ.get("FORCE_MOCK", "").lower() in {"1", "true"},
             models_path=Path(os.environ.get("MODELS_PATH") or DEFAULT_MODELS_PATH),
+            cors_origins=tuple(o for o in (x.strip() for x in os.environ.get("CORS_ORIGINS", "").split(",")) if o)
+            or DEFAULT_CORS_ORIGINS,
         )

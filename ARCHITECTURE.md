@@ -136,7 +136,7 @@ sequenceDiagram
 - 앱은 0.5초 디바운스로 보내고, 새 입력이 오면 `AbortController`로 이전 요청을 취소한다. 응답은 최신 `seq`만 표시한다.
 - 전체 1.5초(디바운스 제외)를 넘기면 엔진은 `hint=null`을 돌려준다.
 - 힌트가 떠 있어도 보내기는 막지 않는다.
-- 최근 대화 8개에는 화자 표시(나 / 상대1 / 상대2…)를 붙인다. 입력 중인 문장이 답장이면(`reply_to`, 4장) 원문 메시지를 맥락 맨 앞에 넣는다.
+- 맥락 = 최근 8개 + 화자 표시 + 답장 대상 맨 앞. 최근 대화 8개에는 화자 표시(나 / 1:1은 상대 / 그룹방은 처음 나온 순서로 상대1, 상대2…)를 붙인다. 입력 중인 문장이 답장이면(`reply_to`, 4장) 원문 메시지를 `답장 대상 · 상대N` 표시로 맥락 맨 앞에 넣는다. 사진만 있는 메시지는 `(사진)`이다(`engine/app/context.py`).
 - 그룹방 판정 기준은 "이 방 사람들이 읽을 때"다. 관계는 방 단위 하나다.
 
 | 구간 | 목표 |
@@ -201,8 +201,8 @@ sequenceDiagram
 
 | 메서드 | 경로 | 요청 | 응답 |
 |---|---|---|---|
-| POST | `/v1/hint` | `{room_id, text(1~500자), seq, reply_to?}` | `{seq, hint: {title, detail} \| null, trace_id}` |
-| POST | `/v1/detail` | `{room_id, text, intent?, reply_to?}` | `{alert, top_reading, readings: {읽힘: "자주"\|"가끔"\|"드물어요"}, why: [str], options: [{label, text, keep, change}], mismatch: str \| null, footnote, trace_id}` |
+| POST | `/v1/hint` | `{room_id, text(1~500자, 앞뒤 공백 제외), seq(0 이상), reply_to?(같은 방이 아니면 422)}` | `{seq, hint: {title, detail} \| null, trace_id}` |
+| POST | `/v1/detail` | `{room_id, text, intent?, reply_to?(같은 방이 아니면 422)}` | `{alert, top_reading, readings: {읽힘: "자주"\|"가끔"\|"드물어요"}, why: [str], options: [{label, text, keep, change}], mismatch: str \| null, footnote, trace_id}` |
 | POST | `/v1/feedback` | `{room_id, message_id, text(1~1000자)}` | 202 `{ack}` |
 | POST | `/v1/mirror/today` | 없음 | `{cards: [{card_id, kind: "roleplay"\|"receive"\|"predict", persona, relation, situation, message}]}` |
 | POST | `/v1/mirror/answer` | `{card_id, reply?, score?, predicted?}` | `{readings, inner_voice?, reveal?, options?, gap?}` |
@@ -212,11 +212,12 @@ sequenceDiagram
 
 - 오류: 401(토큰), 403(방 멤버 아님 / 받은 메시지 아님), 422(형식), 429(사용자별 요청 한도), 503 `auth_unavailable`(공개키를 받지 못해 토큰을 검증할 수 없음. 앱이 다시 시도한다).
 - 토큰은 서명·`exp`·`aud`(authenticated)·`iss`와 `role=authenticated`를 모두 통과해야 한다. 익명 로그인(`is_anonymous`)과 `anon`·`service_role` 토큰은 401이다. 알고리즘은 ES256·RS256만 받는다.
-- 방 멤버 확인은 `room_members`로 한다.
-- `reply_to`는 답장 대상 메시지 id다. 엔진은 같은 방 메시지인지 확인하고(아니면 거부), 그 문장은 DB에서 읽는다. 앱이 보낸 문장은 믿지 않는다. 이 메시지를 맥락 맨 앞에 넣는다.
+- 방 멤버 확인은 `room_members`로 한다. `room_id`를 받는 모든 `/v1/*`는 방을 읽기 전에 `ensure_member`를 거친다(`test_every_room_route_checks_membership_before_reading`이 라우트를 모두 돈다).
+- CORS: 허용 origin은 `CORS_ORIGINS`(쉼표로 나눔, 기본 `http://localhost:8081`), 메서드 GET·POST·OPTIONS, 헤더 Authorization·Content-Type. 쿠키를 쓰지 않아 credentials는 켜지 않는다.
+- `reply_to`는 답장 대상 메시지 id다. 엔진은 같은 방 메시지인지 확인하고(없거나 다른 방이면 422 `reply_to not in room`), 그 문장은 DB에서 읽는다. 앱이 보낸 문장은 믿지 않는다. 이 메시지를 맥락 맨 앞에 넣는다.
 - 읽힘 키는 `차갑게, 성의없게, 화나게, 무난하게, 따뜻하게` 다섯 개로 고정.
 - `intent`는 의도 칩 `단호하게, 미안하게, 가볍게` 중 하나다. 고쳐 쓰기에만 들어간다(3-3).
-- 요청·응답 모델은 `engine/app/contracts.py`의 pydantic이 원본이다. 앱 타입은 OpenAPI에서 `openapi-typescript`로, DB 타입은 `supabase gen types typescript`로 생성한다.
+- 요청·응답 모델은 `engine/app/contracts.py`의 pydantic이 원본이다. 앱 타입은 OpenAPI에서 `openapi-typescript`로, DB 타입은 `supabase gen types typescript`로 생성한다. `npm run gen:engine:pull`(`engine/app/openapi_dump.py`)은 엔진 OpenAPI를 원본으로 쓰고, 엔진에 아직 없는 경로와 그 경로가 쓰는 스키마만 기존 파일(T-04b seed)에서 옮긴다. 이 표의 경로가 엔진에 다 생기면 옮기기를 지운다.
 
 ---
 
@@ -370,7 +371,7 @@ risk = sigmoid( w0 + w1·prior + w2·Σk(αk·negk)/Σk(αk) + w3·violation + w
 - 같은 (전문가, 입력) 결과는 캐시. 의도 칩만 바꾼 상세 재호출에서는 판정 전문가가 여기 걸린다(3-3). 캐시는 `CACHE_MAX`(2048)를 넘으면 통째로 비운다. 넣을 때와 꺼낼 때 깊은 복사를 해서 한 요청의 이름 복원이 다른 요청에 새지 않는다. trace는 최근 1000개만 두고 원문은 없다.
 - 출력은 `<think>…</think>` 제거 → 첫 JSON 객체 추출 → pydantic 검사. 실패하면 폴백. 공급자 응답 모양이 틀려도(`choices` 없음 등) `ProviderError`로 폴백·차단기에 넘긴다. 오류 메시지에 요청·응답 본문을 넣지 않는다.
 - 선택 기능: 실시간 경로에서 같은 역할의 빠른 모델 두 개에 동시에 보내고 먼저 온 유효한 답을 쓴다(지연 편차 감소, 호출 2배).
-- 입구 가리기: 파이프라인 입구에서 요청마다 `pii.Masker`(참여자 이름 포함)를 한 번 거치고, 모든 레이어는 가린 문장만 받는다. 가리는 것: 전화번호(`.`·공백·`-` 구분, `+82` 형식), 이메일(전각 `＠` 포함), 주민·외국인등록번호, 카드번호(16자리), 계좌 모양 숫자, 긴 숫자, 참여자 이름(2글자 이상, 3글자 한글 이름은 뒤 2글자도, 영문은 대소문자 무시). 규칙은 정규식 하나로 한 번에 돌린다(같은 위치에서는 앞 규칙이 이긴다). 대상: 초안, 최근 대화(그룹방 화자 label 포함), 답장 대상, 의도, 하소연, 거울 카드 문장.
+- 입구 가리기: 파이프라인 입구에서 요청마다 `pii.Masker`(참여자 이름 포함)를 한 번 거치고, 모든 레이어는 가린 문장만 받는다. 가리는 것: 전화번호(`.`·공백·`-` 구분, `+82` 형식), 이메일(전각 `＠` 포함), 주민·외국인등록번호, 카드번호(16자리), 계좌 모양 숫자, 긴 숫자, 참여자 이름(2글자 이상, 3글자 한글 이름은 뒤 2글자도, 영문은 대소문자 무시). 날짜(`YYYY-MM-DD`·`YYYY.MM.DD`·`YYYY/MM/DD`, `MM/DD`)와 시각(`19:30`)은 말투 맥락이라 가리지 않는다(계좌 규칙보다 앞에서 뺀다). 규칙은 정규식 하나로 한 번에 돌린다(같은 위치에서는 앞 규칙이 이긴다). 대상: 초안, 최근 대화(그룹방 화자 label 포함), 답장 대상, 의도, 하소연, 거울 카드 문장.
 - 자리표시는 종류별로 등장 순서대로 번호를 붙이고 같은 값은 같은 자리표시를 받는다(`[이름1]`, `[전화번호1]` …). 고쳐 쓰기 후보(거울 `options` 포함)는 엔진이 응답 직전에 `Masker.restore`로 되돌린다. 대응표는 그 요청의 `Masker` 메모리에만 두고 로그·trace·큐 인자에 남기지 않는다.
 - 안전망: 그 위에 `Router.call`이 `mock`이 아닌 공급자로 보내기 직전에 system, user, payload 안의 모든 문자열(중첩 포함)에 `pii.mask`(이름 없이 패턴만)를 한 번 더 쓴다. `local`도 원격 주소를 가리킬 수 있어 예외로 두지 않는다. `pii`를 import하는 곳은 `pipeline.py`와 `harness/router.py`뿐이다(테스트로 고정).
 
@@ -400,7 +401,7 @@ risk = sigmoid( w0 + w1·prior + w2·Σk(αk·negk)/Σk(αk) + w3·violation + w
 | 위치 | 변수 |
 |---|---|
 | 앱 (`apps/mobile/.env`) | `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`, `EXPO_PUBLIC_ENGINE_URL`, `EXPO_PUBLIC_VAPID_PUBLIC_KEY` |
-| 엔진 (루트 `.env`) | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_DB_URL`, `HOOK_SECRET`, `NVIDIA_API_KEY`, `GEMINI_API_KEY`(합성 문장 평가만), `GITHUB_TOKEN`, `LOCAL_API_KEY`, `USE_LOCAL_MODEL`(`1`이면 로컬 모델 사용), `MODELS_PATH`(선택, 기본 `engine/config/models.yaml`), `EXPO_ACCESS_TOKEN`(선택), `FORCE_MOCK`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` |
+| 엔진 (루트 `.env`) | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_DB_URL`, `HOOK_SECRET`, `NVIDIA_API_KEY`, `GEMINI_API_KEY`(합성 문장 평가만), `GITHUB_TOKEN`, `LOCAL_API_KEY`, `USE_LOCAL_MODEL`(`1`이면 로컬 모델 사용), `MODELS_PATH`(선택, 기본 `engine/config/models.yaml`), `EXPO_ACCESS_TOKEN`(선택), `FORCE_MOCK`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `CORS_ORIGINS`(선택, 쉼표로 나눔, 비우면 `http://localhost:8081`) |
 | 협업 스크립트 | `TONE_ACCOUNT`(`a`·`b`, 셸에서 설정) |
 | 개발 도구 | SUPABASE_PROJECT_REF (npm run gen:db 전용, 번들에 안 들어감) |
 
