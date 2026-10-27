@@ -43,3 +43,11 @@ test('consent screen: 체크를 다시 누르면 시작하기가 도로 꺼진�
   await press('checkbox');
   expect(byRole('button').props.accessibilityState.disabled).toBe(true);
 });
+
+test('consent screen: 체크 상자는 Space 키로도 토글된다(웹 키보드)', async () => {
+  const { byRole } = await setup();
+  await act(async () => byRole('checkbox').props.onKeyDown({ nativeEvent: { key: ' ' }, preventDefault() {} }));
+  expect(byRole('checkbox').props.accessibilityState.checked).toBe(true);
+  await act(async () => byRole('checkbox').props.onKeyDown({ nativeEvent: { key: 'a' }, preventDefault() {} }));
+  expect(byRole('checkbox').props.accessibilityState.checked).toBe(true);
+});

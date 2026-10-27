@@ -7,7 +7,7 @@ import { AppText } from '../components/AppText';
 import { Button } from '../components/Button';
 import { saveConsent } from '../lib/consent';
 import { currentIosWebState } from '../lib/iosWeb';
-import { useTheme } from '../lib/theme';
+import { focusRing, useTheme } from '../lib/theme';
 
 // 문구는 바꾸지 않는다(바꾸면 lib/consent.ts의 CONSENT_VERSION을 올려 다시 동의받는다).
 const PARTICIPATION = '이 앱은 수업 프로젝트의 1주 파일럿이에요. 언제든 그만둘 수 있고, 그만두고 싶으면 진행하는 팀에 알려 주세요.';
@@ -79,6 +79,13 @@ export default function Consent() {
 
           <Pressable
             onPress={() => setAgreed((v) => !v)}
+            // 웹(react-native-web)은 button 역할만 Space로 눌린다. 체크 상자는 Space로도 토글한다(Enter는 onPress가 받는다).
+            onKeyDown={(e) => {
+              if (e.nativeEvent.key === ' ') {
+                e.preventDefault();
+                setAgreed((v) => !v);
+              }
+            }}
             accessibilityRole="checkbox"
             accessibilityState={{ checked: agreed }}
             aria-checked={agreed} // 웹은 accessibilityState.checked를 aria-checked로 옮기지 않는다
@@ -89,6 +96,7 @@ export default function Consent() {
               alignItems: 'center',
               gap: space[2],
               opacity: pressed ? 0.8 : 1,
+              ...focusRing(colors.primary),
             })}
           >
             <View

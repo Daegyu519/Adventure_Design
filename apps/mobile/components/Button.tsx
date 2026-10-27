@@ -1,6 +1,6 @@
 import { ActivityIndicator, Pressable, View } from 'react-native';
 
-import { useTheme, type Colors } from '../lib/theme';
+import { focusRing, useTheme, type Colors } from '../lib/theme';
 import { AppText } from './AppText';
 
 type Props = {
@@ -42,6 +42,7 @@ export function Button({ label, onPress, kind = 'primary', disabled = false, loa
         alignItems: 'center',
         justifyContent: 'center',
         opacity: inactive && !loading ? 0.4 : pressed ? 0.8 : 1,
+        ...focusRing(colors.primary),
       })}
     >
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[1] }}>
