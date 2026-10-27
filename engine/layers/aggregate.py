@@ -72,7 +72,7 @@ def aggregate(draft: str, gate: GateResult, ctx: ContextReading | None, tones: T
 
     m = merged(tones)
     negs = [negative(t.readings) for t, _ in used]
-    missing = missing_points(draft, ctx, used) if ctx else []
+    missing = missing_points(draft, ctx, used) if ctx is not None else []
     # 보낸 사람 패턴은 전체 관찰 수가 기준 이상인 신호만 (한 사람 신고만으로 알림 금지)
     pair = store.patterns_for(convo.pair_id)
     matched = pattern_matches(gate.signals, store, convo.pair_id, cfg["global_min_obs"])
@@ -81,13 +81,14 @@ def aggregate(draft: str, gate: GateResult, ctx: ContextReading | None, tones: T
     f = {
         "prior": gate.prior,
         "neg": negative(m),   # = Σα·neg_k / Σα
-        "violation": len(missing) / len(ctx.expectation_points) if ctx and ctx.expectation_points else 0.0,
+        "violation": len(missing) / len(ctx.expectation_points) if ctx is not None and ctx.expectation_points else 0.0,
         "pattern": min(1.0, sum(pair[s]["strength"] / 3 for s in matched)),
         "disagreement": max(negs) - min(negs),
-        "confidence": (unit(ctx.confidence) + tone_conf) / 2 if ctx else tone_conf,
+        "confidence": (unit(ctx.confidence) + tone_conf) / 2 if ctx is not None else tone_conf,
     }
     w = cfg["weights"]
-    risk = 1 / (1 + math.exp(-(w["bias"] + sum(w[k] * f[k] for k in TERMS))))
+    z = w["bias"] + sum(w[k] * f[k] for k in TERMS)
+    risk = 0.5 * (1 + math.tanh(z / 2))   # = sigmoid(z), 넘침 없음
     abstain = f["disagreement"] > cfg["max_disagreement"] or f["confidence"] < cfg["min_confidence"]
     alert = not abstain and risk >= cfg["alert_threshold"]
 

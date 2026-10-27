@@ -21,8 +21,8 @@ def tone(neg: float, conf: float = 0.8) -> ToneReading:
     return ToneReading(readings={"차갑게": neg, "무난하게": 1 - neg}, confidence=conf)
 
 
-def run(tones, ctx=CTX, store=None, g=GATE):
-    return A.aggregate(DRAFT, g, ctx, tones, store or ProfileStore(), CONVO, CFG)
+def run(tones, ctx=CTX, store=None, g=GATE, cfg=CFG):
+    return A.aggregate(DRAFT, g, ctx, tones, store or ProfileStore(), CONVO, cfg)
 
 
 def z_of(f: dict) -> float:
@@ -40,6 +40,25 @@ def test_single_expert_formula():
     assert v.risk == round(1 / (1 + math.exp(-z_of(f))), 3)
     assert v.alert and not v.abstain and v.top_reading == "차갑게"
     assert "이유 설명 없음" in v.signals
+
+
+def test_alert_top_reading_is_negative_max_not_merged_max():
+    even = ToneReading(readings={"차갑게": 0.2, "성의없게": 0.2, "화나게": 0.2, "무난하게": 0.4}, confidence=0.8)
+    v = run([(even, 1.0)], g=GATE.model_copy(update={"prior": 0.9}))
+    assert v.alert and not v.abstain
+    assert v.top_reading == "차갑게"            # 합친 읽힘의 최대는 무난하게(.4)지만 알림이면 부정 셋 중 최대
+
+
+def test_quiet_top_reading_is_merged_max():
+    v = run([(tone(0.3), 1.0)], ctx=None, g=GATE.model_copy(update={"prior": 0.0}))
+    assert v.risk < CFG["alert_threshold"] and not v.alert and not v.abstain
+    assert v.top_reading == "무난하게"
+
+
+@pytest.mark.parametrize("bias,risk", [(-1e4, 0.0), (1e4, 1.0)])
+def test_extreme_z_does_not_overflow(bias, risk):
+    cfg = CFG | {"weights": CFG["weights"] | {"bias": bias}}
+    assert run([(tone(0.5), 1.0)], cfg=cfg).risk == risk
 
 
 def test_alpha_weighting():

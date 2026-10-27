@@ -1,6 +1,7 @@
 """레이어 사이에 오가는 데이터 형태. LLM 출력은 전부 여기서 검사한다."""
 from __future__ import annotations
 
+import math
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
@@ -66,6 +67,9 @@ class ToneReading(BaseModel):
     @field_validator("readings")
     @classmethod
     def normalize(cls, v: dict[str, float]) -> dict[str, float]:
+        # json.loads는 Infinity·NaN을 받는다. 0으로 바꾸지 않고 떨어뜨려 폴백시킨다(규칙 3)
+        if not all(math.isfinite(x) for x in v.values()):
+            raise ValueError("readings에 유한하지 않은 값")
         v = {k: max(0.0, float(v.get(k, 0.0))) for k in READINGS}
         s = sum(v.values()) or 1.0
         return {k: round(x / s, 3) for k, x in v.items()}

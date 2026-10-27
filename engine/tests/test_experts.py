@@ -8,6 +8,7 @@ from pathlib import Path
 import httpx
 import pytest
 import yaml
+from pydantic import ValidationError
 
 from app.settings import DEFAULT_MODELS_PATH
 from experts.base import ExpertRequest
@@ -101,6 +102,24 @@ def test_invalid_output_falls_back(tmp_path):
            "fallback": {"mock:garbage": ["mock:tone"]}}
     router = Router.from_file(_write(tmp_path, cfg), force_mock=True)
     router.providers["mock"] = SpyProvider(canned={"garbage": lambda p: "not json"})
+    expert = LLMExpert("t", "tone", {"detail"}, 1.0, "tone", router)
+    assert asyncio.run(expert.run(_req(), time.monotonic() + 1)).model == "mock:tone"
+
+
+@pytest.mark.parametrize("bad", [float("inf"), float("-inf"), float("nan")])
+def test_tone_reading_rejects_non_finite(bad):
+    with pytest.raises(ValidationError):
+        ToneReading(readings={"차갑게": bad, "무난하게": 0.5})
+
+
+def test_infinity_reading_falls_back(tmp_path):
+    """json.loads는 Infinity를 받아들인다. 그런 출력은 스키마에서 떨어지고 다음 모델로 넘어가야 한다(규칙 3)."""
+    cfg = {"providers": {"mock": {}},
+           "experts": [{"id": "t", "role": "tone", "model": "mock:inf", "prompt": "tone", "paths": ["detail"]}],
+           "fallback": {"mock:inf": ["mock:tone"]}}
+    router = Router.from_file(_write(tmp_path, cfg), force_mock=True)
+    raw = '{"readings": {"차갑게": Infinity, "무난하게": 0.5}, "confidence": 0.8}'
+    router.providers["mock"] = SpyProvider(canned={"inf": lambda p: raw})
     expert = LLMExpert("t", "tone", {"detail"}, 1.0, "tone", router)
     assert asyncio.run(expert.run(_req(), time.monotonic() + 1)).model == "mock:tone"
 
