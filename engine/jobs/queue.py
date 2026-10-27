@@ -98,7 +98,9 @@ class JobQueue:
 
     def _retry_later(self, job: _Job, delay: float) -> None:
         def fire() -> None:
+            nonlocal handle
             self._timers.discard(handle)
+            handle = None  # 핸들↔콜백 순환을 끊는다: 울린 뒤에도 job(인자)이 순환 gc를 기다리며 남지 않게
             try:
                 self._q.put_nowait(job)
             except asyncio.QueueFull:  # 받아 둔 작업이니 버리지 않고 한 번 더 기다린다

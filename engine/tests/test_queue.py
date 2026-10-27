@@ -232,6 +232,37 @@ def test_finished_job_args_are_released():
     assert asyncio.run(main()) == [False, False]
 
 
+def test_retried_job_args_are_released_without_cyclic_gc():
+    """재시도 타이머가 울린 뒤에는 핸들↔콜백 순환이 없어서, gc 없이도 인자가 풀린다."""
+    attempts = []
+
+    async def flaky(p):
+        attempts.append(1)
+        if len(attempts) == 1:
+            raise RuntimeError("fail")
+
+    async def main():
+        q = JobQueue(workers=1, max_attempts=3, backoff_s=0.01)
+        q.start()
+        p = _Payload()
+        ref = weakref.ref(p)
+        q.enqueue("t", flaky, p)
+        del p
+        await q.join()
+        alive = ref() is not None  # gc.collect() 없이 본다
+        await q.stop()
+        return alive
+
+    gc.collect()  # 앞선 테스트의 쓰레기를 치운 뒤에 끈다
+    gc.disable()
+    try:
+        alive = asyncio.run(main())
+    finally:
+        gc.enable()
+    assert len(attempts) == 2  # 실제로 재시도를 거쳤다
+    assert alive is False
+
+
 def test_stop_cancels_pending_retry_timer():
     # 내부(_timers, _q)를 일부러 본다: 취소된 타이머가 남았는지는 겉으로 보이지 않는다.
     calls = []
