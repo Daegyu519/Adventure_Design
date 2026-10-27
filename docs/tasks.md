@@ -73,7 +73,7 @@
 | T-27a | 앱 리포트 화면: 알림 수, 살펴보기 수, 고친 비율, 예측 차이 추이, 주별 힌트 수 | 앱 | T-34 | mock·엔진 숫자와 화면이 같음 | 대기 |
 | T-27b | `/v1/stats/me`(엔진): 알림 수, 살펴보기 수, 고친 비율, 주별 힌트 수, 예측 차이 추이 | 엔진 | T-14 | 이벤트·`mirror_attempts` 수와 응답 숫자가 일치 | 대기 |
 | T-28a | 앱 등록: Android 푸시 토큰, 웹 서비스 워커 + VAPID 구독, 로그아웃 시 해제 | 앱 | T-37, T-09a | `push_tokens`에 android·web 행, 웹 테스트 푸시 표시 | 대기 |
-| T-28b | 엔진 발송: 웹훅 → 방 멤버(보낸 사람·알림 끈 사람 제외)에게 Expo Push와 웹 푸시(`pywebpush`, VAPID). 웹 endpoint는 허용 호스트만, 만료 구독은 삭제 | 엔진 | T-10, T-23 | 대상 제외·묶음·실패 격리·SSRF 허용 목록·만료 삭제 테스트. 같은 message_id 웹훅 두 번 → 작업 1개 | 대기 |
+| T-28b | 엔진 발송: 웹훅 → 방 멤버(보낸 사람·알림 끈 사람 제외)에게 Expo Push와 웹 푸시(`pywebpush`, VAPID). 웹 endpoint는 허용 호스트만, 만료 구독은 삭제 | 엔진 | T-10, T-23 | 대상 제외·묶음·실패 격리·SSRF 허용 목록·만료 삭제 테스트. 같은 message_id 웹훅 두 번 → 작업 1개. 확인: `cd engine && uv run pytest -q tests/test_push.py` 54 passed(큐 인자는 message_id뿐이고 키 `push:<id>`로 같은 웹훅 두 번 → 작업 1개, enqueue가 거절돼도 202, 워커가 DB에서 메시지를 다시 읽음, 보낸 사람·알림 끈 멤버 제외, Expo 요청 모양과 100개 묶음, 한 구독 실패가 다른 구독을 막지 않음, endpoint 허용 목록 28개 경우와 허용 안 된 endpoint는 `webpush` 미호출·토큰 유지, 허용 호스트의 리다이렉트는 안 따라감, 웹 404·410·Expo `DeviceNotRegistered`만 토큰 삭제, 로그에 본문·토큰·endpoint 없음, `Settings` repr에 비밀값 없음, 웹훅 401·무시·422에서는 작업이 안 들어감(`test_hooks.py`), 보내기 전체 제한 시간), `tests/test_queue.py` 23 passed(멱등 키: 같은 키 한 번, 키 메모리 상한, 거절된 작업은 키 안 남김). 한계: 멱등 키는 프로세스 메모리라 재시작하면 같은 웹훅이 알림을 한 번 더 보낼 수 있음 | 완료 |
 | T-35 | 거울 엔진 API: `/v1/mirror/today`, `/v1/mirror/answer`, 엔진 서명 `card_id`, 상황 카드 20장(`engine/content/mirror_cards.yaml`) | 엔진 | T-03b, T-21 | mock 테스트 통과, 위조한 `card_id`는 거부, 실제 대화에서 뽑은 카드는 Gemini로 가지 않음 | 대기 |
 | T-36 | 거울 화면 3종: 역할극, 되돌려 받기, 예측 맞히기 | 앱 | T-07, T-35 | 카드 3장을 끝까지 풀 수 있고, 점수는 차이로만 보임("예측과 한 칸 차이"), `mirror_attempts`에 기록됨 | 대기 |
 
