@@ -31,7 +31,7 @@ FORBIDDEN = re.compile(r"(확실히|분명히|반드시|상대가 말하길|상�
 
 def guard(text: str) -> str:
     if FORBIDDEN.search(text):
-        raise ValueError(f"금지 표현: {text}")
+        raise ValueError("금지 표현이 포함됨")  # 검사한 문장은 복원된 실명을 담을 수 있어 메시지에 싣지 않는다
     return text
 
 

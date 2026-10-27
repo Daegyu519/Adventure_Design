@@ -5,9 +5,11 @@ from __future__ import annotations
 import copy
 import json
 import uuid
+from collections.abc import Awaitable, Callable
 from dataclasses import asdict, dataclass
 from datetime import date, datetime, timezone
 from itertools import count
+from typing import Any
 from uuid import UUID
 
 from app.db import FeedbackWrite, Msg, PushTarget, Room, SentMsg, TraceRow, week_start
@@ -266,3 +268,28 @@ class FakeRepo:
                     and a["created_at"] >= since):
                 gaps.setdefault(week_start(a["created_at"]), []).append(a["gap"])
         return {wk: sum(g) / len(g) for wk, g in gaps.items()}
+
+
+class FakeQueue:
+    """JobQueue 대역: 넣기만 하고, 테스트가 `run_all()`로 직접 돌린다. 인자는 로그가 아니라 `.jobs`에만 있다."""
+
+    def __init__(self, accepting: bool = True) -> None:
+        self.accepting = accepting  # False면 가득 찬 큐처럼 거절한다(호출하는 쪽의 503 경로 테스트용)
+        self.jobs: list[tuple[str, Callable[..., Awaitable[None]], tuple]] = []
+        self._ran = 0
+
+    def enqueue(self, name: str, fn: Callable[..., Awaitable[None]], *args: Any) -> bool:
+        if not self.accepting:
+            return False
+        self.jobs.append((name, fn, args))
+        return True
+
+    def names(self) -> list[str]:
+        return [name for name, _, _ in self.jobs]
+
+    async def run_all(self) -> None:
+        """넣은 순서대로 실행한다. 실행 중 새로 들어온 것도 돈다. 예외는 그대로 올린다."""
+        while self._ran < len(self.jobs):
+            _, fn, args = self.jobs[self._ran]
+            self._ran += 1
+            await fn(*args)

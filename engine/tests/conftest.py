@@ -9,10 +9,10 @@ from fastapi.testclient import TestClient
 
 from app.auth import current_user
 from app.db import PgRepo
-from app.deps import get_repo, get_settings
+from app.deps import get_queue, get_repo, get_settings
 from app.main import app
 from app.settings import Settings
-from tests.fakes import FakeRepo
+from tests.fakes import FakeQueue, FakeRepo
 from tests.pg import Cluster, PgSeeder, missing_reason
 
 
@@ -50,11 +50,17 @@ def fake() -> FakeRepo:
 
 
 @pytest.fixture
-def client(fake):
-    """lifespan은 돌지 않는다(`with` 없이 만든다). DB는 fake, 설정은 테스트 값."""
+def queue() -> FakeQueue:
+    return FakeQueue()
+
+
+@pytest.fixture
+def client(fake, queue):
+    """lifespan은 돌지 않는다(`with` 없이 만든다). DB·큐는 fake, 설정은 테스트 값."""
     settings = dataclasses.replace(Settings.from_env(), hook_secret="test-secret",
                                    supabase_url="https://test.supabase.co")
     app.dependency_overrides[get_repo] = lambda: fake
+    app.dependency_overrides[get_queue] = lambda: queue
     app.dependency_overrides[get_settings] = lambda: settings
     yield TestClient(app)
     app.dependency_overrides.clear()
