@@ -6,7 +6,14 @@ from harness.schemas import Conversation, GateResult
 from harness.store import ProfileStore
 
 
-def score(draft: str, convo: Conversation, store: ProfileStore, user_id: str, threshold: float) -> GateResult:
+def pattern_matches(signals: list[str], store: ProfileStore, pair_id: str, global_min_obs: int) -> list[str]:
+    """보낸 사람 패턴과 겹치는 신호 중 전체 관찰 수가 global_min_obs 이상인 것만. L0·L3가 같이 쓴다(규칙 7)."""
+    pair = store.patterns_for(pair_id)
+    return [s for s in signals if s in pair and store.global_patterns.get(s, 0) >= global_min_obs]
+
+
+def score(draft: str, convo: Conversation, store: ProfileStore, user_id: str, threshold: float,
+          global_min_obs: int) -> GateResult:
     s = K.surface(draft)
     last = convo.last_them()
     signals: list[str] = []
@@ -37,8 +44,8 @@ def score(draft: str, convo: Conversation, store: ProfileStore, user_id: str, th
             prior += 0.15
             signals.append("존댓말이 갑자기 빠짐")
 
-    pair = store.patterns_for(convo.pair_id)
-    matched = [sig for sig in signals if sig in pair]
+    # 한 사람의 신고만으로는 오르지 않는다
+    matched = pattern_matches(signals, store, convo.pair_id, global_min_obs)
     prior += min(0.3, 0.15 * len(matched))
 
     for k in ("softener", "hedge", "apology"):

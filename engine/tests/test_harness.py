@@ -7,9 +7,9 @@ import yaml
 from app.settings import DEFAULT_MODELS_PATH
 from harness import pii
 from harness.router import NoResult, Router, chains
-from harness.schemas import ContextReading, Conversation, Turn
+from harness.schemas import ContextReading, Conversation, ToneReading, Turn
 from harness.store import ProfileStore
-from layers import gate, guard
+from layers import aggregate, gate, guard
 
 
 def test_pii_mask():
@@ -28,8 +28,8 @@ def test_gate_passes_short_reply_to_heavy_message_only():
     store = ProfileStore()
     light = Conversation(pair_id="p", turns=[Turn(speaker="them", text="내일 7시 맞지?")])
     heavy = Conversation(pair_id="p", turns=[Turn(speaker="them", text="요즘 너무 힘들다 다 그만두고 싶어")])
-    assert not gate.score("ㅇㅇ", light, store, "me", 0.3).passed
-    assert gate.score("ㅇㅇ", heavy, store, "me", 0.3).passed
+    assert not gate.score("ㅇㅇ", light, store, "me", 0.3, 5).passed
+    assert gate.score("ㅇㅇ", heavy, store, "me", 0.3, 5).passed
 
 
 def test_router_falls_back_to_mock():
@@ -46,21 +46,20 @@ def test_router_gives_up_after_deadline():
 
 
 def test_single_report_alone_does_not_boost():
-    from harness.schemas import FeedbackPattern, ToneReading
-    # 프로토타입 layers/judge.py는 T-13에서 layers/aggregate.py로 옮겨 온다. 그때 import 이름만 맞추면 켜진다.
-    judge = pytest.importorskip("layers.judge", reason="judge는 T-13에서 aggregate로 이전")
     cfg = Router.from_file(DEFAULT_MODELS_PATH, force_mock=True).config["aggregate"]
-    store = ProfileStore()
-    store.add_patterns("p", [FeedbackPattern(trigger="이유 없는 거절", feeling="차갑게", strength=3)])
+    pair = {"p": {"이유 없는 거절": {"count": 1, "strength": 3, "feeling": "차갑게"}}}
     c = Conversation(pair_id="p", turns=[Turn(speaker="them", text="이거 미뤄도 될까요?")])
-    g = gate.score("안 돼요.", c, store, "me", 0.3)
     ctx = ContextReading(prev_act="부탁", expectation_points=["이유 설명"], confidence=0.8)
-    tone = ToneReading(readings={"차갑게": 0.5, "무난하게": 0.5}, confidence=0.8)
+    tones = [(ToneReading(readings={"차갑게": 0.5, "무난하게": 0.5}, confidence=0.8), 1.0)]
+
+    def verdict(store):
+        g = gate.score("안 돼요.", c, store, "me", 0.3, global_min_obs=cfg["global_min_obs"])
+        return aggregate.aggregate("안 돼요.", g, ctx, tones, store, c, cfg)
+
     # 한 사람의 피드백뿐이면 관계 패턴은 반영되지 않는다
-    assert not judge.aggregate("안 돼요.", g, ctx, [tone], store, c, cfg).pattern_used
+    assert not verdict(ProfileStore(pair_patterns=pair, global_patterns={"이유 없는 거절": 1})).pattern_used
     # 일반 패턴이 충분히 쌓이면 반영된다
-    store.seed_global({"이유 없는 거절": 10})
-    assert judge.aggregate("안 돼요.", g, ctx, [tone], store, c, cfg).pattern_used
+    assert verdict(ProfileStore(pair_patterns=pair, global_patterns={"이유 없는 거절": 10})).pattern_used
 
 
 def test_no_gemini_on_real_text_roles():
