@@ -101,7 +101,7 @@ test('layout: keys + session still loading → blank (no login flash), then logi
   expect(SplashScreen.hide).toHaveBeenCalled();
 });
 
-test('layout: signed in → blank while the profile loads (after the splash is gone too), then profile screen', async () => {
+test('layout: signed in → blank while the profile loads, then profile screen', async () => {
   mockConsented = true;
   const fake = fakeSupabase();
   const { screens, blank } = await mount();

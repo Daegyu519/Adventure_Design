@@ -61,7 +61,7 @@ export default function Profile() {
                 <AppText accessibilityRole="header" aria-level={1} variant="title">
                   프로필을 불러오지 못했어요
                 </AppText>
-                <AppText color="textMuted">인터넷 연결을 확인하고 다시 해 보세요.</AppText>
+                <AppText color="textMuted">연결이 불안정할 수도 있어요. 잠시 뒤 다시 해 보세요.</AppText>
                 <Button label="다시 불러오기" onPress={retry} loading={busy} />
               </>
             ) : (

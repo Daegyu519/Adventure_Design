@@ -111,6 +111,7 @@ test('profile: 프로필을 못 불러왔으면 이름 입력 대신 안내와 �
   mockSession.failed = true;
   const { field, press, texts } = await setup();
   expect(texts()).toContain(LOAD_FAILED);
+  expect(texts()).toContain('연결이 불안정할 수도 있어요. 잠시 뒤 다시 해 보세요.'); // 서버 쪽 문제일 수도 있어 연결 탓으로 단정하지 않는다
   expect(field()).toBeUndefined(); // 이미 이름이 있는 사람이 새 이름을 정하게 하지 않는다
   await press('다시 불러오기');
   expect(mockRefresh).toHaveBeenCalledTimes(1);
