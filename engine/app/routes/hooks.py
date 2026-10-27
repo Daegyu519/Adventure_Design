@@ -1,5 +1,6 @@
 import hmac
 import logging
+from collections.abc import Awaitable, Callable
 from datetime import datetime
 from uuid import UUID
 
@@ -9,6 +10,7 @@ from pydantic import BaseModel, Field, ValidationError
 from app.db import Repo
 from app.deps import get_queue, get_repo, get_settings
 from app.settings import Settings
+from jobs import baseline
 from jobs.push import send_push
 from jobs.queue import JobQueue
 
@@ -59,9 +61,17 @@ async def hook_message(request: Request, settings: Settings = Depends(get_settin
     except ValidationError:
         raise HTTPException(status_code=422, detail="invalid_payload") from None
     log.info("hook message id=%s room=%s", rec.id, rec.room_id)  # text는 남기지 않는다
-    # 작업 넣기(T-28b 푸시; T-26 기준선도 같은 규칙). 뒤 작업은 아래를 지킨다.
+    # 작업 넣기(T-28b 푸시, T-26 기준선). 뒤 작업도 아래를 지킨다.
     # - 큐 인자는 `{message_id}`만(멱등 키 f"{kind}:{message_id}"). 본문은 워커가 DB에서 다시 읽고, 큐 인자에는 text를 넣지 않는다.
-    # - enqueue가 실패해도 항상 202를 돌려준다(Supabase pg_net은 재시도하지 않는다).
-    if not queue.enqueue("push", send_push, repo, settings, rec.id, key=f"push:{rec.id}"):
-        log.warning("push enqueue rejected id=%s", rec.id)
+    # - enqueue가 실패해도 항상 202를 돌려준다(Supabase pg_net은 재시도하지 않는다). 하나가 실패해도 다음 것은 넣는다.
+    _enqueue(queue, "push", send_push, repo, settings, rec.id, message_id=rec.id)
+    _enqueue(queue, "baseline", baseline.update, repo, rec.id, message_id=rec.id)
     return {}
+
+
+def _enqueue(queue: JobQueue, name: str, fn: Callable[..., Awaitable[None]], *args, message_id: int) -> None:
+    try:
+        if not queue.enqueue(name, fn, *args, key=f"{name}:{message_id}"):
+            log.warning("%s enqueue rejected id=%s", name, message_id)
+    except Exception as e:  # 예외 메시지에 인자가 있을 수 있어 타입 이름만
+        log.warning("%s enqueue failed: %s", name, type(e).__name__)
