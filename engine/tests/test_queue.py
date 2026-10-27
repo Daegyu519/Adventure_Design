@@ -390,3 +390,89 @@ def test_fake_queue_can_refuse_jobs():
     fq = FakeQueue(accepting=False)
     assert fq.enqueue("t", _noop) is False
     assert fq.jobs == []
+
+
+def test_same_key_is_enqueued_once():
+    got = []
+
+    async def job(x):
+        got.append(x)
+
+    async def main():
+        q = JobQueue(workers=1)
+        q.start()
+        assert q.enqueue("push", job, 1, key="push:1") is True
+        assert q.enqueue("push", job, 1, key="push:1") is True  # 이미 받은 작업: 거절(False)이 아니다
+        assert q.enqueue("push", job, 2, key="push:2") is True
+        await q.join()
+        assert q.enqueue("push", job, 1, key="push:1") is True  # 끝난 뒤에 와도 다시 안 돈다
+        await q.join()
+        await q.stop()
+
+    asyncio.run(main())
+    assert got == [1, 2]
+
+
+def test_jobs_without_key_are_never_deduped():
+    got = []
+
+    async def job():
+        got.append(1)
+
+    async def main():
+        q = JobQueue(workers=1)
+        q.start()
+        assert q.enqueue("t", job) and q.enqueue("t", job)
+        await q.join()
+        await q.stop()
+
+    asyncio.run(main())
+    assert got == [1, 1]
+
+
+def test_key_memory_is_bounded():
+    got = []
+
+    async def job(x):
+        got.append(x)
+
+    async def main():
+        q = JobQueue(workers=1, max_keys=2)
+        q.start()
+        for k in ("a", "b", "c", "a"):  # c가 들어오며 가장 오래된 a를 잊는다 → 마지막 a는 다시 돈다
+            assert q.enqueue("t", job, k, key=k) is True
+        await q.join()
+        await q.stop()
+
+    asyncio.run(main())
+    assert got == ["a", "b", "c", "a"]
+
+
+def test_rejected_job_key_is_not_remembered():
+    got = []
+
+    async def job(x):
+        got.append(x)
+
+    async def main():
+        q = JobQueue(workers=1, maxsize=1)  # start 전: 아무도 꺼내지 않는다
+        assert q.enqueue("t", job, 1, key="k1") is True
+        assert q.enqueue("t", job, 2, key="k2") is False  # 가득 참: 받지 않았으니 키도 남기지 않는다
+        q.start()
+        await q.join()
+        assert q.enqueue("t", job, 2, key="k2") is True
+        await q.join()
+        await q.stop()
+
+    asyncio.run(main())
+    assert got == [1, 2]
+
+
+def test_fake_queue_dedupes_same_key():
+    fq = FakeQueue()
+    assert fq.enqueue("push", _noop, 1, key="push:1") is True
+    assert fq.enqueue("push", _noop, 1, key="push:1") is True
+    assert fq.enqueue("push", _noop, 2, key="push:2") is True
+    assert fq.enqueue("t", _noop) and fq.enqueue("t", _noop)  # 키 없는 작업은 그대로
+    assert fq.names() == ["push", "push", "t", "t"]
+    assert fq.keys == ["push:1", "push:2"]

@@ -17,26 +17,30 @@ def _insert(table: str = "messages", **record) -> dict:
     return {"type": "INSERT", "table": table, "schema": "public", "record": rec, "old_record": None}
 
 
-def test_wrong_secret_401(client):
+def test_wrong_secret_401(client, queue):
     # 본문이 깨져 있어도 401: 비밀값을 먼저 본다
     r = client.post("/hooks/message", content=b"not json", headers={"X-Hook-Secret": "wrong"})
     assert r.status_code == 401
+    assert queue.jobs == []  # 인증 전에는 작업을 넣지 않는다(enqueue를 비밀값 검사 위로 옮기면 실패)
 
 
-def test_missing_header_401(client):
+def test_missing_header_401(client, queue):
     assert client.post("/hooks/message", json=_insert()).status_code == 401
+    assert queue.jobs == []
 
 
-def test_non_ascii_secret_401_not_500(client):
+def test_non_ascii_secret_401_not_500(client, queue):
     # hmac.compare_digest(str, str)는 비ASCII에서 TypeError → 500이 되면 안 된다
     r = client.post("/hooks/message", json=_insert(), headers={"X-Hook-Secret": "비밀".encode()})
     assert r.status_code == 401
+    assert queue.jobs == []
 
 
-def test_empty_configured_secret_rejects(client):
+def test_empty_configured_secret_rejects(client, queue):
     base = app.dependency_overrides[get_settings]()
     app.dependency_overrides[get_settings] = lambda: dataclasses.replace(base, hook_secret="")
     assert client.post("/hooks/message", json=_insert(), headers={"X-Hook-Secret": ""}).status_code == 401
+    assert queue.jobs == []
 
 
 def test_insert_logged_without_text(client, caplog):
@@ -48,36 +52,40 @@ def test_insert_logged_without_text(client, caplog):
     assert "비밀문장" not in caplog.text
 
 
-def test_other_events_ignored(client, caplog):
+def test_other_events_ignored(client, queue, caplog):
     caplog.set_level(logging.DEBUG)
     r = client.post("/hooks/message", json=_insert(table="reactions"), headers=SECRET)
     assert r.status_code == 202
     assert "hook message" not in caplog.text
+    assert queue.jobs == []  # 메시지 insert가 아니면 푸시 작업도 없다
 
 
 @pytest.mark.parametrize("patch", [{"type": "UPDATE"}, {"type": "DELETE"}, {"schema": "tone"}],
                          ids=["update", "delete", "other-schema"])
-def test_non_insert_or_non_public_ignored(client, caplog, patch):
+def test_non_insert_or_non_public_ignored(client, queue, caplog, patch):
     caplog.set_level(logging.DEBUG)
     r = client.post("/hooks/message", json={**_insert(), **patch}, headers=SECRET)
     assert r.status_code == 202
     assert "hook message" not in caplog.text
+    assert queue.jobs == []
 
 
-def test_malformed_payload_422_does_not_echo_text(client):
+def test_malformed_payload_422_does_not_echo_text(client, queue):
     r = client.post("/hooks/message", json={"type": "INSERT"}, headers=SECRET)
     assert r.status_code == 422
     bad = client.post("/hooks/message", json=_insert(id="x"), headers=SECRET)
     assert bad.status_code == 422
     assert "비밀문장" not in bad.text
+    assert queue.jobs == []
 
 
 @pytest.mark.parametrize("patch", [{"id": 0}, {"id": -1}, {"id": 2**63}, {"reply_to": 0}, {"reply_to": 2**63}],
                          ids=["id-zero", "id-negative", "id-overflow", "reply-zero", "reply-overflow"])
-def test_ids_outside_bigint_range_422(client, patch):
+def test_ids_outside_bigint_range_422(client, queue, patch):
     # messages.id/reply_to는 양수 bigint: 범위 밖 값은 큐·DB로 넘어가기 전에 거절한다
     r = client.post("/hooks/message", json=_insert(**patch), headers=SECRET)
     assert r.status_code == 422
+    assert queue.jobs == []
 
 
 def test_secret_rejection_log_distinguishes_unset_from_wrong(client, caplog):
