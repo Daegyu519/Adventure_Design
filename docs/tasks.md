@@ -37,7 +37,7 @@
 | T-09d | 방 정보(멤버, 관계, 알림 끄기, 그룹 초대) · 방 안 검색 | 앱 | T-09a | 알림 끈 방이 목록에 표시, 검색 결과에 원문 강조 | 대기 |
 | T-10 | DB 웹훅 → `POST /hooks/message`, `X-Hook-Secret` 검증 | 엔진, DB | T-03a, T-05 | mock/로컬 기준: TestClient로 INSERT 수신 로그, 비밀값 틀리면 401, 다른 이벤트 무시(test_hooks.py 통과). 확인: `cd engine && uv run pytest -q tests/test_hooks.py` 17개 통과(브리프의 6개 + 비ASCII 비밀값·UPDATE/DELETE/다른 스키마 무시·422·id 범위·거절 로그 구분), 전체 `uv run pytest -q` 123개 통과; 비밀값 비교는 `hmac.compare_digest`(bytes), 설정값이 비면 항상 401, 로그에는 id·room만(본문 없음), 변이 4건(빈 비밀값 허용, str 비교, text 로깅, 무시 검사 제거)이 각각 테스트에 걸림 | 완료 |
 | T-10-live | 웹훅 실제 연결: Supabase 대시보드 Webhooks(public.messages INSERT) → cloudflared 터널 → 엔진, README 절차대로 | 엔진, DB | T-02, T-10 | 실제 메시지를 보내면 엔진 로그에 수신 기록, 비밀값 틀리면 401 | 대기 |
-| T-34 | 첫 실행 동의 화면: 파일럿 동의, AI 데이터 처리(하소연 원문 미저장 등 개인정보 규칙), iOS 홈 화면 추가 안내(웹 푸시는 iOS 16.4 이상) | 앱 | T-04 | 첫 실행에만 뜨고, 동의해야 로그인으로 넘어감 | 대기 |
+| T-34 | 첫 실행 동의 화면: 파일럿 동의, AI 데이터 처리(하소연 원문 미저장 등 개인정보 규칙), iOS 홈 화면 추가 안내(웹 푸시는 iOS 16.4 이상) | 앱 | T-04 | 첫 실행에만 뜨고, 동의해야 로그인으로 넘어감. 확인: jest 9개(gate 3 + iosWeb 6) + consent 5 + 동의 화면 3, expo export web 성공, 웹에서 첫 방문에 동의 화면 → 체크 전 시작하기 비활성 → 동의 후 탭 화면, 새로고침해도 유지, localStorage consent 지우면 다시 동의 화면, 다크 모드 확인. 로그인 게이트는 Task 4(GateState를 넓힌다) | 완료 |
 | T-37 | 설정 화면: 힌트 끄기, 테마(시스템·밝게·어둡게), 계정(로그아웃) | 앱 | T-07 | 힌트를 끄면 엔진 요청이 없음, 테마가 바로 바뀌고 다시 열어도 유지 | 대기 |
 
 ## 단계 2. AI 엔진 핵심 (실시간 힌트)
