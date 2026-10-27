@@ -1607,6 +1607,7 @@ dependencies = [
     { name = "pyjwt", extra = ["crypto"] },
     { name = "pywebpush" },
     { name = "pyyaml" },
+    { name = "requests" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -1625,6 +1626,7 @@ requires-dist = [
     { name = "pyjwt", extras = ["crypto"], specifier = ">=2.10.1" },
     { name = "pywebpush", specifier = ">=2.0" },
     { name = "pyyaml", specifier = ">=6.0" },
+    { name = "requests", specifier = ">=2.31" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
 ]
 

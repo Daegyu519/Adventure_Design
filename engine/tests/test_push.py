@@ -385,6 +385,18 @@ def test_slow_push_hits_overall_deadline(fake, monkeypatch, caplog):
     assert "push send deadline exceeded" in caplog.text
 
 
+def test_settings_repr_hides_secrets():
+    """Settings는 큐 인자라 repr가 로그·예외에 나올 수 있다: 비밀값은 찍히지 않는다."""
+    secrets = ("SECRET-HOOK", "SECRET-SRK", "postgres://u:SECRET-PW@h/db", "SECRET-EXPO", "SECRET-VAPID")
+    s = Settings(hook_secret=secrets[0], supabase_service_role_key=secrets[1], supabase_db_url=secrets[2],
+                 expo_access_token=secrets[3], vapid_private_key=secrets[4], vapid_subject="mailto:a@b.c",
+                 supabase_url="https://x.supabase.co")
+    text = repr(s) + str(s)
+    for v in secrets:
+        assert v not in text
+    assert "SECRET" not in text and "supabase.co" in text  # 비밀이 아닌 칸은 그대로 보인다
+
+
 def test_settings_from_env(monkeypatch):
     monkeypatch.setenv("EXPO_ACCESS_TOKEN", "e")
     monkeypatch.setenv("VAPID_PRIVATE_KEY", "p")
