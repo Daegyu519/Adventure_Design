@@ -41,7 +41,7 @@ paths:
   realtime: {deadline_ms: 1500, expert_deadline_ms: 1200, gate_threshold: 0.3}
   detail:   {deadline_ms: 8000}
   mirror:   {deadline_ms: 8000}
-  async:    {deadline_ms: 60000}
+  async:    {deadline_ms: 8000}    # 털어놓기 L4. 요청 안에서 분류한다(하소연을 큐에 넣지 않으려고): 앱 기본 제한 10초 안
 aggregate:
   weights: {bias: -2.2, prior: 1.6, neg: 2.4, violation: 1.4, pattern: 0.9}
   alert_threshold: 0.6

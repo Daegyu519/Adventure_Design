@@ -95,16 +95,20 @@
       "FeedbackIn": {
         "properties": {
           "message_id": {
-            "format": "int64",
+            "exclusiveMaximum": 9.223372036854776e+18,
+            "exclusiveMinimum": 0.0,
+            "title": "Message Id",
             "type": "integer"
           },
           "room_id": {
             "format": "uuid",
+            "title": "Room Id",
             "type": "string"
           },
           "text": {
             "maxLength": 1000,
             "minLength": 1,
+            "title": "Text",
             "type": "string"
           }
         },
@@ -113,17 +117,20 @@
           "message_id",
           "text"
         ],
+        "title": "FeedbackIn",
         "type": "object"
       },
       "FeedbackOut": {
         "properties": {
           "ack": {
+            "title": "Ack",
             "type": "string"
           }
         },
         "required": [
           "ack"
         ],
+        "title": "FeedbackOut",
         "type": "object"
       },
       "Freq": {
@@ -664,6 +671,25 @@
     },
     "/v1/feedback": {
       "post": {
+        "operationId": "feedback_v1_feedback_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -684,13 +710,18 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "summary": "Feedback"
       }
     },

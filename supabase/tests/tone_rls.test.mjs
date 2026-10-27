@@ -50,9 +50,12 @@ test('service_role can write tone tables', async () => {
   await svc(
     `insert into tone.sender_patterns(sender_id, relation, trigger, count, strength, feeling, active_from)
      values ($1, '팀원', 'curt_reply', 2, 1.4, '차갑게', now() + interval '1 day')`, [a])
-  await assert.rejects(svc(
-    `insert into tone.sender_patterns(sender_id, relation, trigger, active_from) values ($1, '팀원', 'curt_reply', now())`, [a]),
-  /duplicate key/) // PK(sender_id, relation, trigger)
+  // PK(sender_id, relation, trigger, active_from): 활성 시각마다 한 행. now()는 문장마다 달라 같은 키 검사에는 고정 시각을 쓴다
+  const activation = (at) => svc(
+    `insert into tone.sender_patterns(sender_id, relation, trigger, active_from) values ($1, '팀원', 'curt_reply', $2)`, [a, at])
+  await activation('2026-10-01 00:00+09')
+  await assert.rejects(activation('2026-10-01 00:00+09'), /duplicate key/)
+  await activation('2026-10-02 00:00+09') // active_from만 다르면 별개 행
   await svc( // 같은 사람, 다른 관계는 별개 행
     `insert into tone.sender_patterns(sender_id, relation, trigger, active_from) values ($1, '친구', 'curt_reply', now())`, [a])
   await assert.rejects(svc(

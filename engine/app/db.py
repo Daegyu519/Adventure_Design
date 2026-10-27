@@ -14,9 +14,22 @@ from zoneinfo import ZoneInfo
 
 import asyncpg
 
-from harness.schemas import FeedbackPattern
+from harness.schemas import READINGS, TRIGGERS, FeedbackPattern
 
 KST = ZoneInfo("Asia/Seoul")
+GROUP_MIN_MEMBERS = 3  # 털어놓은 사람을 감출 수 있는 최소 인원. 이보다 작은 방은 global_patterns에만(규칙 14)
+
+
+def check_patterns(patterns: list[FeedbackPattern]) -> None:
+    """패턴 값을 SQL보다 먼저 검사한다. DB CHECK 위반이면 Postgres DETAIL(행 값 = L4가 흘린 하소연 조각)이
+    asyncpg 예외 문자열에 실려 로그로 샐 수 있어서다. 메시지는 고정 문구이고 값을 싣지 않는다."""
+    for p in patterns:
+        if not (isinstance(p.trigger, str) and p.trigger in TRIGGERS):
+            raise ValueError("unknown trigger") from None
+        if not (isinstance(p.feeling, str) and p.feeling in READINGS):
+            raise ValueError("unknown feeling") from None
+        if not (type(p.strength) is int and 1 <= p.strength <= 3):
+            raise ValueError("bad strength") from None
 
 
 def week_start(ts: datetime) -> date:
@@ -75,11 +88,10 @@ class TraceRow:
 
 @dataclass(frozen=True)
 class FeedbackWrite:
+    """보낸 사람·관계 칸은 없다: apply_feedback이 message_id로 DB에서 찾는다(호출자를 믿지 않는다)."""
     room_id: UUID
     reporter_id: UUID
     message_id: int
-    sender_id: UUID
-    relation: str
     usable: bool
     patterns: list[FeedbackPattern]
     to_sender: bool
@@ -160,9 +172,14 @@ class PgRepo:
         return {r["id"]: r["name"] for r in rows}
 
     async def sender_patterns(self, sender_id: UUID, relation: str, now: datetime) -> dict[str, dict]:
+        # 켜진(active_from <= now) 행을 trigger별로: count는 합, strength는 count 가중 평균, feeling은 가장 늦게 켜진 행
         rows = await self._pool.fetch(
-            """select trigger, count, strength, feeling from tone.sender_patterns
-               where sender_id = $1 and relation = $2 and active_from <= $3""", sender_id, relation, now)
+            """select trigger, sum(count)::int as count,
+                      (sum(strength::float8 * count) / sum(count))::float8 as strength,
+                      (array_agg(feeling order by active_from desc))[1] as feeling
+               from tone.sender_patterns
+               where sender_id = $1 and relation = $2 and active_from <= $3 group by trigger""",
+            sender_id, relation, now)
         return {r["trigger"]: {"count": r["count"], "strength": r["strength"], "feeling": r["feeling"]} for r in rows}
 
     async def global_patterns(self) -> dict[str, int]:
@@ -210,7 +227,17 @@ class PgRepo:
             sender_id, relation, since)
 
     async def apply_feedback(self, fb: FeedbackWrite) -> bool:
+        check_patterns(fb.patterns)  # 첫 쿼리 전에
         async with self._pool.acquire() as conn, conn.transaction():
+            # 보낸 사람·관계·그룹 여부는 호출자가 아니라 여기서 읽는다. 규칙 14: 3명 이상 그룹방만 sender_patterns
+            src = await conn.fetchrow(
+                """select m.sender_id, r.relation,
+                          r.kind = 'group' and (select count(*) from public.room_members x where x.room_id = r.id) >= $3
+                            as to_sender_ok
+                   from public.messages m join public.rooms r on r.id = m.room_id
+                   where m.id = $1 and m.room_id = $2""", fb.message_id, fb.room_id, GROUP_MIN_MEMBERS)
+            if src is None:
+                raise ValueError("unknown message")
             logged = await conn.fetchval(
                 """insert into tone.feedback_log (room_id, reporter_id, message_id, usable, pattern_count)
                    values ($1, $2, $3, $4, $5)
@@ -228,18 +255,18 @@ class PgRepo:
                     await conn.execute(
                         """insert into tone.global_patterns as g (trigger, count) values ($1, 1)
                            on conflict (trigger) do update set count = g.count + 1""", p.trigger)
-                if fb.to_sender:
+                if fb.to_sender and src["to_sender_ok"]:
+                    # 자기 active_from 행에만 쌓는다: 이미 켜진 행은 그대로라 재신고가 켜진 패턴을 끄지 않는다
                     await conn.execute(
                         """insert into tone.sender_patterns as s
                              (sender_id, relation, trigger, count, strength, feeling, active_from)
                            values ($1, $2, $3, 1, $4, $5, $6)
-                           on conflict (sender_id, relation, trigger) do update set
+                           on conflict (sender_id, relation, trigger, active_from) do update set
                              count = s.count + 1,
                              strength = (s.strength * s.count + excluded.strength) / (s.count + 1),
                              feeling = excluded.feeling,
-                             active_from = excluded.active_from,
                              updated_at = now()""",
-                        fb.sender_id, fb.relation, p.trigger, float(p.strength), p.feeling, fb.active_from)
+                        src["sender_id"], src["relation"], p.trigger, float(p.strength), p.feeling, fb.active_from)
             return True
 
     async def push_targets(self, room_id: UUID, sender_id: UUID) -> list[PushTarget]:

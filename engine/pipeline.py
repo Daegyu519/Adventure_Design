@@ -2,13 +2,14 @@
 거친다. 레이어·전문가는 가린 문장만 받는다. 대응표는 이 함수의 `Masker` 메모리에만 있고 밖으로 내보내지 않는다."""
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from typing import Literal
 
 from experts.base import ExpertRequest, ExpertResult
 from experts.registry import Registry, run_all
 from harness.pii import Masker
-from harness.schemas import Conversation, GateResult, Hint, Verdict
+from harness.schemas import Conversation, FeedbackResult, GateResult, Hint, Verdict
 from harness.store import ProfileStore
 from layers import gate
 from layers.aggregate import aggregate
@@ -44,3 +45,14 @@ async def realtime(reg: Registry, draft: str, convo: Conversation, store: Profil
     v = aggregate(draft, g, ctx, tones, store, convo, agg)
     hint = render_hint(v)
     return RealtimeOutcome(g, v, hint, results, "abstain" if v.abstain else "alert" if v.alert else "none")
+
+
+async def feedback(reg: Registry, complaint: str, about: str, relation: str, names: list[str]) -> FeedbackResult | None:
+    """털어놓기(L4). 하소연과 대상 메시지를 가려서 feedback 전문가에게 보낸다. 모든 전문가가 실패·시간 초과면 None.
+    하소연은 이 함수 밖으로 나가지 않는다(돌려주는 것은 패턴 태그뿐이고, 저장할지는 호출자가 거른다)."""
+    m = Masker(names)
+    complaint, about = m(complaint), m(about)
+    req = ExpertRequest(path="async", draft=about, relation=relation, extra={"text": complaint, "about": about})
+    deadline = time.monotonic() + reg.cfg["paths"]["async"]["deadline_ms"] / 1000
+    results = await run_all(reg.for_path("async", "feedback"), req, deadline)
+    return next((r.output for r in results), None)

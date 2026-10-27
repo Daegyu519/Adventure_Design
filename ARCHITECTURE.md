@@ -170,13 +170,14 @@ sequenceDiagram
 
 ### 3-4. 털어놓기 (비동기)
 1. 받은 메시지의 "⋯" → `POST /v1/feedback (room_id, message_id, text)`. 1:1 방과 그룹방 모두에 있다.
-2. 엔진은 그 메시지가 요청자가 **받은** 메시지인지 확인하고, 큐에 넣은 뒤 202와 안내 문구를 바로 돌려준다.
-3. 큐: 메시지 내용 + 하소연(`pii.mask` 거침) → L4 피드백 전문가 → 패턴 태그 → 아래 반영 규칙대로 `tone.sender_patterns`, `tone.global_patterns` 갱신, `tone.feedback_log` 기록.
-4. 하소연 원문은 메모리에서만 쓰고 버린다. 무엇이 추출됐는지는 털어놓은 사람에게도 보여 주지 않는다.
+2. 엔진은 그 메시지가 요청자가 **이 방에서 받은** 메시지인지 확인한다(아니면 403 `not_received`).
+3. 같은 요청 안에서: 메시지 내용 + 하소연(입구 `Masker` 거침) → L4 피드백 전문가(`paths.async.deadline_ms` 8초, 앱 기본 제한 10초 안) → 패턴 태그. 고정 어휘(`TRIGGERS`)의 태그와 부정 읽힘만 남기고, 나머지·`dropped_reason`은 버린다. 분류가 실패해도 털어놓기는 받는다(패턴 없음).
+4. 큐에는 id와 분류 결과(태그·읽힘·강도)만 넣고 202와 안내 문구를 돌려준다(가득 차면 503). 큐 작업이 관계별 주간 상한과 아래 반영 규칙대로 `tone.sender_patterns`, `tone.global_patterns` 갱신, `tone.feedback_log` 기록을 한다.
+5. 하소연 원문은 그 요청의 메모리에서만 쓰고 버린다(DB·로그·trace·큐 인자 금지). 무엇이 추출됐는지는 털어놓은 사람에게도 보여 주지 않는다.
 
 **반영 규칙** (누가 털어놓았는지는 3명 이상 방에서만 감출 수 있다)
 - 패턴의 주인은 털어놓기 대상 메시지를 **보낸 사람**이다. 키는 (보낸 사람, 관계, 신호)다. 그 사람이 같은 관계의 어느 방에서 쓰든 적용하고, 털어놓은 사람의 문장에는 적용하지 않는다.
-- 그룹방(3명 이상)에서 나온 하소연만 `tone.sender_patterns`에 넣는다. `active_from`은 다음 날 0시다. 관계별 주간 상한은 그대로 둔다.
+- 그룹방(3명 이상, `app.db.GROUP_MIN_MEMBERS`)에서 나온 하소연만 `tone.sender_patterns`에 넣는다. `active_from`은 다음 날 0시(Asia/Seoul)다. 보낸 사람·관계·방 종류·인원은 `apply_feedback`가 메시지 id로 DB에서 읽어 SQL에서 판정한다(호출자 값을 믿지 않는다). 신고는 자기 `active_from` 행에만 쌓여서, 재신고가 이미 켜진 패턴을 끄지 않는다. 관계별 주간 상한은 (보낸 사람, 관계)마다 KST ISO 주(월요일 0시부터) 5건이다.
 - 1:1 방에서 나온 하소연은 `tone.global_patterns`(신호별 전체 수)에만 더한다.
 - 반영은 L0 사전점수와 L3 `pattern` 항으로만 하고, `global_patterns[trigger] ≥ global_min_obs`일 때만 한다. 원래 패널이 낼 법한 경고만 강해지고, 없던 경고를 새로 만들지 않는다.
 
@@ -203,7 +204,7 @@ sequenceDiagram
 |---|---|---|---|
 | POST | `/v1/hint` | `{room_id, text(1~500자, 앞뒤 공백 제외), seq(0 이상), reply_to?(같은 방이 아니면 422)}` | `{seq, hint: {title, detail} \| null, trace_id}` |
 | POST | `/v1/detail` | `{room_id, text, intent?, reply_to?(같은 방이 아니면 422)}` | `{alert, top_reading, readings: {읽힘: "자주"\|"가끔"\|"드물어요"}, why: [str], options: [{label, text, keep, change}], mismatch: str \| null, footnote, trace_id}` |
-| POST | `/v1/feedback` | `{room_id, message_id, text(1~1000자)}` | 202 `{ack}` |
+| POST | `/v1/feedback` | `{room_id, message_id(이 방에서 받은 메시지), text(1~1000자)}` | 202 `{ack}`(큐가 가득 차면 503 `queue_full`) |
 | POST | `/v1/mirror/today` | 없음 | `{cards: [{card_id, kind: "roleplay"\|"receive"\|"predict", persona, relation, situation, message}]}` |
 | POST | `/v1/mirror/answer` | `{card_id, reply?, score?, predicted?}` | `{readings, inner_voice?, reveal?, options?, gap?}` |
 | GET | `/v1/stats/me` | 없음 | `{hints, details, fixed, fix_rate, predict_gap_trend, hints_by_week}` |
@@ -236,7 +237,7 @@ sequenceDiagram
 | `public.mirror_attempts` | id, user_id, kind(`roleplay`·`receive`·`predict`), card_ref, answer_score, predicted, panel_bin, gap, created_at | 본인 | 엔진(서비스 키) |
 | Storage `chat-images` | 경로 `<room_id>/…` | 방 멤버 | 방 멤버 |
 | `tone.feedback_log` | id, room_id, reporter_id, message_id, usable, pattern_count, created_at | 엔진 | 엔진 |
-| `tone.sender_patterns` | sender_id, relation, trigger, count, strength, feeling, active_from, updated_at. PK(sender_id, relation, trigger) | 엔진 | 엔진 |
+| `tone.sender_patterns` | sender_id, relation, trigger, count, strength, feeling, active_from, updated_at. PK(sender_id, relation, trigger, active_from). 읽을 때 `active_from <= now`인 행을 trigger별로 묶어 count 합 · strength count 가중 평균 · feeling은 가장 늦게 켜진 행 | 엔진 | 엔진 |
 | `tone.global_patterns` | trigger, count(서로 다른 신고자 수) | 엔진 | 엔진 |
 | `tone.pattern_reporters` | trigger, reporter_id, created_at. PK(reporter_id, trigger). 같은 신고자를 한 번만 세려고 둔다 | 엔진 | 엔진 |
 | `tone.baselines` | user_id, avg_len, polite_rate, softener_rate, n | 엔진 | 엔진 |
@@ -332,7 +333,7 @@ paths:
   realtime: {deadline_ms: 1500, expert_deadline_ms: 1200, gate_threshold: 0.3}
   detail:   {deadline_ms: 8000}
   mirror:   {deadline_ms: 8000}
-  async:    {deadline_ms: 60000}
+  async:    {deadline_ms: 8000}    # 털어놓기 L4는 요청 안에서 돈다(하소연을 큐에 넣지 않음)
 aggregate:
   weights: {bias: -2.2, prior: 1.6, neg: 2.4, violation: 1.4, pattern: 0.9}
   alert_threshold: 0.6
@@ -424,7 +425,7 @@ risk = sigmoid( w0 + w1·prior + w2·Σk(αk·negk)/Σk(αk) + w3·violation + w
 | `layers/judge.py` | `engine/layers/aggregate.py` | 전문가 N개, α 가중치. 심판 호출(`arbitrate`)이 `pii.mask`를 빠뜨렸으니 입구에서 가린 문장을 받게 고친다 |
 | `layers/hint.py` | `engine/layers/guard.py` | 그대로 |
 | `layers/rewrite.py`, `context.py`, `tone.py`, `feedback.py` | `engine/experts/` + `pipeline.py` | 전문가 인터페이스로 감싸기. 레이어마다 하던 `pii.mask`는 파이프라인 입구 한 번으로 모은다(`rewrite.py`는 빠뜨렸다) |
-| `harness/store.py` | `engine/app/db.py` | JSON 파일 → `tone` 스키마 표 |
+| `harness/store.py` | `engine/harness/store.py` + `engine/app/db.py` | `harness/store.py`는 `app/context.py`가 요청마다 `app/db.Repo`에서 채우는 읽기 전용 스냅숏, 쓰기는 `app/db.py` |
 | `prompts/*.md`, `eval/` | `engine/prompts/`, `eval/` | 그대로 |
 | `server/` (FastAPI 채팅), `server/static/index.html` | 쓰지 않음 | 채팅은 Supabase, 화면은 Expo |
 

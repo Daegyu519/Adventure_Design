@@ -28,3 +28,13 @@ class HintOut(BaseModel):
     seq: int
     hint: HintBody | None
     trace_id: UUID
+
+
+class FeedbackIn(BaseModel):
+    room_id: UUID
+    message_id: int = Field(gt=0, lt=2**63)   # messages.id는 양수 bigint
+    text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000)]
+
+
+class FeedbackOut(BaseModel):
+    ack: str
