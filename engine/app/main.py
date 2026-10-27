@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 
 from app.db import PgRepo
+from app.routes import hooks
 from app.settings import Settings
 from harness.providers import available
 from harness.router import chains
@@ -34,6 +35,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="tone-chat engine", lifespan=lifespan)
+app.include_router(hooks.router)
 
 
 class HealthResponse(BaseModel):
