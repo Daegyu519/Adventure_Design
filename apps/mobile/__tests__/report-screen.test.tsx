@@ -1,8 +1,10 @@
 import { act } from 'react';
+import { StyleSheet } from 'react-native';
 import { createRoot, type TestInstance, type TestNode } from 'test-renderer';
 
 import Report from '../app/(tabs)/report';
 import { engine, type StatsRes } from '../lib/engine';
+import tokens from '../lib/tokens.json';
 
 // 화면이 열릴 때(포커스) 한 번 불러오는 동작은 마운트 때 한 번 도는 effect로 대신한다(탭 내비게이션 없이 그리려고).
 jest.mock('expo-router', () => ({ useFocusEffect: (cb: () => void | (() => void)) => require('react').useEffect(cb, [cb]) }));
@@ -10,6 +12,12 @@ jest.mock('react-native-safe-area-context', () => ({ SafeAreaView: ({ children }
 jest.mock('../lib/engine', () => ({ engine: { stats: jest.fn() } }));
 
 const stats = engine.stats as jest.Mock;
+
+// 오늘 = 2026-11-04(수) 낮 12시 KST. 이번 주 월요일은 2026-11-02.
+// Date만 고정한다(타이머까지 가짜로 만들면 act가 멈춘다).
+const ALL_BUT_DATE = ['hrtime', 'nextTick', 'performance', 'queueMicrotask', 'requestAnimationFrame', 'cancelAnimationFrame', 'requestIdleCallback', 'cancelIdleCallback', 'setImmediate', 'clearImmediate', 'setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'] as const;
+beforeAll(() => jest.useFakeTimers({ now: new Date('2026-11-04T03:00:00Z'), doNotFake: [...ALL_BUT_DATE] }));
+afterAll(() => jest.useRealTimers());
 
 const FIXTURE: StatsRes = {
   hints: 12,
@@ -23,7 +31,7 @@ const FIXTURE: StatsRes = {
     { week: '2026-10-12', count: 0 },
     { week: '2026-10-19', count: 3 },
     { week: '2026-10-26', count: 5 },
-    { week: '2026-11-02', count: 3 },
+    { week: '2026-11-02', count: 6 }, // 이번 주
   ],
   predict_gap_trend: [
     { week: '2026-10-19', avg_gap: 1.5 },
@@ -34,6 +42,10 @@ const FIXTURE: StatsRes = {
 const textOf = (n: TestNode): string => (typeof n === 'string' ? n : n.children.map(textOf).join(''));
 const labels = (root: { container: TestInstance }) =>
   root.container.queryAll((n) => typeof n.props.accessibilityLabel === 'string').map((n) => n.props.accessibilityLabel as string);
+const bars = (root: { container: TestInstance }) => root.container.queryAll((n) => n.props.accessibilityRole === 'image');
+// 막대 칸 안에서 위 모서리가 4px로 둥근 상자가 막대 자체다.
+const barBox = (col: TestInstance) => col.queryAll((n) => StyleSheet.flatten(n.props.style)?.borderTopLeftRadius === 4)[0];
+const barColor = (col: TestInstance) => StyleSheet.flatten(barBox(col).props.style).backgroundColor;
 
 async function setup() {
   const root = createRoot();
@@ -45,45 +57,54 @@ async function setup() {
 
 beforeEach(() => stats.mockReset());
 
-test('report: 숫자 타일 세 개가 엔진 숫자와 같다(힌트 12 · 살펴보기 5 · 스스로 고친 비율 33%)', async () => {
+test('report: 타일 세 개는 순서대로 예측과의 차이(주 표시) · 이번 주 힌트 · 스스로 고친 비율이고, 살펴보기 수는 없다', async () => {
   stats.mockResolvedValue(FIXTURE);
   const root = await setup();
-  expect(labels(root)).toEqual(expect.arrayContaining(['힌트 12', '살펴보기 5', '스스로 고친 비율 33%']));
+  const tiles = root.container.queryAll((n) => n.props.accessible === true && !n.props.accessibilityRole).map((n) => n.props.accessibilityLabel);
+  expect(tiles).toEqual(['10/26 주 예측과의 차이 0.8칸', '이번 주 힌트 6번', '스스로 고친 비율 33%']);
+  expect(labels(root).some((l) => l.includes('살펴보기'))).toBe(false);
 });
 
-test('report: 막대는 최근 5주만, 막대마다 주와 개수를 읽어 준다', async () => {
+test('report: 이번 주 항목이 없으면 이번 주 힌트는 0번, 예측 차이 기록이 없으면 타일은 –', async () => {
+  stats.mockResolvedValue({ ...FIXTURE, hints_by_week: FIXTURE.hints_by_week.slice(0, 6), predict_gap_trend: [] });
+  const root = await setup();
+  expect(labels(root)).toEqual(expect.arrayContaining(['예측과의 차이 –', '이번 주 힌트 0번']));
+});
+
+test('report: 막대는 최근 5주만, 막대마다 주와 개수를 읽어 주고 이번 주는 "이번 주"로 읽는다', async () => {
   stats.mockResolvedValue(FIXTURE);
   const root = await setup();
-  const bars = labels(root).filter((l) => /주 힌트 \d+번$/.test(l));
-  expect(bars).toEqual([
+  expect(bars(root).map((b) => b.props.accessibilityLabel)).toEqual([
     '10월 5일 주 힌트 1번',
     '10월 12일 주 힌트 0번',
     '10월 19일 주 힌트 3번',
     '10월 26일 주 힌트 5번',
-    '11월 2일 주 힌트 3번',
+    '이번 주 힌트 6번',
   ]);
+  expect(textOf(root.container)).toContain('이번 주'); // 눈에 보이는 주 이름도 "이번 주"
 });
 
-test('report: 예측 차이 한 줄은 마지막 주를 붙이고, 맨 아래에 평가하지 않는다는 안내가 있다', async () => {
+test('report: 이번 주 막대는 primary, 지난 주 막대는 textMuted(색만으로 뜻을 전하지 않고 값 글자가 같이 있다)', async () => {
+  stats.mockResolvedValue(FIXTURE);
+  const root = await setup();
+  const colors = bars(root).map(barColor);
+  expect(colors).toEqual([tokens.light.textMuted, tokens.light.textMuted, tokens.light.textMuted, tokens.light.textMuted, tokens.light.primary]);
+  expect(textOf(bars(root)[4])).toContain('6'); // 막대 위 값
+});
+
+test('report: 맨 아래에 평가하지 않는다는 안내가 있고, 예측 차이는 타일 하나로만 나온다', async () => {
   stats.mockResolvedValue(FIXTURE);
   const root = await setup();
   const text = textOf(root.container);
-  expect(text).toContain('10/26 주 예측과 평균 0.8칸 차이');
   expect(text).toContain('숫자는 나만 봐요. 사람을 평가하는 점수가 아니에요.');
-});
-
-test('report: 예측 차이 기록이 없으면 그 줄만 빠지고 나머지는 그대로다', async () => {
-  stats.mockResolvedValue({ ...FIXTURE, predict_gap_trend: [] });
-  const root = await setup();
-  expect(textOf(root.container)).not.toContain('예측과 평균');
-  expect(labels(root)).toContain('힌트 12');
+  expect(text).not.toContain('예측과 평균'); // 따로 한 줄을 두지 않는다
 });
 
 test('report: 불러오지 못하면 안내와 다시 시도 버튼이 뜨고, 누르면 숫자가 나온다', async () => {
   stats.mockRejectedValueOnce(new Error('engine down')).mockResolvedValueOnce(FIXTURE);
   const root = await setup();
   expect(textOf(root.container)).toContain('지금은 불러오지 못했어요');
-  expect(labels(root)).not.toContain('힌트 12');
+  expect(labels(root)).not.toContain('이번 주 힌트 6번');
 
   const retry = root.container.queryAll((n) => n.props.accessibilityRole === 'button' && n.props.accessibilityLabel === '다시 시도')[0];
   expect(retry).toBeDefined();
@@ -91,5 +112,5 @@ test('report: 불러오지 못하면 안내와 다시 시도 버튼이 뜨고, �
 
   expect(stats).toHaveBeenCalledTimes(2);
   expect(textOf(root.container)).not.toContain('지금은 불러오지 못했어요');
-  expect(labels(root)).toContain('힌트 12');
+  expect(labels(root)).toContain('이번 주 힌트 6번');
 });
