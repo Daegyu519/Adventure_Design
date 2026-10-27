@@ -15,7 +15,8 @@
 | T-01 | 모노레포 초기화: 폴더 구조(ARCHITECTURE 2장), `.gitignore`, `README`, `.env.example`, 프로토타입을 `prototype/`에 둠. 범위 보완(그룹방, 거울, 웹 푸시, land)을 기준 문서에 반영 | 공통 | T-00 | 폴더 구조가 ARCHITECTURE와 같다. 확인: `find . -path ./prototype -prune -o -type d -print`에 최상위 폴더 apps/mobile, engine, supabase/migrations, eval, docs, design이 모두 있고 prototype/tone-harness가 있음 | 완료 |
 | D-01 | 디자인 시스템 + HTML 목업 | 앱 | T-01 | MASTER.md, tokens.json 대비 검사 통과, 목업을 사용자가 승인. 확인: 대비 검사 통과(자가 검사 포함), 목업 사용자 승인 2026-10-27 | 완료 |
 | P-01 | 단계 1 계획 두 개(엔진·앱) 작성, 교차 검토 반영 | 공통 | T-01 | `docs/superpowers/plans/2026-10-27-phase1-{engine,app}.md`, 교차 검토 16건 반영 확인: 계획 작성 에이전트 2 + 교차 검토 1 + 수정 1, 앱은 네이티브 개발 빌드 기준 | 완료 |
-| T-02 | Supabase dev 프로젝트(클라우드, 서울) 생성, Supabase CLI 연결. pilot 프로젝트는 나중에 따로 만든다(T-29에서 전환) | DB | T-01 | `supabase link`로 dev 연결 | 대기 |
+| P-02 | 단계 0 최종 검토 후속 정리 | 공통 | P-01 | 계획 수정(공감 upsert, env, 안전망 문구, T-24 규칙), claim이 .env 연결, guard 오류 문구, radius.input, T-02 수동 단계. 확인: scripts/test_coord.sh ALL PASS(.env 심볼릭 링크 검사 포함), engine pytest 80 passed(guard 오류 문구 테스트 포함), design/check_contrast.py contrast OK, apps/mobile tsc --noEmit 0 | 완료 |
+| T-02 | Supabase dev 프로젝트(클라우드, 서울) 생성, Supabase CLI 연결. pilot 프로젝트는 나중에 따로 만든다(T-29에서 전환) | DB | T-01 | `supabase link`로 dev 연결. 수동 단계: `supabase db push`로 _platform 포함 모든 마이그레이션 적용, Realtime "Allow public access" 끄기, push 전에 대시보드에서 `messages`·`reactions`·`room_members`의 Realtime을 켜지 않기(_platform이 켠다), DB 웹훅은 대시보드에서 설정(README "dev 웹훅 연결", T-10 land됨) | 대기 |
 | T-03a | 채팅 스키마: `profiles`, `rooms`, `room_members`, `messages`, `reactions`, `invites`, 함수(`is_member`, `create_group`, `create_invite`, `accept_invite`), RLS | DB | T-01 | PGlite RLS 테스트 통과. 확인: PGlite(node --test) 16 pass — RLS·초대·멤버 상한·메시지 제약. 동시성은 실제 Postgres에서 T-02 이후 재확인 | 완료 |
 | T-03b | `tone` 스키마(API 비공개), `tone_events`, `mirror_attempts`, `push_tokens`, Realtime·Storage(`chat-images`) platform 마이그레이션 | DB | T-03a | PGlite RLS 테스트 통과. 확인: PGlite 24 pass — tone 비공개, 본인 행 전용 표, 푸시 upsert·updated_at 트리거. _platform.sql(Storage·Realtime·typing 정책)은 T-02 이후 실제 프로젝트에서 재확인 | 완료 |
 | T-04 | Expo 앱 초기화: expo-router, TypeScript strict, Supabase 클라이언트, 환경 변수 | 앱 | T-01, D-01 | 웹·iOS·Android에서 빈 화면 실행. 확인: `tsc --noEmit` 0 오류, `npm run lint` 오류 0, `expo export --platform web` 성공, `expo-doctor` 20/20, 웹에서 탭 4개(대화·거울·리포트·설정) 라이트·다크 스크린샷. iOS·Android 실행은 개발 빌드가 필요해 T-28에서 확인한다(`eas.json`·`expo-dev-client`·`expo-notifications` 설정만 해 둠) | 완료 |
@@ -34,7 +35,8 @@
 | T-09b | 답장 · 공감 · 메시지별 읽음 수 | 앱 | T-09a | 1:1·그룹에서 답장 인용, 공감 토글, 읽음 수가 줄어듦 | 대기 |
 | T-09c | 입력 중(Presence) · 사진 · 멘션 | 앱 | T-09b | 두 기기에서 입력 중 표시, 사진 전송, 그룹 멘션 강조 | 대기 |
 | T-09d | 방 정보(멤버, 관계, 알림 끄기, 그룹 초대) · 방 안 검색 | 앱 | T-09a | 알림 끈 방이 목록에 표시, 검색 결과에 원문 강조 | 대기 |
-| T-10 | DB 웹훅 → `POST /hooks/message`, `X-Hook-Secret` 검증 | 엔진, DB | T-02, T-03a, T-05 | 메시지를 보내면 엔진 로그에 수신 기록, 비밀값 틀리면 401 | 대기 |
+| T-10 | DB 웹훅 → `POST /hooks/message`, `X-Hook-Secret` 검증 | 엔진, DB | T-03a, T-05 | mock/로컬 기준: TestClient로 INSERT 수신 로그, 비밀값 틀리면 401, 다른 이벤트 무시(test_hooks.py 통과). 확인: `cd engine && uv run pytest -q tests/test_hooks.py` 17개 통과(브리프의 6개 + 비ASCII 비밀값·UPDATE/DELETE/다른 스키마 무시·422·id 범위·거절 로그 구분), 전체 `uv run pytest -q` 123개 통과; 비밀값 비교는 `hmac.compare_digest`(bytes), 설정값이 비면 항상 401, 로그에는 id·room만(본문 없음), 변이 4건(빈 비밀값 허용, str 비교, text 로깅, 무시 검사 제거)이 각각 테스트에 걸림 | 완료 |
+| T-10-live | 웹훅 실제 연결: Supabase 대시보드 Webhooks(public.messages INSERT) → cloudflared 터널 → 엔진, README 절차대로 | 엔진, DB | T-02, T-10 | 실제 메시지를 보내면 엔진 로그에 수신 기록, 비밀값 틀리면 401 | 대기 |
 | T-34 | 첫 실행 동의 화면: 파일럿 동의, AI 데이터 처리(하소연 원문 미저장 등 개인정보 규칙), iOS 홈 화면 추가 안내(웹 푸시는 iOS 16.4 이상) | 앱 | T-04 | 첫 실행에만 뜨고, 동의해야 로그인으로 넘어감 | 대기 |
 | T-37 | 설정 화면: 힌트 끄기, 테마(시스템·밝게·어둡게), 계정(로그아웃) | 앱 | T-07 | 힌트를 끄면 엔진 요청이 없음, 테마가 바로 바뀌고 다시 열어도 유지 | 대기 |
 
@@ -64,14 +66,14 @@
 
 | ID | 작업 | 영역 | 선행 | 완료 기준 | 상태 |
 |---|---|---|---|---|---|
-| T-23 | 작업 큐: asyncio 기반, Redis로 바꿀 수 있는 인터페이스 | 엔진 | T-05 | 작업 넣기·실패 재시도 테스트 | 대기 |
+| T-23 | 작업 큐: asyncio 기반, Redis로 바꿀 수 있는 인터페이스 | 엔진 | T-05 | 작업 넣기·실패 재시도 테스트. 확인: `cd engine && uv run pytest -q tests/test_queue.py` 18 passed(넣기, 두 번 실패 뒤 성공, 백오프 2배, 버릴 때 로그에 작업 이름·예외 타입만 있고 인자·메시지 없음, 끝난·재시도된 작업 인자 해제, 가득 차면 거절, 가득 찬 큐를 만난 재시도는 버려지지 않음, stop이 대기 작업을 비우고 타이머·워커를 정리, lifespan이 루프 스레드에서 실제로 작업을 돌림) | 완료 |
 | T-24 | `POST /v1/feedback` → 큐 → L4 → 그룹방(3명 이상) 하소연은 `sender_patterns`(보낸 사람·관계·신호, 다음 날 0시부터 반영), 1:1 하소연은 `global_patterns`에만. `feedback_log`, 관계별 주간 상한 | 엔진 | T-03b, T-12, T-23 | 원문이 어디에도 저장되지 않음, 1:1 하소연이 `sender_patterns`에 들어가지 않음을 테스트로 확인 | 대기 |
 | T-25 | 털어놓기 시트: 받은 메시지에만 "⋯", 안내 문구 표시 | 앱 | T-09b, T-24 | 내가 보낸 메시지에는 버튼이 없음 | 대기 |
-| T-26 | 기준선 갱신: 웹훅 → 큐 → `tone.baselines`, L0에 반영 | 엔진 | T-10, T-23 | 메시지 10개 이후 기준선 이탈 신호가 동작 | 대기 |
+| T-26 | 기준선 갱신: 웹훅 → 큐 → `tone.baselines`, L0에 반영 | 엔진 | T-10, T-23 | 메시지 10개 이후 기준선 이탈 신호가 동작. 같은 message_id 웹훅 두 번 → 작업 1개 | 대기 |
 | T-27a | 앱 리포트 화면: 알림 수, 살펴보기 수, 고친 비율, 예측 차이 추이, 주별 힌트 수 | 앱 | T-34 | mock·엔진 숫자와 화면이 같음 | 대기 |
 | T-27b | `/v1/stats/me`(엔진): 알림 수, 살펴보기 수, 고친 비율, 주별 힌트 수, 예측 차이 추이 | 엔진 | T-14 | 이벤트·`mirror_attempts` 수와 응답 숫자가 일치 | 대기 |
 | T-28a | 앱 등록: Android 푸시 토큰, 웹 서비스 워커 + VAPID 구독, 로그아웃 시 해제 | 앱 | T-37, T-09a | `push_tokens`에 android·web 행, 웹 테스트 푸시 표시 | 대기 |
-| T-28b | 엔진 발송: 웹훅 → 방 멤버(보낸 사람·알림 끈 사람 제외)에게 Expo Push와 웹 푸시(`pywebpush`, VAPID). 웹 endpoint는 허용 호스트만, 만료 구독은 삭제 | 엔진 | T-10, T-23 | 대상 제외·묶음·실패 격리·SSRF 허용 목록·만료 삭제 테스트 | 대기 |
+| T-28b | 엔진 발송: 웹훅 → 방 멤버(보낸 사람·알림 끈 사람 제외)에게 Expo Push와 웹 푸시(`pywebpush`, VAPID). 웹 endpoint는 허용 호스트만, 만료 구독은 삭제 | 엔진 | T-10, T-23 | 대상 제외·묶음·실패 격리·SSRF 허용 목록·만료 삭제 테스트. 같은 message_id 웹훅 두 번 → 작업 1개 | 대기 |
 | T-35 | 거울 엔진 API: `/v1/mirror/today`, `/v1/mirror/answer`, 엔진 서명 `card_id`, 상황 카드 20장(`engine/content/mirror_cards.yaml`) | 엔진 | T-03b, T-21 | mock 테스트 통과, 위조한 `card_id`는 거부, 실제 대화에서 뽑은 카드는 Gemini로 가지 않음 | 대기 |
 | T-36 | 거울 화면 3종: 역할극, 되돌려 받기, 예측 맞히기 | 앱 | T-07, T-35 | 카드 3장을 끝까지 풀 수 있고, 점수는 차이로만 보임("예측과 한 칸 차이"), `mirror_attempts`에 기록됨 | 대기 |
 

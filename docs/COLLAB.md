@@ -35,6 +35,7 @@ export TONE_ACCOUNT=b   # B 계정 셸에서. 없으면 a로 본다.
 - `.coord/claims/T-07/`을 만든다. `mkdir`이라서 동시에 잡아도 하나만 성공한다.
 - 안에 `owner`(a 또는 b), `branch`, `started` 파일을 적는다.
 - `main`에서 브랜치를 따서 worktree를 `~/Projects/tone-chat-wt/<브랜치>`에 만든다.
+- 루트의 `.env`와 `apps/mobile/.env`가 있으면 worktree의 같은 위치로 심볼릭 링크를 건다(복사하지 않는다). 키는 루트 쪽에만 두고, 보통은 worktree에서 따로 `ln`하지 않는다. worktree를 잡은 뒤에 키 파일을 만들었다면 그 worktree에서 손으로 건다: `ln -s ~/Projects/tone-chat/.env .env`, `ln -s ~/Projects/tone-chat/apps/mobile/.env apps/mobile/.env`.
 - ID에 글자가 있어도 된다. `T-03a chat-schema`는 `t03a-chat-schema`, `D-01 design`은 `d01-design`이 된다.
 
 ### land가 하는 일

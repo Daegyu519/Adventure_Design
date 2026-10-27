@@ -9,9 +9,11 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 
 from app.db import PgRepo
+from app.routes import hooks
 from app.settings import Settings
 from harness.providers import available
 from harness.router import chains
+from jobs.queue import JobQueue
 
 
 @lru_cache
@@ -25,15 +27,21 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     dsn = Settings.from_env().supabase_db_url
     repo = await PgRepo.connect(dsn) if dsn else None  # 풀은 min_size=0: DB가 죽어 있어도 시작한다
     app.state.repo = repo
+    queue = app.state.queue = JobQueue()
+    queue.start()
     try:
         yield
     finally:
-        if repo:
-            await repo.close()
-            app.state.repo = None
+        try:
+            await queue.stop()  # 남은 작업이 repo를 쓸 수 있으니 repo보다 먼저 비운다
+        finally:
+            if repo:
+                await repo.close()
+                app.state.repo = None
 
 
 app = FastAPI(title="tone-chat engine", lifespan=lifespan)
+app.include_router(hooks.router)
 
 
 class HealthResponse(BaseModel):

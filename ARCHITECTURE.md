@@ -89,7 +89,7 @@ tone-chat/
     prompts/*.md
     tests/
   supabase/
-    migrations/           표 · RLS · 함수 · 웹훅 (이름에 _platform이 붙은 파일은 실제 Supabase에서만)
+    migrations/           표 · RLS · 함수 (이름에 _platform이 붙은 파일은 실제 Supabase에서만). DB 웹훅은 여기 없고 대시보드 Database → Webhooks에서 만든다(README)
     tests/                PGlite로 RLS 테스트 (Docker 없이)
     seed.sql
   eval/

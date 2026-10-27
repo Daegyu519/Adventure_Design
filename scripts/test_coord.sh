@@ -34,11 +34,13 @@ mkdir docs && cat > docs/tasks.md <<'MD'
 |---|---|---|---|---|---|
 | T-97 | 다른 작업 | 앱 | T-98 | 기준 | 완료 |
 MD
-echo '.coord/' > .gitignore
+printf '.coord/\n.env\n' > .gitignore
+mkdir -p apps/mobile && touch apps/mobile/.gitkeep
 cp -R "$SRC" scripts
 git add -A && git commit -qm init
 MAIN_BEFORE=$(git rev-parse main)
 WT="$TONE_WT_ROOT/t99-race"
+echo SECRET > .env; echo APPKEY > apps/mobile/.env   # git 밖(.gitignore) 키 파일
 
 # 1) 동시 claim → 정확히 하나만 성공
 scripts/claim T-99 race >/dev/null 2>&1 & p1=$!
@@ -49,6 +51,7 @@ assert "[ $(grep -c '| T-99 | claimed |' .coord/log.md) -eq 1 ]" "exactly one cl
 assert "[ -f .coord/claims/T-99/owner ]" "owner file written"
 assert "[ \"\$(cat .coord/claims/T-99/branch)\" = t99-race ] && [ -f .coord/claims/T-99/started ]" "branch/started files written"
 assert "[ -d \"$WT\" ]" "worktree created"
+assert "[ -L \"$WT/.env\" ] && [ \"$WT/.env\" -ef \"$TMP/repo/.env\" ] && [ -L \"$WT/apps/mobile/.env\" ] && [ \"$WT/apps/mobile/.env\" -ef \"$TMP/repo/apps/mobile/.env\" ]" "root and apps/mobile .env are symlinked (not copied) into the worktree"
 out=$(scripts/claim T-99 other 2>&1); rc=$?
 assert "[ $rc -eq 1 ] && echo \"\$out\" | grep -q 'taken by a'" "second claim says taken by a"
 
@@ -87,6 +90,7 @@ rmdir .coord/merge.lock
 (cd "$WT" && scripts/land T-99 >/dev/null 2>&1); assert "[ \"$(git rev-parse main)\" != \"$MAIN_BEFORE\" ]" "merged"
 assert "[ ! -d .coord/claims/T-99 ] && [ ! -d .coord/merge.lock ] && [ ! -d \"$WT\" ]" "cleaned up"
 assert "git rev-parse -q --verify t99-race >/dev/null; [ \$? -ne 0 ]" "branch deleted"
+assert "[ \"\$(cat .env)\" = SECRET ] && [ \"\$(cat apps/mobile/.env)\" = APPKEY ]" "land removes the symlinks, not the root key files"
 assert "grep -q '| T-99 | landed |' .coord/log.md" "logged"
 assert "git log -1 --format=%B main | grep -q 'fake-uv: 7 passed'" "merge commit body carries check output"
 assert "grep -q '| T-99 | claimed |' .coord/log.md" "claim logged"
