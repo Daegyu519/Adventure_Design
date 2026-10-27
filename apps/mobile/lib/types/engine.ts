@@ -4,6 +4,23 @@
  */
 
 export interface paths {
+    "/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Health */
+        get: operations["health_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/detail": {
         parameters: {
             query?: never;
@@ -94,30 +111,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Hint */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["HintIn"];
-                };
-            };
-            responses: {
-                /** @description Successful Response */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["HintOut"];
-                    };
-                };
-            };
-        };
+        post: operations["hint_v1_hint_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -270,21 +264,50 @@ export interface components {
         };
         /** @enum {string} */
         Freq: "자주" | "가끔" | "드물어요";
+        /** HTTPValidationError */
+        HTTPValidationError: {
+            /** Detail */
+            detail?: components["schemas"]["ValidationError"][];
+        };
+        /** HealthResponse */
+        HealthResponse: {
+            /** Models */
+            models: {
+                [key: string]: "up" | "down";
+            };
+            /** Ok */
+            ok: boolean;
+        };
+        /** HintBody */
         HintBody: {
+            /** Detail */
             detail: string;
+            /** Title */
             title: string;
         };
+        /** HintIn */
         HintIn: {
+            /** Reply To */
             reply_to?: number | null;
-            /** Format: uuid */
+            /**
+             * Room Id
+             * Format: uuid
+             */
             room_id: string;
+            /** Seq */
             seq: number;
+            /** Text */
             text: string;
         };
+        /** HintOut */
         HintOut: {
             hint: components["schemas"]["HintBody"] | null;
+            /** Seq */
             seq: number;
-            /** Format: uuid */
+            /**
+             * Trace Id
+             * Format: uuid
+             */
             trace_id: string;
         };
         /** @enum {string} */
@@ -337,6 +360,19 @@ export interface components {
             hints_by_week: components["schemas"]["WeekCount"][];
             predict_gap_trend: components["schemas"]["WeekGap"][];
         };
+        /** ValidationError */
+        ValidationError: {
+            /** Context */
+            ctx?: Record<string, never>;
+            /** Input */
+            input?: unknown;
+            /** Location */
+            loc: (string | number)[];
+            /** Message */
+            msg: string;
+            /** Error Type */
+            type: string;
+        };
         WeekCount: {
             count: number;
             /** Format: date */
@@ -355,4 +391,60 @@ export interface components {
     pathItems: never;
 }
 export type $defs = Record<string, never>;
-export type operations = Record<string, never>;
+export interface operations {
+    health_health_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HealthResponse"];
+                };
+            };
+        };
+    };
+    hint_v1_hint_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HintIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HintOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+}

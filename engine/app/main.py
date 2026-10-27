@@ -6,11 +6,12 @@ from typing import Literal
 
 import yaml
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from app.auth import get_verifier
 from app.db import PgRepo
-from app.routes import hooks
+from app.routes import hint, hooks
 from app.settings import Settings
 from harness.providers import available
 from harness.router import chains
@@ -43,7 +44,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="tone-chat engine", lifespan=lifespan)
+# 앱 웹 빌드가 Authorization 헤더를 달고 부를 때의 사전 요청(OPTIONS)을 통과시킨다. 쿠키를 쓰지 않아 credentials는 끈다.
+app.add_middleware(CORSMiddleware, allow_origins=list(Settings.from_env().cors_origins),
+                   allow_methods=["GET", "POST", "OPTIONS"], allow_headers=["Authorization", "Content-Type"])
 app.include_router(hooks.router)
+app.include_router(hint.router)
 
 
 class HealthResponse(BaseModel):
