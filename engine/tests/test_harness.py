@@ -1,17 +1,15 @@
 import asyncio
 import time
-from pathlib import Path
 
 import pytest
 import yaml
 
+from app.settings import DEFAULT_MODELS_PATH
 from harness import pii
-from harness.router import NoResult, Router
+from harness.router import NoResult, Router, chains
 from harness.schemas import ContextReading, Conversation, Turn
 from harness.store import ProfileStore
 from layers import gate, guard
-
-ROOT = Path(__file__).resolve().parent.parent  # engine/
 
 
 def test_pii_mask():
@@ -35,23 +33,23 @@ def test_gate_passes_short_reply_to_heavy_message_only():
 
 
 def test_router_falls_back_to_mock():
-    r = Router.from_file(force_mock=True)
-    obj, model = asyncio.run(r.call("context_fast", "s", "u", {"turns": []}, ContextReading,
+    r = Router.from_file(DEFAULT_MODELS_PATH, force_mock=True)
+    obj, model = asyncio.run(r.call("ctx_fast", "s", "u", {"turns": []}, ContextReading,
                                     time.monotonic() + 1))
     assert model.startswith("mock")
 
 
 def test_router_gives_up_after_deadline():
-    r = Router.from_file(force_mock=True)
+    r = Router.from_file(DEFAULT_MODELS_PATH, force_mock=True)
     with pytest.raises(NoResult):
-        asyncio.run(r.call("context_fast", "s", "u2", {"turns": []}, ContextReading, time.monotonic() - 1))
+        asyncio.run(r.call("ctx_fast", "s", "u2", {"turns": []}, ContextReading, time.monotonic() - 1))
 
 
 def test_single_report_alone_does_not_boost():
     from harness.schemas import FeedbackPattern, ToneReading
     # 프로토타입 layers/judge.py는 T-13에서 layers/aggregate.py로 옮겨 온다. 그때 import 이름만 맞추면 켜진다.
     judge = pytest.importorskip("layers.judge", reason="judge는 T-13에서 aggregate로 이전")
-    cfg = Router.from_file(force_mock=True).config["judge"]
+    cfg = Router.from_file(DEFAULT_MODELS_PATH, force_mock=True).config["aggregate"]
     store = ProfileStore()
     store.add_patterns("p", [FeedbackPattern(trigger="이유 없는 거절", feeling="차갑게", strength=3)])
     c = Conversation(pair_id="p", turns=[Turn(speaker="them", text="이거 미뤄도 될까요?")])
@@ -66,6 +64,6 @@ def test_single_report_alone_does_not_boost():
 
 
 def test_no_gemini_on_real_text_roles():
-    cfg = yaml.safe_load((ROOT / "config" / "models.yaml").read_text(encoding="utf-8"))
-    for role, chain in cfg["roles"].items():
-        assert not any(e.startswith("gemini:") for e in chain), role
+    cfg = yaml.safe_load(DEFAULT_MODELS_PATH.read_text(encoding="utf-8"))
+    for expert_id, chain in chains(cfg).items():
+        assert not any(e.startswith("gemini:") for e in chain), expert_id
