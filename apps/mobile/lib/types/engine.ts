@@ -179,26 +179,7 @@ export interface paths {
             cookie?: never;
         };
         /** Stats Me */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Successful Response */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["StatsOut"];
-                    };
-                };
-            };
-        };
+        get: operations["stats_me_v1_stats_me_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -336,12 +317,19 @@ export interface components {
             "\uCC28\uAC11\uAC8C": components["schemas"]["Freq"];
             "\uD654\uB098\uAC8C": components["schemas"]["Freq"];
         };
+        /** StatsOut */
         StatsOut: {
+            /** Details */
             details: number;
+            /** Fix Rate */
             fix_rate: number;
+            /** Fixed */
             fixed: number;
+            /** Hints */
             hints: number;
+            /** Hints By Week */
             hints_by_week: components["schemas"]["WeekCount"][];
+            /** Predict Gap Trend */
             predict_gap_trend: components["schemas"]["WeekGap"][];
         };
         /** ValidationError */
@@ -357,14 +345,18 @@ export interface components {
             /** Error Type */
             type: string;
         };
+        /** WeekCount */
         WeekCount: {
+            /** Count */
             count: number;
-            /** Format: date */
+            /** Week */
             week: string;
         };
+        /** WeekGap */
         WeekGap: {
+            /** Avg Gap */
             avg_gap: number;
-            /** Format: date */
+            /** Week */
             week: string;
         };
     };
@@ -453,6 +445,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HintOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stats_me_v1_stats_me_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StatsOut"];
                 };
             };
             /** @description Validation Error */

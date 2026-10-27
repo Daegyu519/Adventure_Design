@@ -82,12 +82,12 @@ def test_webhook_enqueues_push(client, queue, fake):
                        "sender_id": "0b9d1a3e-52c7-4f6a-8c1e-9d2f4a6b8c10", "text": "비밀문장",
                        "created_at": "2026-10-27T09:00:00+00:00"}}
     assert client.post("/hooks/message", json=body, headers=HOOK).status_code == 202
-    assert queue.names() == ["push"]
+    assert queue.names() == ["push", "baseline"]   # 기준선(T-26)도 같이 들어간다
     _, fn, args = queue.jobs[0]
     assert fn is send_push
     assert args[0] is fake and args[2] == 42  # 큐 인자에는 message_id만: 본문은 워커가 DB에서 읽는다
     assert "비밀문장" not in repr(args[2:])
-    assert queue.keys == ["push:42"]
+    assert queue.keys == ["push:42", "baseline:42"]
 
 
 def _hook(client, mid):
@@ -100,9 +100,9 @@ def _hook(client, mid):
 def test_same_message_id_webhook_twice_is_one_job(client, queue):
     assert _hook(client, 7).status_code == 202
     assert _hook(client, 7).status_code == 202
-    assert queue.names() == ["push"]
+    assert queue.names().count("push") == 1
     assert _hook(client, 8).status_code == 202
-    assert queue.names() == ["push", "push"]
+    assert queue.names().count("push") == 2
 
 
 def test_webhook_202_even_if_enqueue_rejected(client, queue, caplog):
