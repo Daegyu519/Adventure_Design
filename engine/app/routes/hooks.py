@@ -6,8 +6,11 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, ValidationError
 
-from app.deps import get_settings
+from app.db import Repo
+from app.deps import get_queue, get_repo, get_settings
 from app.settings import Settings
+from jobs.push import send_push
+from jobs.queue import JobQueue
 
 log = logging.getLogger(__name__)
 router = APIRouter()
@@ -40,7 +43,8 @@ def _secret_ok(got: str, want: str) -> bool:
 
 
 @router.post("/hooks/message", status_code=202, include_in_schema=False)
-async def hook_message(request: Request, settings: Settings = Depends(get_settings)) -> dict:
+async def hook_message(request: Request, settings: Settings = Depends(get_settings), repo: Repo = Depends(get_repo),
+                       queue: JobQueue = Depends(get_queue)) -> dict:
     # 비밀값을 본문보다 먼저 본다: 인증 전에는 본문을 읽지도 않는다.
     if not _secret_ok(request.headers.get("x-hook-secret", ""), settings.hook_secret):
         # 헤더 값은 남기지 않는다. 설정이 빈 경우와 값이 틀린 경우만 구분한다.
@@ -55,7 +59,9 @@ async def hook_message(request: Request, settings: Settings = Depends(get_settin
     except ValidationError:
         raise HTTPException(status_code=422, detail="invalid_payload") from None
     log.info("hook message id=%s room=%s", rec.id, rec.room_id)  # text는 남기지 않는다
-    # 작업 넣기: T-26 기준선, T-28b 푸시. 뒤 작업은 아래를 지킨다.
+    # 작업 넣기(T-28b 푸시; T-26 기준선도 같은 규칙). 뒤 작업은 아래를 지킨다.
     # - 큐 인자는 `{message_id}`만(멱등 키 f"{kind}:{message_id}"). 본문은 워커가 DB에서 다시 읽고, 큐 인자에는 text를 넣지 않는다.
     # - enqueue가 실패해도 항상 202를 돌려준다(Supabase pg_net은 재시도하지 않는다).
+    if not queue.enqueue("push", send_push, repo, settings, rec.id, key=f"push:{rec.id}"):
+        log.warning("push enqueue rejected id=%s", rec.id)
     return {}

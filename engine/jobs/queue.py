@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections import OrderedDict
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -15,6 +16,8 @@ from typing import Any
 log = logging.getLogger(__name__)
 
 # ponytail: 메모리 큐라 재시작하면 대기 작업이 사라짐(ARCHITECTURE 10장). Redis로 바꿀 때 feedback 작업 인자(하소연 원문)는 Redis에 넣지 않는다.
+# ponytail: 멱등 키(`enqueue(key=)`)도 이 프로세스 메모리의 최근 `max_keys`개뿐이다. 재시작하거나 키가 밀려나면 같은 웹훅이 다시 오면 작업이 또 생긴다
+#   (푸시는 알림이 한 번 더 갈 수 있음). 그게 문제 되면 DB에 message_id를 기본키로 한 처리 기록 표를 두고 작업 시작에서 insert-on-conflict로 가른다.
 
 
 @dataclass
@@ -27,7 +30,8 @@ class _Job:
 
 
 class JobQueue:
-    def __init__(self, workers: int = 2, max_attempts: int = 3, backoff_s: float = 1.0, maxsize: int = 1000) -> None:
+    def __init__(self, workers: int = 2, max_attempts: int = 3, backoff_s: float = 1.0, maxsize: int = 1000,
+                 max_keys: int = 10_000) -> None:
         if workers < 1:  # 워커가 없으면 받은 작업이 영원히 안 돈다
             raise ValueError("workers must be >= 1")
         self._q: asyncio.Queue[_Job] = asyncio.Queue(maxsize)
@@ -37,6 +41,8 @@ class JobQueue:
         self._workers: list[asyncio.Task[None]] = []
         self._timers: set[asyncio.TimerHandle] = set()  # 백오프 중인 재시도
         self._open = 0  # 받았고 아직 끝나지(성공·버림) 않은 작업 수
+        self._keys: OrderedDict[str, None] = OrderedDict()  # 받은 멱등 키, 오래된 것부터 잊는다
+        self._max_keys = max_keys
         self._closed = False
 
     def start(self) -> None:
@@ -44,14 +50,21 @@ class JobQueue:
         if not self._workers:
             self._workers = [asyncio.create_task(self._work()) for _ in range(self._n_workers)]
 
-    def enqueue(self, name: str, fn: Callable[..., Awaitable[None]], *args: Any) -> bool:
-        """큐가 가득 찼거나 종료 중이면 False(받지 않았다)."""
+    def enqueue(self, name: str, fn: Callable[..., Awaitable[None]], *args: Any, key: str | None = None) -> bool:
+        """큐가 가득 찼거나 종료 중이면 False(받지 않았다). 같은 `key`를 이미 받았으면 새로 넣지 않고 True(이미 받은 작업).
+        키에는 종류와 id만 넣는다(`f"push:{message_id}"`). 사용자 입력 금지."""
         if self._closed:
             return False
+        if key is not None and key in self._keys:
+            return True
         try:
             self._q.put_nowait(_Job(name, fn, args))
         except asyncio.QueueFull:
-            return False
+            return False  # 받지 않았으니 키도 남기지 않는다
+        if key is not None:
+            self._keys[key] = None
+            if len(self._keys) > self._max_keys:
+                self._keys.popitem(last=False)
         self._open += 1
         return True
 
