@@ -17,7 +17,7 @@
 | P-01 | 단계 1 계획 두 개(엔진·앱) 작성, 교차 검토 반영 | 공통 | T-01 | `docs/superpowers/plans/2026-10-27-phase1-{engine,app}.md`, 교차 검토 16건 반영 확인: 계획 작성 에이전트 2 + 교차 검토 1 + 수정 1, 앱은 네이티브 개발 빌드 기준 | 완료 |
 | T-02 | Supabase dev 프로젝트(클라우드, 서울) 생성, Supabase CLI 연결. pilot 프로젝트는 나중에 따로 만든다(T-29에서 전환) | DB | T-01 | `supabase link`로 dev 연결 | 대기 |
 | T-03a | 채팅 스키마: `profiles`, `rooms`, `room_members`, `messages`, `reactions`, `invites`, 함수(`is_member`, `create_group`, `create_invite`, `accept_invite`), RLS | DB | T-01 | PGlite RLS 테스트 통과. 확인: PGlite(node --test) 16 pass — RLS·초대·멤버 상한·메시지 제약. 동시성은 실제 Postgres에서 T-02 이후 재확인 | 완료 |
-| T-03b | `tone` 스키마(API 비공개), `tone_events`, `mirror_attempts`, `push_tokens`, Realtime·Storage(`chat-images`) platform 마이그레이션 | DB | T-03a | PGlite RLS 테스트 통과 | 대기 |
+| T-03b | `tone` 스키마(API 비공개), `tone_events`, `mirror_attempts`, `push_tokens`, Realtime·Storage(`chat-images`) platform 마이그레이션 | DB | T-03a | PGlite RLS 테스트 통과. 확인: PGlite 24 pass — tone 비공개, 본인 행 전용 표, 푸시 upsert·updated_at 트리거. _platform.sql(Storage·Realtime·typing 정책)은 T-02 이후 실제 프로젝트에서 재확인 | 완료 |
 | T-04 | Expo 앱 초기화: expo-router, TypeScript strict, Supabase 클라이언트, 환경 변수 | 앱 | T-01, D-01 | 웹·iOS·Android에서 빈 화면 실행 | 대기 |
 | T-05 | 엔진 초기화: FastAPI, `settings.py`, `models.yaml` 로딩, `/health`, pytest | 엔진 | T-01 | `/health` 200, 테스트 1개 통과. 확인: uv run pytest -q 6 passed(경고 없음), /health 200 curl 확인. 컨테이너는 T-29 | 완료 |
 | T-06 | 엔진 인증: Supabase JWKS로 토큰 검증하는 의존성, 방 멤버 확인 헬퍼(`room_members`) | 엔진 | T-05 | 정상·만료·위조 토큰, 비참여자 403 테스트 | 대기 |
