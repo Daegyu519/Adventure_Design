@@ -276,11 +276,16 @@ class FakeQueue:
     def __init__(self, accepting: bool = True) -> None:
         self.accepting = accepting  # False면 가득 찬 큐처럼 거절한다(호출하는 쪽의 503 경로 테스트용)
         self.jobs: list[tuple[str, Callable[..., Awaitable[None]], tuple]] = []
+        self.keys: list[str] = []  # 받은 멱등 키(JobQueue처럼 같은 키는 한 번만 받는다)
         self._ran = 0
 
-    def enqueue(self, name: str, fn: Callable[..., Awaitable[None]], *args: Any) -> bool:
+    def enqueue(self, name: str, fn: Callable[..., Awaitable[None]], *args: Any, key: str | None = None) -> bool:
         if not self.accepting:
             return False
+        if key is not None:
+            if key in self.keys:
+                return True
+            self.keys.append(key)
         self.jobs.append((name, fn, args))
         return True
 

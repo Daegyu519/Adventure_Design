@@ -30,6 +30,16 @@ DB 웹훅은 SQL 마이그레이션이 아니라 Supabase 대시보드에서 만
 3. Supabase 대시보드 Database → Webhooks에서 만든다: 표 `public.messages`, 이벤트 Insert, HTTP POST `<터널 URL>/hooks/message`, 헤더 `X-Hook-Secret: <HOOK_SECRET>`.
 4. 터널 URL은 실행할 때마다 바뀌므로 웹훅 URL도 고친다.
 
+## 푸시 키 (엔진)
+
+웹 푸시는 VAPID 키 한 쌍이 필요하다. 한 번만 만든다.
+
+1. `npx web-push generate-vapid-keys`를 실행한다(키가 각각 한 줄로 나온다).
+2. `Public Key`는 앱 `apps/mobile/.env`의 `EXPO_PUBLIC_VAPID_PUBLIC_KEY`에 넣는다.
+3. `Private Key`는 엔진 `.env`의 `VAPID_PRIVATE_KEY`에 넣고, `VAPID_SUBJECT=mailto:<연락 이메일>`을 적는다. `pywebpush`는 이 한 줄 base64url 개인키를 그대로 받는다.
+
+엔진은 공개키를 읽지 않는다(`VAPID_PUBLIC_KEY`는 없다). 키는 git에 넣지 않는다. `VAPID_PRIVATE_KEY`나 `VAPID_SUBJECT`가 비어 있으면 웹 푸시는 건너뛴다. Expo Push 보안을 켠 경우에만 `EXPO_ACCESS_TOKEN`을 넣는다.
+
 ## 협업
 
 두 Claude 계정이 같은 맥에서 나눠 작업한다. 작업 잡기와 합치기는 `docs/COLLAB.md`를 따른다.

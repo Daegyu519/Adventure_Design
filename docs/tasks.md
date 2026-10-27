@@ -65,8 +65,10 @@
 | T-24 | `POST /v1/feedback` → 큐 → L4 → 그룹방(3명 이상) 하소연은 `sender_patterns`(보낸 사람·관계·신호, 다음 날 0시부터 반영), 1:1 하소연은 `global_patterns`에만. `feedback_log`, 관계별 주간 상한 | 엔진 | T-03b, T-12, T-23 | 원문이 어디에도 저장되지 않음, 1:1 하소연이 `sender_patterns`에 들어가지 않음을 테스트로 확인 | 대기 |
 | T-25 | 털어놓기 시트: 받은 메시지에만 "⋯", 안내 문구 표시 | 앱 | T-09, T-24 | 내가 보낸 메시지에는 버튼이 없음 | 대기 |
 | T-26 | 기준선 갱신: 웹훅 → 큐 → `tone.baselines`, L0에 반영 | 엔진 | T-10, T-23 | 메시지 10개 이후 기준선 이탈 신호가 동작. 같은 message_id 웹훅 두 번 → 작업 1개 | 대기 |
-| T-27 | `GET /v1/stats/me` + 리포트 화면(알림 수, 살펴보기 수, 고친 비율, 예측 차이 추이, 주별 힌트 수) | 앱, 엔진 | T-15, T-35 | 이벤트 수와 화면 숫자가 일치, 예측 차이가 `mirror_attempts`와 일치 | 대기 |
-| T-28 | 푸시: `push_tokens` 등록, 웹훅 → 방 멤버(보낸 사람·알림 끈 사람 제외)에게 Android = EAS preview APK + FCM(Expo Push 경유), 웹 = 웹 푸시(서비스 워커, VAPID, `pywebpush`), iOS 네이티브(APNs) = 선택(Apple 개발자 계정 필요), Android 개발 빌드 | 앱, 엔진 | T-03b, T-10, T-23 | 앱을 닫은 상태에서 새 메시지 알림(Android, 웹), 알림 끈 방은 오지 않음. 같은 message_id 웹훅 두 번 → 작업 1개 | 대기 |
+| T-27a | 앱 리포트 화면: 알림 수, 살펴보기 수, 고친 비율, 예측 차이 추이, 주별 힌트 수 | 앱 | T-34 | mock·엔진 숫자와 화면이 같음 | 대기 |
+| T-27b | `/v1/stats/me`(엔진): 알림 수, 살펴보기 수, 고친 비율, 주별 힌트 수, 예측 차이 추이 | 엔진 | T-14 | 이벤트·`mirror_attempts` 수와 응답 숫자가 일치 | 대기 |
+| T-28a | 앱 등록: Android 푸시 토큰, 웹 서비스 워커 + VAPID 구독, 로그아웃 시 해제 | 앱 | T-37, T-09a | `push_tokens`에 android·web 행, 웹 테스트 푸시 표시 | 대기 |
+| T-28b | 엔진 발송: 웹훅 → 방 멤버(보낸 사람·알림 끈 사람 제외)에게 Expo Push와 웹 푸시(`pywebpush`, VAPID). 웹 endpoint는 허용 호스트만, 만료 구독은 삭제 | 엔진 | T-10, T-23 | 대상 제외·묶음·실패 격리·SSRF 허용 목록·만료 삭제 테스트. 같은 message_id 웹훅 두 번 → 작업 1개. 확인: `cd engine && uv run pytest -q tests/test_push.py` 53 passed(큐 인자는 message_id뿐이고 키 `push:<id>`로 같은 웹훅 두 번 → 작업 1개, enqueue가 거절돼도 202, 워커가 DB에서 메시지를 다시 읽음, 보낸 사람·알림 끈 멤버 제외, Expo 요청 모양과 100개 묶음, 한 구독 실패가 다른 구독을 막지 않음, endpoint 허용 목록 28개 경우와 허용 안 된 endpoint는 `webpush` 미호출·토큰 유지, 허용 호스트의 리다이렉트는 안 따라감, 웹 404·410·Expo `DeviceNotRegistered`만 토큰 삭제, 로그에 본문·토큰·endpoint 없음, 보내기 전체 제한 시간), `tests/test_queue.py` 23 passed(멱등 키: 같은 키 한 번, 키 메모리 상한, 거절된 작업은 키 안 남김). 한계: 멱등 키는 프로세스 메모리라 재시작하면 같은 웹훅이 알림을 한 번 더 보낼 수 있음 | 완료 |
 | T-35 | 거울 엔진 API: `/v1/mirror/today`, `/v1/mirror/answer`, 엔진 서명 `card_id`, 상황 카드 20장(`engine/content/mirror_cards.yaml`) | 엔진 | T-03b, T-21 | mock 테스트 통과, 위조한 `card_id`는 거부, 실제 대화에서 뽑은 카드는 Gemini로 가지 않음 | 대기 |
 | T-36 | 거울 화면 3종: 역할극, 되돌려 받기, 예측 맞히기 | 앱 | T-07, T-35 | 카드 3장을 끝까지 풀 수 있고, 점수는 차이로만 보임("예측과 한 칸 차이"), `mirror_attempts`에 기록됨 | 대기 |
 
@@ -75,7 +77,7 @@
 | ID | 작업 | 영역 | 선행 | 완료 기준 | 상태 |
 |---|---|---|---|---|---|
 | T-29 | 엔진 배포: Dockerfile, 서버(학교 서버 또는 VM), 공개 HTTPS(Cloudflare Tunnel 등), pilot Supabase로 전환 | 배포 | T-24 | 컨테이너 실행, 외부 네트워크에서 `/health` 200, 웹훅 수신 | 대기 |
-| T-30 | 웹 빌드 배포(`npx expo export --platform web`, HTTPS, 웹 푸시 서비스 워커 포함), Android = EAS preview APK 배포, iOS 네이티브(TestFlight) = 선택(Apple 개발자 계정 필요) | 배포 | T-22, T-28 | 참가자가 링크·APK로 접속, 아이폰은 홈 화면에 추가해서 실행 | 대기 |
+| T-30 | 웹 빌드 배포(`npx expo export --platform web`, HTTPS, 웹 푸시 서비스 워커 포함), Android = EAS preview APK 배포, iOS 네이티브(TestFlight) = 선택(Apple 개발자 계정 필요) | 배포 | T-22, T-28a, T-28b | 참가자가 링크·APK로 접속, 아이폰은 홈 화면에 추가해서 실행 | 대기 |
 | T-31 | 파일럿: 동의서, 10~15쌍 + 팀 그룹방 모집, 1주 운영, 이벤트 집계(알림 수 변화, 고친 비율) | 공통 | T-29, T-30 | 집계표와 발표용 그래프 | 대기 |
 
 ## 선택
