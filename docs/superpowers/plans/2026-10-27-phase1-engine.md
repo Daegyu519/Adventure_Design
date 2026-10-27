@@ -327,7 +327,8 @@ def test_masker_tokens_and_restore():
     assert m.restore(m(s)) == s and m("민수") == "[이름1]"
 def test_masker_short_names_and_conversation()  # Masker(["수"])("수업") == "수업"; conversation()은 turns와 reply_to를 가리고 원본은 그대로
 def test_name_survives_rewrite_round_trip()  # m = Masker(["민수"]); rewrite 전문가에 m("민수야 안 돼요.") → 후보 text에 "[이름1]" → m.restore(text)에 "민수" 있고 "[이름" 없음
-def test_router_masks_before_third_party()   # 사슬 [nvidia:x], providers["nvidia"] = SpyProvider(name="nvidia"), force_mock=False, user·payload에 날것 "010-1234-5678" → spy.seen()에 "010-1234" 없음, "[전화번호]" 있음
+@pytest.mark.parametrize("provider", ["nvidia", "local"])   # local도 원격을 가리킬 수 있어 예외 아님
+def test_router_masks_before_third_party(provider)   # 사슬 [<provider>:x], providers[provider] = SpyProvider(name=provider), force_mock=False, user·payload에 날것 "010-1234-5678" → spy.seen()에 "010-1234" 없음, "[전화번호]" 있음
 def test_router_cache_bounded()              # r.CACHE_MAX = 3, 서로 다른 입력 5번 → len(r.cache) <= 3
 def test_only_pipeline_and_router_import_pii()  # engine/**/*.py(tests, harness/pii.py 제외) 중 pii를 import하는 파일 ⊆ {"pipeline.py", "harness/router.py"}
 ```
@@ -849,16 +850,16 @@ git add -A && git commit -m "T-21: /v1/detail with judge, intent-only rewrite, t
 
 **Files:**
 - Create: `engine/jobs/feedback.py`, `engine/app/routes/feedback.py`, `engine/tests/test_feedback.py`, `supabase/migrations/20261028000002_sender_pattern_activations.sql`
-- Modify: `engine/pipeline.py`(`feedback`), `engine/layers/guard.py`(`ACK`), `engine/app/contracts.py`, `engine/app/main.py`, `engine/app/db.py`·`engine/tests/fakes.py`·`engine/tests/pg.py`·`engine/tests/test_db.py`(`FeedbackWrite`, `apply_feedback`, `sender_patterns`, 값 검사), `engine/harness/store.py`, 앱 타입(생성), `ARCHITECTURE.md` 3-4·5장·9장
+- Modify: `engine/pipeline.py`(`feedback`), `engine/layers/guard.py`(`ACK`), `engine/app/contracts.py`, `engine/app/main.py`, `engine/app/db.py`·`engine/tests/fakes.py`·`engine/tests/pg.py`·`engine/tests/test_db.py`(`FeedbackWrite`, `apply_feedback`, `sender_patterns`, 값 검사), `supabase/tests/tone_rls.test.mjs`(기본 키 변경에 맞춤), `engine/harness/store.py`, 앱 타입(생성), `ARCHITECTURE.md` 5장·9장
 
 **Interfaces:**
-- Consumes: Task 1의 `Repo.apply_feedback`·`sender_patterns`·`weekly_feedback_count`·`FeedbackWrite`·`KST`·`week_start`(이 Task가 앞의 셋을 바꾼다), Task 2의 `TRIGGERS`·`FeedbackResult`(중복 제거·3개 상한), Task 5 `get_queue`.
+- Consumes: Task 1의 `Repo.apply_feedback`·`sender_patterns`·`weekly_feedback_count`·`FeedbackWrite`·`KST`·`week_start`. 이 중 `apply_feedback`·`sender_patterns`·`FeedbackWrite`는 이 Task가 바꾼다(아래 규칙). `weekly_feedback_count`·`KST`·`week_start`는 그대로 쓴다. 또 `app.db.GROUP_MIN_MEMBERS`·`check_patterns`를 쓴다. Task 2의 `TRIGGERS`·`FeedbackResult`(중복 제거·3개 상한), Task 5 `get_queue`.
 - Produces:
   - `FeedbackIn(room_id: UUID, message_id: int, text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000)])`, `FeedbackOut(ack: str)`
   - `guard.ACK`: 프로토타입 `layers/feedback.py`의 `ACK` 문장 그대로
   - `async pipeline.feedback(reg, complaint: str, about: str, relation: str, names: list[str]) -> FeedbackResult | None`: 입구에서 `Masker`로 가린다. `ExpertRequest(path="async", draft=about_m, relation, extra={"text": complaint_m, "about": about_m})`로 feedback 전문가를 부른다. `NoResult`면 None이다.
   - `jobs.feedback`:
-    - 상수: `WEEKLY_CAP = 5`, `GROUP_MIN_MEMBERS = 3`
+    - 상수: `WEEKLY_CAP = 5`. `GROUP_MIN_MEMBERS`는 여기 두지 않고 `app.db`에서 가져온다(규칙 2, 정의는 한 곳).
     - `next_midnight_kst(now: datetime) -> datetime`
     - `async run(repo: Repo, reg: Registry, room_id: UUID, reporter_id: UUID, message_id: int, complaint: str, now: datetime | None = None) -> None`
   - `run` 순서:
@@ -871,7 +872,7 @@ git add -A && git commit -m "T-21: /v1/detail with judge, intent-only rewrite, t
     7. complaint와 결과의 `dropped_reason`은 로그에 쓰지 않는다.
   - **`Repo.apply_feedback`·`sender_patterns` 규칙 (필수. 이 Task가 T-06a 구현을 바꾼다. `PgRepo`와 `FakeRepo`가 같이 지킨다)**
     1. **활성 시각별 행.** 마이그레이션 `20261028000002_sender_pattern_activations.sql`이 `tone.sender_patterns`의 기본 키를 `(sender_id, relation, trigger, active_from)`으로 바꾼다(`alter table tone.sender_patterns drop constraint sender_patterns_pkey; alter table tone.sender_patterns add primary key (sender_id, relation, trigger, active_from);`). 신고는 **자기 `active_from`(다음 KST 자정) 행만** upsert한다(`on conflict (sender_id, relation, trigger, active_from) do update`: count + 1, strength는 count 가중 누적 평균, feeling은 새 값). 이미 켜진 행(`active_from`이 지난 것)은 건드리지 않으므로 재신고가 켜진 패턴을 꺼 버리지 않는다. 같은 날 되풀이한 신고는 같은 행에 쌓인다. `Repo.sender_patterns(sender_id, relation, now)`는 `active_from <= now`인 행을 trigger별로 묶어 count는 합, strength는 count 가중 평균, feeling은 그중 `active_from`이 가장 늦은 행의 값으로 돌려준다(반환 모양이 그대로라 T-13 `aggregate`는 안 바뀐다). `FakeRepo`도 같은 키와 같은 읽기 규칙을 쓴다.
-    2. **보낸 사람·관계는 호출자가 안 준다.** `FeedbackWrite`에서 `sender_id`·`relation`을 뺀다(남는 칸: `room_id, reporter_id, message_id, usable, patterns, to_sender, active_from`). `apply_feedback`가 같은 트랜잭션 안에서 `messages`(`id = message_id and room_id = room_id`)에서 `sender_id`를, `rooms`에서 `relation`·`kind`를, `room_members` 행 수를 읽는다. 행이 없으면(없는 메시지, 다른 방) `ValueError("unknown message")`이고 아무것도 쓰지 않는다. `sender_patterns` upsert는 `fb.to_sender`이고 **SQL이 읽은** `kind = 'group'`이며 멤버 수가 `GROUP_MIN_MEMBERS` 이상일 때만 한다(규칙 14를 DB 쪽에서도 지킨다). 호출자가 `to_sender=True`를 넘겨도 1:1이나 2명 방이면 `sender_patterns`는 그대로고 `global_patterns`만 는다. `GROUP_MIN_MEMBERS = 3`은 `app.db`에 두고 `jobs.feedback`이 가져다 쓴다(두 곳이 어긋나지 않게).
+    2. **보낸 사람·관계는 호출자가 안 준다.** `FeedbackWrite`에서 `sender_id`·`relation`을 뺀다(남는 칸: `room_id, reporter_id, message_id, usable, patterns, to_sender, active_from`). `apply_feedback`가 같은 트랜잭션 안에서 `messages`(`id = message_id and room_id = room_id`)에서 `sender_id`를, `rooms`에서 `relation`·`kind`를, `room_members` 행 수를 읽는다. 행이 없으면(없는 메시지, 다른 방) `ValueError("unknown message")`이고 아무것도 쓰지 않는다. `sender_patterns` upsert는 `fb.to_sender`이고 **SQL이 읽은** `kind = 'group'`이며 멤버 수가 `GROUP_MIN_MEMBERS` 이상일 때만 한다(규칙 14를 DB 쪽에서도 지킨다). 호출자가 `to_sender=True`를 넘겨도 1:1이나 2명 방이면 `sender_patterns`는 그대로고 `global_patterns`만 는다. `GROUP_MIN_MEMBERS = 3`은 `app.db`에만 정의하고 `jobs.feedback`·`FakeRepo`·테스트는 거기서 import한다(숫자를 다시 쓰지 않는다).
     3. **값 검사는 SQL보다 먼저, 값을 메시지에 싣지 않는다.** `app.db.check_patterns(patterns)`를 `apply_feedback` 맨 앞(첫 쿼리·트랜잭션 전)에서 부른다. `trigger not in TRIGGERS` → `ValueError("unknown trigger")`, `feeling not in READINGS`(`harness.schemas`의 다섯 읽힘) → `ValueError("unknown feeling")`, `strength`가 정수 1~3이 아니면 → `ValueError("bad strength")`. 메시지는 고정 문구이고 값·`repr(pattern)`을 넣지 않으며 `raise … from None`으로 쓴다. 검사를 SQL 앞에 두는 이유: DB check 위반이 나면 Postgres DETAIL(`Failing row contains (...)`)이 asyncpg 예외의 `str(exc)`에 들어가 행 값(L4가 trigger 자리에 흘린 하소연 조각)이 로그로 샌다. 큐는 이미 `type(e).__name__`만 남기지만(Task 5), 이 검사로 DB 예외가 아예 나지 않게 한다. `usable=False`여도 `patterns`가 있으면 검사한다.
     4. **패턴은 `sorted(patterns, key=lambda p: p.trigger)` 순서로 쓴다.** 두 신고가 같은 `global_patterns`·`sender_patterns` 행을 반대 순서로 잠가 데드락 나는 것을 막는다. T-06a에서 이미 이 순서로 쓰게 했으니 여기서 다시 만들지 않고, 테스트로 고정만 한다.
   - `POST /v1/feedback` → 202 `FeedbackOut`
@@ -906,26 +907,25 @@ def test_complaint_never_persisted_pg(pg_dsn)   # PgRepo로 run() 뒤 public·to
 
 `tests/test_db.py`에 더한다(`world` 픽스처라 `FakeRepo`·`PgRepo` 둘 다 돈다). 그룹방 픽스처는 위와 같고, 시각은 KST 자정 기준으로 고정한다.
 ```python
-def test_rereport_keeps_active_pattern(world)   # 어제 0시 활성 행(count 1, strength 2.0) 시드 → 같은 (민수, 팀원, "짧은 답")을 내일 0시 active_from으로 apply_feedback → rows 2개; sender_patterns(now=지금)는 count 1·strength 2.0 그대로; now=내일 0시면 count 2·strength는 count 가중 평균; 같은 날 한 번 더 → 내일 행만 count 3
+def test_rereport_keeps_active_pattern(world)   # 어제 0시 활성 행(count 1, strength 2.0) 시드 → 같은 (민수, 팀원, "짧은 답")을 내일 0시 active_from으로 apply_feedback → rows 2개; sender_patterns(now=지금)는 count 1·strength 2.0 그대로; now=내일 0시면 count 2·strength는 count 가중 평균; 같은 날 한 번 더 → 내일 행 count 2(행은 여전히 2개), now=내일 0시 이후 합산 읽기는 count 3
 def test_sender_patterns_weighted_read(world)   # 행 (count 1, strength 1.0, 성의없게, 어제), (count 3, strength 3.0, 차갑게, 오늘 0시) → count 4, strength 2.5, feeling "차갑게"(가장 늦은 active_from); 내일 행은 제외
 def test_apply_feedback_derives_sender_and_relation(world)  # FeedbackWrite 칸에 sender_id·relation이 없다(dataclasses.fields); 친구 관계 그룹방의 민수 메시지 → 저장된 sender_patterns 행의 sender_id == 민수, relation == "친구"; 다른 방의 message_id → ValueError("unknown message")이고 네 표 모두 그대로
 def test_apply_feedback_group_rule_in_sql(world)  # to_sender=True로 직접 호출: 1:1 방, kind group이지만 멤버 2명인 방 → sender_patterns 0행, global_patterns += 1, feedback_log 1행; 멤버 3명 그룹방 → sender_patterns 1행
 @pytest.mark.parametrize("bad", ["trigger", "feeling", "strength0", "strength4"])
 def test_apply_feedback_rejects_bad_values(world, bad)  # trigger "민수가 안 된다고만 함" / feeling "짜증" / strength 0·4(FeedbackPattern.model_construct로 만듦) → ValueError, 메시지에 그 값이 없음, sender_patterns·global_patterns·pattern_reporters·feedback_log 모두 그대로; usable=False여도 같다
-def test_apply_feedback_processes_triggers_sorted(world)  # patterns를 역순으로 넘겨도 쓰기 순서가 sorted(trigger): FakeRepo는 기록한 순서, PgRepo는 pg_stat_statements 없이 `global_patterns`를 잠그는 두 연결을 반대 순서로 동시에 돌려 데드락 없이 둘 다 끝남
+def test_apply_feedback_no_deadlock_with_reversed_triggers(world)  # PgRepo 전용(fake는 잠금이 없어 pytest.skip). 서로 다른 신고자·메시지 둘이 같은 패턴 두 개를 서로 반대 순서(`["짧은 답","마침표로 끝남"]` / 역순)로 `asyncio.gather(repo.apply_feedback(a), repo.apply_feedback(b))` — 새 신고자·메시지로 20번 반복. 매번 둘 다 예외 없이 끝나고(데드락이면 asyncpg가 DeadlockDetectedError), 끝난 뒤 두 trigger의 global count가 40 = 신고자 수. 데드락은 확률적이라 반복으로 잡는다. 정렬을 빼면 이 테스트가 간헐적으로 실패해야 한다
 ```
 
 - [ ] **Step 3: 실패 확인** — `cd engine && uv run pytest -q tests/test_feedback.py` → FAIL
 
 - [ ] **Step 4: 구현**
 
-- [ ] **Step 5: 통과 확인 + 타입 생성** — `cd engine && uv run pytest -q` → 실패 0. `cd supabase && npm test` → 새 마이그레이션(기본 키 변경)과 함께 단계 0 테스트 그대로 통과. 타입 생성 → 스냅숏 테스트 PASS.
+- [ ] **Step 5: 통과 확인 + 타입 생성** — `cd engine && uv run pytest -q` → 실패 0. `supabase/tests/tone_rls.test.mjs`의 `service_role can write tone tables`(:50-56)는 "같은 (sender, relation, trigger)를 active_from만 다르게 또 넣으면 `/duplicate key/`로 실패"를 단언하는데, 새 기본 키에서는 성공하므로 그대로 두면 깨진다. 그 단언을 이렇게 바꾼다: 고정 과거 시각 `'2026-10-01 00:00+09'`로 (a, '팀원', 'curt_reply')를 넣고, 같은 active_from으로 한 번 더 넣으면 `/duplicate key/`로 거부되며, active_from만 `'2026-10-02 00:00+09'`로 다른 행은 들어간다(둘 다 과거 시각이라 :81의 `active_from > now()` 행 수 1 검사는 그대로 둔다. 첫 줄 `now() + interval '1 day'` 행이 그 1행이다. `now()`는 문장마다 달라 "같은 키" 검사에 쓰지 않는다). 주석 `// PK(sender_id, relation, trigger)`도 `PK(…, active_from)`으로 고친다. `cd supabase && npm test` → 이 수정 + 새 마이그레이션과 함께 모두 통과. 타입 생성 → 스냅숏 테스트 PASS.
 
 - [ ] **Step 6: 문서 + 완료 처리 + commit**
 
 `ARCHITECTURE.md`를 고친다.
-- 3-4: `tone.pair_patterns`를 "그룹(3명 이상)은 `sender_patterns`(다음 날 0시부터), 1:1은 `global_patterns`만"으로 바꾼다.
-- 5장: `global_patterns.count` = 서로 다른 신고자 수, `pattern_reporters`. `tone.sender_patterns` 행의 PK를 `(sender_id, relation, trigger, active_from)`으로 고치고(3-4장의 같은 PK 표기도), "읽을 때 `active_from <= now`인 행의 count 합 · strength count 가중 평균"을 덧붙인다.
+- 5장: `global_patterns.count` = 서로 다른 신고자 수, `pattern_reporters`. `tone.sender_patterns` 행의 PK를 `(sender_id, relation, trigger, active_from)`으로 고치고, "읽을 때 `active_from <= now`인 행의 count 합 · strength count 가중 평균"을 덧붙인다.
 - 9장: `harness/store.py` → `app/db.py` 줄을 "`harness/store.py`는 `app/context.py`가 요청마다 `app/db.Repo`에서 채우는 읽기 전용 스냅숏, 쓰기는 `app/db.py`"로 바꾼다.
 
 tasks.md T-24를 `완료`로 바꾼다. 확인 칸: 원문 미저장(fake·pg·로그), 1:1이 sender_patterns에 안 들어감.
