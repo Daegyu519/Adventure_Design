@@ -29,6 +29,10 @@ export default function RootLayout() {
   const ready = loaded || error !== null; // 글꼴 실패해도 시스템 글꼴로 계속 간다
 
   useEffect(() => {
+    if (__DEV__ && error) console.warn('[fonts] Pretendard 로드 실패, 시스템 글꼴로 계속합니다.', error);
+  }, [error]);
+
+  useEffect(() => {
     if (ready) SplashScreen.hide();
   }, [ready]);
 

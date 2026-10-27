@@ -17,7 +17,7 @@
 | T-02 | Supabase dev 프로젝트(클라우드, 서울) 생성, Supabase CLI 연결. pilot 프로젝트는 나중에 따로 만든다(T-29에서 전환) | DB | T-01 | `supabase link`로 dev 연결 | 대기 |
 | T-03a | 채팅 스키마: `profiles`, `rooms`, `room_members`, `messages`, `reactions`, `invites`, 함수(`is_member`, `create_group`, `create_invite`, `accept_invite`), RLS | DB | T-01 | PGlite RLS 테스트 통과. 확인: PGlite(node --test) 16 pass — RLS·초대·멤버 상한·메시지 제약. 동시성은 실제 Postgres에서 T-02 이후 재확인 | 완료 |
 | T-03b | `tone` 스키마(API 비공개), `tone_events`, `mirror_attempts`, `push_tokens`, Realtime·Storage(`chat-images`) platform 마이그레이션 | DB | T-03a | PGlite RLS 테스트 통과 | 대기 |
-| T-04 | Expo 앱 초기화: expo-router, TypeScript strict, Supabase 클라이언트, 환경 변수 | 앱 | T-01, D-01 | 웹·iOS·Android에서 빈 화면 실행. 확인: `tsc --noEmit` 0 오류, `expo export --platform web` 성공, `expo-doctor` 20/20, 웹에서 탭 4개(대화·거울·리포트·설정) 라이트·다크 스크린샷. iOS·Android 실행은 개발 빌드가 필요해 T-28에서 확인한다(`eas.json`·`expo-dev-client`·`expo-notifications` 설정만 해 둠) | 완료 |
+| T-04 | Expo 앱 초기화: expo-router, TypeScript strict, Supabase 클라이언트, 환경 변수 | 앱 | T-01, D-01 | 웹·iOS·Android에서 빈 화면 실행. 확인: `tsc --noEmit` 0 오류, `npm run lint` 오류 0, `expo export --platform web` 성공, `expo-doctor` 20/20, 웹에서 탭 4개(대화·거울·리포트·설정) 라이트·다크 스크린샷. iOS·Android 실행은 개발 빌드가 필요해 T-28에서 확인한다(`eas.json`·`expo-dev-client`·`expo-notifications` 설정만 해 둠) | 완료 |
 | T-05 | 엔진 초기화: FastAPI, `settings.py`, `models.yaml` 로딩, `/health`, pytest | 엔진 | T-01 | `/health` 200, 테스트 1개 통과. 확인: uv run pytest -q 6 passed(경고 없음), /health 200 curl 확인. 컨테이너는 T-29 | 완료 |
 | T-06 | 엔진 인증: Supabase JWKS로 토큰 검증하는 의존성, 방 멤버 확인 헬퍼(`room_members`) | 엔진 | T-05 | 정상·만료·위조 토큰, 비참여자 403 테스트 | 대기 |
 
@@ -62,7 +62,7 @@
 | T-25 | 털어놓기 시트: 받은 메시지에만 "⋯", 안내 문구 표시 | 앱 | T-09, T-24 | 내가 보낸 메시지에는 버튼이 없음 | 대기 |
 | T-26 | 기준선 갱신: 웹훅 → 큐 → `tone.baselines`, L0에 반영 | 엔진 | T-10, T-23 | 메시지 10개 이후 기준선 이탈 신호가 동작 | 대기 |
 | T-27 | `GET /v1/stats/me` + 리포트 화면(알림 수, 살펴보기 수, 고친 비율, 예측 차이 추이, 주별 힌트 수) | 앱, 엔진 | T-15, T-35 | 이벤트 수와 화면 숫자가 일치, 예측 차이가 `mirror_attempts`와 일치 | 대기 |
-| T-28 | 푸시: `push_tokens` 등록, 웹훅 → 방 멤버(보낸 사람·알림 끈 사람 제외)에게 Expo Push(Android)와 웹 푸시(서비스 워커, VAPID, `pywebpush`), Android 개발 빌드 | 앱, 엔진 | T-03b, T-10, T-23 | 앱을 닫은 상태에서 새 메시지 알림(Android, 웹), 알림 끈 방은 오지 않음 | 대기 |
+| T-28 | 푸시: `push_tokens` 등록, 웹훅 → 방 멤버(보낸 사람·알림 끈 사람 제외)에게 Android = EAS preview APK + FCM(Expo Push 경유), 웹 = 웹 푸시(서비스 워커, VAPID, `pywebpush`), iOS 네이티브(APNs) = 선택(Apple 개발자 계정 필요), Android 개발 빌드 | 앱, 엔진 | T-03b, T-10, T-23 | 앱을 닫은 상태에서 새 메시지 알림(Android, 웹), 알림 끈 방은 오지 않음 | 대기 |
 | T-35 | 거울 엔진 API: `/v1/mirror/today`, `/v1/mirror/answer`, 엔진 서명 `card_id`, 상황 카드 20장(`engine/content/mirror_cards.yaml`) | 엔진 | T-03b, T-21 | mock 테스트 통과, 위조한 `card_id`는 거부, 실제 대화에서 뽑은 카드는 Gemini로 가지 않음 | 대기 |
 | T-36 | 거울 화면 3종: 역할극, 되돌려 받기, 예측 맞히기 | 앱 | T-07, T-35 | 카드 3장을 끝까지 풀 수 있고, 점수는 차이로만 보임("예측과 한 칸 차이"), `mirror_attempts`에 기록됨 | 대기 |
 
@@ -71,7 +71,7 @@
 | ID | 작업 | 영역 | 선행 | 완료 기준 | 상태 |
 |---|---|---|---|---|---|
 | T-29 | 엔진 배포: Dockerfile, 서버(학교 서버 또는 VM), 공개 HTTPS(Cloudflare Tunnel 등), pilot Supabase로 전환 | 배포 | T-24 | 컨테이너 실행, 외부 네트워크에서 `/health` 200, 웹훅 수신 | 대기 |
-| T-30 | 웹 빌드 배포(`npx expo export --platform web`, HTTPS, 웹 푸시 서비스 워커 포함), Android APK 배포 | 배포 | T-22, T-28 | 참가자가 링크·APK로 접속, 아이폰은 홈 화면에 추가해서 실행 | 대기 |
+| T-30 | 웹 빌드 배포(`npx expo export --platform web`, HTTPS, 웹 푸시 서비스 워커 포함), Android = EAS preview APK 배포, iOS 네이티브(TestFlight) = 선택(Apple 개발자 계정 필요) | 배포 | T-22, T-28 | 참가자가 링크·APK로 접속, 아이폰은 홈 화면에 추가해서 실행 | 대기 |
 | T-31 | 파일럿: 동의서, 10~15쌍 + 팀 그룹방 모집, 1주 운영, 이벤트 집계(알림 수 변화, 고친 비율) | 공통 | T-29, T-30 | 집계표와 발표용 그래프 | 대기 |
 
 ## 선택
