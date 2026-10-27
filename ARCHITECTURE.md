@@ -47,6 +47,8 @@ flowchart LR
 | AI 엔진 (`engine`) | `/v1/hint`, `/v1/detail`, `/v1/feedback`, `/v1/mirror/*`, `/v1/stats/me`, `/hooks/message`. 하네스, 전문가 레지스트리, 집계기, 작업 큐, 푸시(Expo · 웹), trace 기록 | 메시지 저장·전달, 로그인 |
 | 모델 공급자 | OpenAI 호환 `/chat/completions` | 상태 저장 |
 
+**배포 형태**: 앱은 Expo 개발 빌드/EAS 빌드로 만든 네이티브 앱으로 배포한다(Expo Go 아님). 파일럿 기본 경로는 Android = EAS preview APK + FCM(Expo Push 경유), 웹 = 웹 푸시이고, 아이폰 참가자는 웹 빌드를 홈 화면에 추가해 웹 푸시로 받는다. iOS 네이티브(APNs·TestFlight)는 Apple 개발자 계정이 생길 때만 하는 선택 사항이다. 앱이 열려 있을 때는 Supabase Realtime으로, 닫혀 있을 때는 푸시(Android FCM, 웹은 웹 푸시, iOS 네이티브를 하면 APNs)로 새 메시지를 알리고, 다시 열리면 재연결해 놓친 메시지를 불러온다. 빌드 설정은 `apps/mobile/eas.json`(development · preview · production), 푸시 자격 증명(FCM `google-services.json`, iOS 네이티브를 할 때만 APNs 키)은 T-28에서 넣는다.
+
 **경계 규칙**
 - 채팅은 엔진 없이 돈다. 엔진이 죽어도 메시지는 오간다.
 - 엔진은 앱이 보낸 맥락을 믿지 않는다. 최근 대화는 엔진이 DB에서 직접 읽는다.
@@ -63,7 +65,7 @@ tone-chat/
   ARCHITECTURE.md
   CLAUDE.md
   README.md
-  .env.example            변수 이름만 (값은 .env, git 밖)
+  .env.example            엔진·협업 변수 이름만 (값은 .env, git 밖). 앱 변수는 apps/mobile/.env.example
   docs/
     tasks.md
     COLLAB.md             두 계정 협업 (claim · land)
@@ -229,7 +231,7 @@ sequenceDiagram
 | `public.reactions` | message_id, user_id, emoji(고정 6개 중), created_at. PK(message_id, user_id) | 방 멤버 | 멤버, 본인 행만 |
 | `public.push_tokens` | user_id, token, platform(`ios`·`android`·`web`) | 본인 | 본인 |
 | `public.tone_events` | id, room_id, user_id, kind, risk, top_reading, signals(jsonb), choice, created_at | 본인 | 본인 행 insert만 |
-| `public.mirror_attempts` | id, user_id, kind(`roleplay`·`receive`·`predict`), card_ref, answer_score, predicted, panel_bin, gap, created_at | 본인 | 본인 행만 |
+| `public.mirror_attempts` | id, user_id, kind(`roleplay`·`receive`·`predict`), card_ref, answer_score, predicted, panel_bin, gap, created_at | 본인 | 엔진(서비스 키) |
 | Storage `chat-images` | 경로 `<room_id>/…` | 방 멤버 | 방 멤버 |
 | `tone.feedback_log` | id, room_id, reporter_id, message_id, usable, pattern_count, created_at | 엔진 | 엔진 |
 | `tone.sender_patterns` | sender_id, relation, trigger, count, strength, feeling, active_from, updated_at. PK(sender_id, relation, trigger) | 엔진 | 엔진 |
@@ -242,8 +244,8 @@ sequenceDiagram
 - 초대 코드는 8자(A–Z0–9), 72시간 유효. 1:1 초대는 `max_uses` 1, 그룹 초대는 7이고 그룹 멤버만 만든다. 이미 그 방 멤버(1:1은 이미 방이 있는 두 사람)가 다시 수락하면 만료·소진 여부와 관계없이 그 방을 돌려준다.
 - `messages.reply_to`는 `bigint references messages(id) on delete set null`이고 같은 방 메시지만 가리킨다. `image_path`는 `<room_id>/<이름>` 한 단계만 허용한다(이름은 `[A-Za-z0-9_-][A-Za-z0-9._-]*`, `..` 금지). `mentions`는 8개 이하, 그 방 멤버만. 셋 다 DB 제약·insert 트리거로 막는다.
 - `push_tokens.platform = 'web'`이면 token 칸에 웹 푸시 구독 JSON을 넣는다.
-- 입력 중 표시는 DB에 남기지 않는다(Realtime Presence).
-- `tone_events.kind`: `hint_shown`, `detail_opened`(엔진이 기록), `option_chosen`(choice: A/B/original), `sent_with_hint`, `sent_after_fix`.
+- 입력 중 표시는 DB에 남기지 않는다(Realtime Presence). 채널은 private `typing:<room_id>`이고(`{config: {private: true}}`), `realtime.messages` RLS 정책이 방 멤버만 읽고 보내게 한다(`_platform.sql`).
+- `tone_events.kind`: `hint_shown`, `option_chosen`(choice: A/B/original), `sent_with_hint`, `sent_after_fix`는 앱이 본인 JWT로 기록하고, `detail_opened`는 엔진이 기록한다.
 - 하소연 원문 칸은 어디에도 없다. `analysis_traces`, `mirror_attempts`에도 문장 원문은 넣지 않는다(`analysis_traces`는 겉 신호와 전문가 출력만).
 - 관계는 방마다 하나다(`rooms.relation`: 친구, 팀원 등). 보낸 사람 패턴은 (보낸 사람, 관계) 단위라 같은 관계의 다른 방에도 적용된다(3-4).
 
@@ -395,16 +397,17 @@ risk = sigmoid( w0 + w1·prior + w2·Σk(αk·negk)/Σk(αk) + w3·violation + w
 
 | 위치 | 변수 |
 |---|---|
-| 앱 | `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`, `EXPO_PUBLIC_ENGINE_URL`, `EXPO_PUBLIC_VAPID_PUBLIC_KEY` |
-| 엔진 | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_DB_URL`, `HOOK_SECRET`, `NVIDIA_API_KEY`, `GEMINI_API_KEY`(합성 문장 평가만), `GITHUB_TOKEN`, `LOCAL_API_KEY`, `USE_LOCAL_MODEL`(`1`이면 로컬 모델 사용), `MODELS_PATH`(선택, 기본 `engine/config/models.yaml`), `EXPO_ACCESS_TOKEN`(선택), `FORCE_MOCK`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` |
+| 앱 (`apps/mobile/.env`) | `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`, `EXPO_PUBLIC_ENGINE_URL`, `EXPO_PUBLIC_VAPID_PUBLIC_KEY` |
+| 엔진 (루트 `.env`) | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_DB_URL`, `HOOK_SECRET`, `NVIDIA_API_KEY`, `GEMINI_API_KEY`(합성 문장 평가만), `GITHUB_TOKEN`, `LOCAL_API_KEY`, `USE_LOCAL_MODEL`(`1`이면 로컬 모델 사용), `MODELS_PATH`(선택, 기본 `engine/config/models.yaml`), `EXPO_ACCESS_TOKEN`(선택), `FORCE_MOCK`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` |
 | 협업 스크립트 | `TONE_ACCOUNT`(`a`·`b`, 셸에서 설정) |
 
-- 이름 목록은 `.env.example`에 있다. 값은 `.env`(git 밖)에만 넣는다.
+- 이름 목록은 `.env.example`(엔진·협업)과 `apps/mobile/.env.example`(앱)에 있다. 값은 `.env`(git 밖)에만 넣는다.
+- **앱 변수는 `apps/mobile/.env`에 둔다.** Expo는 프로젝트 루트(`apps/mobile`)의 dotenv 파일만 읽으므로, 저장소 루트 `.env`에 채워도 앱의 `supabase`는 `null`로 남는다(개발 중에는 콘솔 경고가 뜬다). 엔진은 `--env-file ../.env`로 루트 `.env`를 읽는다. 값을 바꾼 뒤에는 `npx expo start -c`.
 - 웹 푸시 공개키는 앱이 `EXPO_PUBLIC_VAPID_PUBLIC_KEY`로 받아 구독에 쓴다. 개인키(`VAPID_PRIVATE_KEY`)와 `VAPID_SUBJECT`는 엔진에만 둔다.
 - dev Supabase는 클라우드 프로젝트(서울 리전)다. 로컬 Supabase(Docker)는 쓰지 않는다. 8GB 맥의 메모리는 로컬 SEED 말투 전문가에 쓴다. DB 테스트는 PGlite로 한다(`supabase/tests`). pilot 프로젝트는 나중에 따로 만든다.
 - dev 웹훅은 `cloudflared` 임시 터널로 로컬 엔진에 닿게 한다. pilot은 T-29의 배포 서버로 보낸다.
 - 키가 없으면 `FORCE_MOCK`으로 엔진·평가·앱을 모두 돌린다.
-- 아이폰 참가자는 웹 빌드를 Safari '홈 화면에 추가'로 쓴다. 웹 푸시는 iOS 16.4 이상, 홈 화면에 추가한 경우만 동작한다.
+- 아이폰 참가자는 기본으로 웹 빌드를 Safari '홈 화면에 추가'로 쓰고 웹 푸시를 받는다. 웹 푸시는 iOS 16.4 이상, 홈 화면에 추가한 경우만 동작한다. iOS 네이티브(APNs·TestFlight)는 Apple 개발자 계정이 있을 때만 추가한다.
 
 ---
 
