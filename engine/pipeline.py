@@ -8,7 +8,7 @@ from typing import Literal
 
 from experts.base import ExpertRequest, ExpertResult
 from experts.registry import Registry, run_all
-from harness.pii import Masker
+from harness.pii import TOKEN, Masker
 from harness.schemas import Conversation, DetailReport, GateResult, Hint, RewriteOption, Verdict
 from harness.store import ProfileStore
 from layers import gate, rewrite
@@ -16,6 +16,7 @@ from layers.aggregate import aggregate, merged, top_reading
 from layers.guard import OPTION_LABELS, guard, render_detail, render_hint, render_mismatch
 
 # 자리표시 모양([이름1], [전화번호], [긴 숫자] …). 번호가 없어도 모델이 지어낸 것으로 보고 그 후보를 버린다.
+# TOKEN도 같이 본다: [이름_7]·[Name:2]처럼 번호 앞에 기호가 붙은 것은 restore가 되돌리지 못한다.
 PLACEHOLDER = re.compile(r"\[[가-힣A-Za-z ]+\d*\]")
 
 
@@ -65,7 +66,7 @@ async def detail(reg: Registry, draft: str, convo: Conversation, store: ProfileS
                  intent: str | None, t0: float, path: Literal["detail", "mirror"] = "detail") -> DetailOutcome:
     """판정(맥락 + 말투 여럿, 갈리면 심판)에는 의도를 넣지 않는다: 칩만 바꾼 재호출은 판정이 라우터 캐시에 걸리고
     고쳐 쓰기만 새로 돈다. 모든 전문가 호출은 t0 + deadline_ms - 0.3초 안에서만 한다."""
-    m = Masker(names)
+    m, raw = Masker(names), draft
     draft, convo = m(draft), m.conversation(convo)
     masked_intent = m(intent) if intent else None   # 모델로 가는 의도는 가린다(규칙 16). 어긋남은 칩 원래 값으로 본다
     agg = reg.cfg["aggregate"]
@@ -106,19 +107,20 @@ async def detail(reg: Registry, draft: str, convo: Conversation, store: ProfileS
             first = tone_results[0]
             checker = next(e for e in reg.for_path(path, "tone") if e.id == first.expert_id)
             passed = await rewrite.check(checker, req, written[0].output.options[:2], first.output.negative, end)
-            options = [o for i, c in passed if (o := _restored(m, i, c))]
+            options = [o for i, c in passed if (o := _restored(m, i, c, raw))]
     return DetailOutcome(g, v, readings, render_detail(v, readings, options), mismatch, results, "ok")
 
 
-def _restored(m: Masker, i: int, c: RewriteOption) -> RewriteOption | None:
+def _restored(m: Masker, i: int, c: RewriteOption, raw: str) -> RewriteOption | None:
     """응답 직전에 자리표시를 되돌린다. 되돌리지 못한 자리표시 모양(모델이 지어냄, 번호 없는 것 포함)이 남거나
-    keep·change가 문구 검사에 걸리면 그 후보를 버린다."""
+    keep·change가 문구 검사에 걸리면 그 후보를 버린다. 사용자가 원문에 직접 쓴 대괄호 말([사진] 등)은 자리표시로 보지 않는다."""
     try:
         o = RewriteOption(label=OPTION_LABELS[i], text=m.restore(c.text),
                           keep=[guard(m.restore(s)) for s in c.keep], change=[guard(m.restore(s)) for s in c.change])
     except ValueError:
         return None
-    return None if any(PLACEHOLDER.search(s) for s in (o.text, *o.keep, *o.change)) else o
+    strays = {x.group(0) for s in (o.text, *o.keep, *o.change) for pat in (TOKEN, PLACEHOLDER) for x in pat.finditer(s)}
+    return None if any(t not in raw for t in strays) else o
 
 
 async def panel(reg: Registry, draft: str, relation: str, names: list[str], t0: float) -> dict[str, float] | None:

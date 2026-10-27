@@ -136,6 +136,7 @@ def test_rewrite_restores_masked_values(client, login, fake, spy):
 @pytest.mark.parametrize("where,opt", [
     ("text", _opt("[이름7]야 " + SOFT)),                     # 모델이 지어낸 자리표시는 되돌릴 수 없다
     ("text-unnumbered", _opt("[이름]야 " + SOFT)),           # 번호 없는 자리표시 모양도
+    ("text-underscore", _opt("[이름_7]야 " + SOFT)),          # 번호 앞에 기호가 붙어도(restore가 못 되돌린다)
     ("change-unnumbered", _opt(SOFT, change=["[긴 숫자] 지움"])),
     ("keep", _opt(SOFT, keep=["[전화번호2] 그대로"])),
     ("keep-forbidden", _opt(SOFT, keep=["반드시 거절"])),
@@ -165,6 +166,15 @@ def test_checker_is_first_tone_expert_that_answered(client, login, fake, spy):
     b = _post(client, room).json()
     assert b["alert"] and b["options"]
     assert _models(spy).count("tone_alt") >= 2   # 원문 + 후보
+
+
+def test_bracket_label_typed_in_draft_is_kept(client, login, fake, spy):
+    """사용자가 직접 쓴 대괄호 말([사진])이 후보에 그대로 있으면 자리표시로 보지 않는다."""
+    me, _, room = _room(fake)
+    login(me)
+    spy.canned["rewrite"] = lambda p: {"options": [_opt("[사진] " + SOFT), _opt("[사진] 지금은 어려워요 (이유)")]}
+    b = _post(client, room, "[사진] 안 돼요.").json()
+    assert b["alert"] and b["options"] and all(o["text"].startswith("[사진] ") for o in b["options"])
 
 
 # ── 세 가지 확인 ───────────────────────────────────────
