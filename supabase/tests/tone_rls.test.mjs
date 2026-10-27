@@ -201,6 +201,13 @@ test('push_tokens: supabase-js upsert (merge-duplicates) works for the owner onl
   assert.equal((await upsert(a, a, 'tok', 'android')).affectedRows, 1) // 재등록
   assert.equal((await upsert(a, a, 'tok', 'ios')).affectedRows, 1) // 플랫폼 바뀜
   assert.equal((await one(as(db, a, 'select platform from public.push_tokens'))).platform, 'ios')
+  // payload에 updated_at이 들어 있어도(클라이언트가 보낸 과거 시각) 실패하지 않고, 저장되는 값은 서버 시각이다
+  assert.equal((await as(db, a,
+    `insert into public.push_tokens(user_id, token, platform, updated_at) values ($1, 'tok', 'android', '2000-01-01')
+     on conflict (user_id, token) do update set user_id = excluded.user_id, token = excluded.token,
+       platform = excluded.platform, updated_at = excluded.updated_at`, [a])).affectedRows, 1)
+  assert.ok((await one(as(db, 'service',
+    "select updated_at > now() - interval '1 minute' as ok from public.push_tokens where user_id = $1 and token = 'tok'", [a]))).ok)
   // 칸을 줄인 형태(platform, updated_at만)도 된다
   assert.equal((await as(db, a,
     `insert into public.push_tokens(user_id, token, platform) values ($1, 'tok', 'android')
@@ -225,10 +232,8 @@ test('push_tokens.updated_at is set by the server clock', async () => {
   const { db, a } = await abc()
   const fresh = async () => (await one(as(db, 'service',
     "select updated_at between now() - interval '1 minute' and now() + interval '1 minute' as ok from public.push_tokens where token = 'tok'"))).ok
-  // insert에는 updated_at을 넣을 권한이 없다
-  await assert.rejects(as(db, a,
-    "insert into public.push_tokens(user_id, token, platform, updated_at) values ($1, 'tok', 'ios', '2000-01-01')", [a]), /permission denied/)
-  await as(db, a, "insert into public.push_tokens(user_id, token, platform) values ($1, 'tok', 'ios')", [a])
+  // insert payload에 updated_at이 있어도 실패하지 않고, 서버 시각으로 덮인다
+  await as(db, a, "insert into public.push_tokens(user_id, token, platform, updated_at) values ($1, 'tok', 'ios', '2000-01-01')", [a])
   assert.ok(await fresh())
   // update로 과거·미래 시각을 넣어도 서버 시계로 덮인다 (service_role도 같다)
   for (const [who, t] of [[a, '2000-01-01'], [a, '2999-01-01'], ['service', '2000-01-01'], ['service', '2999-01-01']]) {

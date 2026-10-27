@@ -139,7 +139,8 @@ revoke all on function public.push_tokens_touch() from public, anon, authenticat
 -- supabase-js .upsert()는 PostgREST가 payload의 모든 칸을 `ON CONFLICT DO UPDATE SET`에 넣으므로
 -- 그 칸들의 UPDATE 권한이 있어야 첫 등록부터 된다. user_id를 남에게 옮기는 것은 update 정책의 with check가,
 -- 값 형식은 check 제약이 그대로 막는다.
-grant select, insert (user_id, token, platform), update (user_id, token, platform, updated_at), delete on public.push_tokens to authenticated;
+-- insert에도 updated_at을 열어 둔다: payload에 시각이 있어도 실패하지 않고, 트리거가 서버 시각으로 덮는다.
+grant select, insert (user_id, token, platform, updated_at), update (user_id, token, platform, updated_at), delete on public.push_tokens to authenticated;
 grant select, insert (room_id, user_id, kind, risk, top_reading, signals, choice) on public.tone_events to authenticated;
 grant select on public.mirror_attempts to authenticated; -- insert는 엔진(service_role)
 

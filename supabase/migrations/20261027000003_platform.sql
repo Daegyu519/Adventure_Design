@@ -3,7 +3,8 @@
 
 -- Realtime: 앱이 구독하는 표. INSERT·UPDATE 이벤트는 구독자의 RLS를 거쳐 방 멤버에게만 간다.
 -- 단, DELETE 이벤트는 RLS 검사 없이 전달되고 옛 행의 기본 키만 담긴다(Realtime 제약). 공감(reactions)은 지울 수 있으므로
--- 구독자가 지워진 공감의 키(message_id, user_id)를 볼 수 있다. 앱은 DELETE 페이로드에 의존하지 않는다(다시 읽어서 맞춘다).
+-- 구독자가 지워진 공감의 키(message_id, user_id)를 볼 수 있다. room_members도 같다: DELETE 페이로드에는 키(room_id, user_id)만
+-- 담긴다(지금은 멤버를 지우는 경로가 없다). 앱은 DELETE 페이로드에 의존하지 않는다(다시 읽어서 맞춘다).
 alter publication supabase_realtime add table public.messages, public.reactions, public.room_members;
 
 -- 비공개 버킷. 파일 하나당 최대 5MB, 이미지 형식만(크기·형식 상한은 임의값: 수업 규모).
