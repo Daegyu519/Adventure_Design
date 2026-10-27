@@ -187,7 +187,7 @@ test('mock detail: option A changes with intent', async () => {
 });
 
 test('mock stats: five Monday weeks ending this week, oldest first (Sunday belongs to the week before)', async () => {
-  jest.useFakeTimers({ now: new Date(2026, 10, 1, 12) }); // 2026-11-01 일요일(로컬)
+  jest.useFakeTimers({ now: new Date('2026-11-01T03:00:00Z') }); // 2026-11-01 일요일 낮 12시 KST(기기 시간대와 무관)
   const p = createEngine({ baseUrl: '', getToken: async () => null }).stats();
   await jest.advanceTimersByTimeAsync(300);
   const s = await p;
@@ -199,4 +199,17 @@ test('mock stats: five Monday weeks ending this week, oldest first (Sunday belon
     { week: '2026-10-26', count: 3 },
   ]);
   expect(s.predict_gap_trend.map((g) => g.week)).toEqual(['2026-10-19', '2026-10-26']);
+});
+
+// 기기 시간대와 무관해야 한다: 아래 두 순간은 UTC 기기에서는 둘 다 일요일이다(TZ=UTC로 돌려 확인).
+test.each([
+  ['2026-11-01T14:59:00Z', '2026-10-26'], // 일요일 23:59 KST = 지난 주 (mock은 300ms 뒤에 시계를 읽으므로 경계에서 1분 떨어뜨린다)
+  ['2026-11-01T15:00:00Z', '2026-11-02'], // 월요일 00:00 KST = 새 주
+])('mock stats: 마지막 주는 KST 이번 주 월요일이다 (%s)', async (now, lastWeek) => {
+  jest.useFakeTimers({ now: new Date(now) });
+  const p = createEngine({ baseUrl: '', getToken: async () => null }).stats();
+  await jest.advanceTimersByTimeAsync(300);
+  const s = await p;
+  expect(s.hints_by_week.at(-1)?.week).toBe(lastWeek);
+  expect(s.hints_by_week).toHaveLength(5);
 });
