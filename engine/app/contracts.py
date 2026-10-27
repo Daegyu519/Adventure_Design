@@ -28,3 +28,40 @@ class HintOut(BaseModel):
     seq: int
     hint: HintBody | None
     trace_id: UUID
+
+
+Intent = Literal["단호하게", "미안하게", "가볍게"]   # 의도 칩. 고쳐 쓰기에만 들어간다(판정에는 넣지 않음)
+
+
+class Readings(BaseModel):
+    """읽힘 키 다섯 개 모두 필수. 값은 자주/가끔/드물어요로만(확률 없음)."""
+    차갑게: Freq
+    성의없게: Freq
+    화나게: Freq
+    무난하게: Freq
+    따뜻하게: Freq
+
+
+class DetailIn(BaseModel):
+    room_id: UUID
+    text: Draft
+    intent: Intent | None = None
+    reply_to: int | None = Field(None, gt=0, lt=2**63)
+
+
+class OptionOut(BaseModel):
+    label: str
+    text: str
+    keep: list[str]
+    change: list[str]
+
+
+class DetailOut(BaseModel):
+    alert: bool
+    top_reading: Reading
+    readings: Readings
+    why: list[str]
+    options: list[OptionOut]
+    mismatch: str | None = None   # 엔진이 만든 어긋남 한 줄. 앱은 그대로 보여 준다
+    footnote: str
+    trace_id: UUID

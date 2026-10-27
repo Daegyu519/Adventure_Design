@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 from app.auth import get_verifier
 from app.db import PgRepo
-from app.routes import hint, hooks
+from app.routes import detail, hint, hooks
 from app.settings import Settings
 from harness.providers import available
 from harness.router import chains
@@ -49,6 +49,7 @@ app.add_middleware(CORSMiddleware, allow_origins=list(Settings.from_env().cors_o
                    allow_methods=["GET", "POST", "OPTIONS"], allow_headers=["Authorization", "Content-Type"])
 app.include_router(hooks.router)
 app.include_router(hint.router)
+app.include_router(detail.router)
 
 
 class HealthResponse(BaseModel):
