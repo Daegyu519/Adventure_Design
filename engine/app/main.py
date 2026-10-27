@@ -8,6 +8,7 @@ import yaml
 from fastapi import FastAPI
 from pydantic import BaseModel
 
+from app.auth import get_verifier
 from app.db import PgRepo
 from app.settings import Settings
 from harness.providers import available
@@ -25,6 +26,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     dsn = Settings.from_env().supabase_db_url
     repo = await PgRepo.connect(dsn) if dsn else None  # 풀은 min_size=0: DB가 죽어 있어도 시작한다
     app.state.repo = repo
+    await get_verifier().warm()  # 첫 /v1/hint가 JWKS 받기를 기다리지 않게. 실패해도 시작은 한다
     try:
         yield
     finally:

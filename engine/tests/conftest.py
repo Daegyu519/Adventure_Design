@@ -7,6 +7,7 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
+from app.auth import current_user
 from app.db import PgRepo
 from app.deps import get_repo, get_settings
 from app.main import app
@@ -57,6 +58,16 @@ def client(fake):
     app.dependency_overrides[get_settings] = lambda: settings
     yield TestClient(app)
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def login():
+    """`login(user_id)` → 이 요청들은 그 사용자로 인증된 것으로 본다(토큰 검증은 test_auth.py에서 따로 본다)."""
+    def do(user_id):
+        app.dependency_overrides[current_user] = lambda: user_id
+
+    yield do
+    app.dependency_overrides.pop(current_user, None)
 
 
 @pytest.fixture(scope="session")
