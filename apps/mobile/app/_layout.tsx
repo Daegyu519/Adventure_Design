@@ -4,6 +4,8 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 
+import { useConsented } from '../lib/consent';
+import { gate } from '../lib/gate';
 import { useTheme } from '../lib/theme';
 import tokens from '../lib/tokens.json';
 
@@ -26,7 +28,9 @@ const fonts = [
 export default function RootLayout() {
   const { colors } = useTheme();
   const [loaded, error] = useFonts(fonts);
-  const ready = loaded || error !== null; // 글꼴 실패해도 시스템 글꼴로 계속 간다
+  const g = gate({ consented: useConsented() });
+  // 글꼴이 실패해도 시스템 글꼴로 계속 가고, 동의 여부를 읽기 전(g === 'loading')에는 스플래시를 붙잡는다.
+  const ready = (loaded || error !== null) && g !== 'loading';
 
   useEffect(() => {
     if (__DEV__ && error) console.warn('[fonts] Pretendard 로드 실패, 시스템 글꼴로 계속합니다.', error);
@@ -40,7 +44,14 @@ export default function RootLayout() {
   return (
     <>
       <StatusBar style="auto" />
-      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }} />
+      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}>
+        <Stack.Protected guard={g === 'consent'}>
+          <Stack.Screen name="consent" />
+        </Stack.Protected>
+        <Stack.Protected guard={g === 'app'}>
+          <Stack.Screen name="(tabs)" />
+        </Stack.Protected>
+      </Stack>
     </>
   );
 }
