@@ -47,11 +47,15 @@ async def realtime(reg: Registry, draft: str, convo: Conversation, store: Profil
     return RealtimeOutcome(g, v, hint, results, "abstain" if v.abstain else "alert" if v.alert else "none")
 
 
+def mask_complaint(complaint: str, names: list[str]) -> str:
+    """털어놓기의 입구 가리기. 라우트가 큐에 넣기 전에 부른다: 큐(메모리)에는 가린 하소연만 들어간다."""
+    return Masker(names)(complaint)
+
+
 async def feedback(reg: Registry, complaint: str, about: str, relation: str, names: list[str]) -> FeedbackResult | None:
-    """털어놓기(L4). 하소연과 대상 메시지를 가려서 feedback 전문가에게 보낸다. 모든 전문가가 실패·시간 초과면 None.
-    하소연은 이 함수 밖으로 나가지 않는다(돌려주는 것은 패턴 태그뿐이고, 저장할지는 호출자가 거른다)."""
-    m = Masker(names)
-    complaint, about = m(complaint), m(about)
+    """털어놓기(L4). complaint는 `mask_complaint`로 이미 가린 하소연이다. 대상 메시지(about)는 여기서 가린다.
+    모든 전문가가 실패·시간 초과면 None. 돌려주는 것은 패턴 태그뿐이고, 저장할지는 호출자가 거른다."""
+    about = Masker(names)(about)
     req = ExpertRequest(path="async", draft=about, relation=relation, extra={"text": complaint, "about": about})
     deadline = time.monotonic() + reg.cfg["paths"]["async"]["deadline_ms"] / 1000
     results = await run_all(reg.for_path("async", "feedback"), req, deadline)

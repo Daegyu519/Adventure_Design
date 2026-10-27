@@ -255,7 +255,14 @@ class PgRepo:
                     await conn.execute(
                         """insert into tone.global_patterns as g (trigger, count) values ($1, 1)
                            on conflict (trigger) do update set count = g.count + 1""", p.trigger)
-                if fb.to_sender and src["to_sender_ok"]:
+                if not (fb.to_sender and src["to_sender_ok"]):
+                    continue
+                # count = (보낸 사람, 관계, 신호)마다 서로 다른 신고자 수: 처음 온 신고자만 센다(규칙 7)
+                new_reporter = await conn.fetchval(
+                    """insert into tone.sender_pattern_reporters (sender_id, relation, trigger, reporter_id)
+                       values ($1, $2, $3, $4) on conflict do nothing returning true""",
+                    src["sender_id"], src["relation"], p.trigger, fb.reporter_id)
+                if new_reporter:
                     # 자기 active_from 행에만 쌓는다: 이미 켜진 행은 그대로라 재신고가 켜진 패턴을 끄지 않는다
                     await conn.execute(
                         """insert into tone.sender_patterns as s

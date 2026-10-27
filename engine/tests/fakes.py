@@ -62,6 +62,7 @@ class FakeRepo:
         self.sender_pats: dict[tuple[UUID, str, str, datetime], SenderPat] = {}   # PK (sender, relation, trigger, active_from)
         self.global_pats: dict[str, int] = {}
         self.pattern_reporters: set[tuple[str, UUID]] = set()
+        self.sender_pattern_reporters: set[tuple[UUID, str, str, UUID]] = set()   # (sender, relation, trigger, reporter)
         self.baselines: dict[UUID, dict] = {}
         self._ids = count(1)
 
@@ -120,6 +121,8 @@ class FakeRepo:
                                              for (s, r, t, a), p in self.sender_pats.items()],
             "tone.global_patterns": lambda: [{"trigger": t, "count": n} for t, n in self.global_pats.items()],
             "tone.pattern_reporters": lambda: [{"trigger": t, "reporter_id": u} for t, u in self.pattern_reporters],
+            "tone.sender_pattern_reporters": lambda: [{"sender_id": s, "relation": r, "trigger": t, "reporter_id": u}
+                                                      for s, r, t, u in self.sender_pattern_reporters],
             "tone.baselines": lambda: [{"user_id": u, **b} for u, b in self.baselines.items()],
         }
         return copy.deepcopy(tables[table]())
@@ -216,7 +219,9 @@ class FakeRepo:
             if (p.trigger, fb.reporter_id) not in self.pattern_reporters:
                 self.pattern_reporters.add((p.trigger, fb.reporter_id))
                 self.global_pats[p.trigger] = self.global_pats.get(p.trigger, 0) + 1
-            if to_sender:
+            first = (m.sender_id, room["relation"], p.trigger, fb.reporter_id)
+            if to_sender and first not in self.sender_pattern_reporters:   # 서로 다른 신고자만 센다
+                self.sender_pattern_reporters.add(first)
                 key = (m.sender_id, room["relation"], p.trigger, fb.active_from)
                 old = self.sender_pats.get(key)
                 if old is None:

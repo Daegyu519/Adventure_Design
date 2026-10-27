@@ -43,7 +43,8 @@ class LLMExpert:
         payload = req.model_dump(mode="json", exclude={"path", "extra"}) | req.extra
         payload["intent"] = intent
         t0 = time.monotonic()
-        out, model = await self.router.call(self.id, system, user, payload, SCHEMAS[self.role], deadline)
+        out, model = await self.router.call(self.id, system, user, payload, SCHEMAS[self.role], deadline,
+                                            cache=self.role != "feedback")   # 하소연 결과는 캐시에 남기지 않는다
         return ExpertResult(expert_id=self.id, role=self.role, output=out,
                             confidence=getattr(out, "confidence", 1.0),
                             latency_ms=round((time.monotonic() - t0) * 1000), model=model)

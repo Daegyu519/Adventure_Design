@@ -16,7 +16,8 @@ NOW = datetime.now(timezone.utc)
 UTC = timezone.utc
 TODAY = datetime.combine(NOW.astimezone(KST).date(), time(0), KST)   # 오늘 0시 KST(NOW는 그 뒤, 내일 0시 전)
 YESTERDAY, TOMORROW = TODAY - timedelta(days=1), TODAY + timedelta(days=1)
-FEEDBACK_TABLES = ("tone.feedback_log", "tone.sender_patterns", "tone.global_patterns", "tone.pattern_reporters")
+FEEDBACK_TABLES = ("tone.feedback_log", "tone.sender_patterns", "tone.global_patterns", "tone.pattern_reporters",
+                   "tone.sender_pattern_reporters")
 
 
 def pat(trigger="짧은 답", feeling="차갑게", strength=2):
@@ -305,7 +306,8 @@ def test_check_domains(world):
             with pytest.raises((ValueError, asyncpg.CheckViolationError)):
                 await make()
         for t in ("tone.analysis_traces", "public.tone_events", "public.mirror_attempts", "tone.baselines",
-                  "tone.feedback_log", "tone.sender_patterns", "tone.global_patterns", "tone.pattern_reporters"):
+                  "tone.feedback_log", "tone.sender_patterns", "tone.global_patterns", "tone.pattern_reporters",
+                  "tone.sender_pattern_reporters"):
             assert await w(seed.rows(t)) == [], t
     world(body)
 
@@ -427,4 +429,32 @@ def test_apply_feedback_no_deadlock_with_reversed_triggers(world, request):
         assert await repo.sender_patterns(a, "팀원", TOMORROW) == {
             "짧은 답": {"count": 40, "strength": 2.0, "feeling": "차갑게"},
             "마침표로 끝남": {"count": 40, "strength": 2.0, "feeling": "차갑게"}}
+    world(body)
+
+
+def test_sender_patterns_count_distinct_reporters(world):
+    """보낸 사람 패턴의 count = (보낸 사람, 관계, 신호)마다 서로 다른 신고자 수(규칙 7). 같은 사람의 되풀이는 1번."""
+    async def body(repo, seed):
+        a, b, c, room = await trio(seed)
+        d = await w(seed.add_user("소연"))
+        for i in range(5):    # b가 다섯 번, 활성 시각도 다르게
+            mid = await w(seed.add_message(room, a, "응"))
+            at = TOMORROW + timedelta(days=i)
+            assert await repo.apply_feedback(FeedbackWrite(room, b, mid, True, [pat(strength=1 + i % 3)], True, at))
+        later = TOMORROW + timedelta(days=9)
+        assert await repo.sender_patterns(a, "팀원", later) == {"짧은 답": {"count": 1, "strength": 1.0, "feeling": "차갑게"}}
+        assert len(await w(seed.rows("tone.sender_patterns"))) == 1
+        for who in (c, d):
+            mid = await w(seed.add_message(room, a, "응"))
+            assert await repo.apply_feedback(FeedbackWrite(room, who, mid, True, [pat()], True, TOMORROW))
+        assert (await repo.sender_patterns(a, "팀원", later))["짧은 답"]["count"] == 3
+        assert sorted(r["reporter_id"] for r in await w(seed.rows("tone.sender_pattern_reporters"))) == sorted([b, c, d])
+        # 같은 신고자라도 다른 관계·다른 보낸 사람이면 따로 센다
+        friends = await w(seed.add_room("group", "친구", [a, b, c]))
+        await repo.apply_feedback(FeedbackWrite(friends, b, await w(seed.add_message(friends, a, "응")), True, [pat()],
+                                                True, TOMORROW))
+        await repo.apply_feedback(FeedbackWrite(room, b, await w(seed.add_message(room, c, "응")), True, [pat()],
+                                                True, TOMORROW))
+        assert (await repo.sender_patterns(a, "친구", later))["짧은 답"]["count"] == 1
+        assert (await repo.sender_patterns(c, "팀원", later))["짧은 답"]["count"] == 1
     world(body)
