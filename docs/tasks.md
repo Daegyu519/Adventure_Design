@@ -20,7 +20,7 @@
 | T-03b | `tone` 스키마(API 비공개), `tone_events`, `mirror_attempts`, `push_tokens`, Realtime·Storage(`chat-images`) platform 마이그레이션 | DB | T-03a | PGlite RLS 테스트 통과. 확인: PGlite 24 pass — tone 비공개, 본인 행 전용 표, 푸시 upsert·updated_at 트리거. _platform.sql(Storage·Realtime·typing 정책)은 T-02 이후 실제 프로젝트에서 재확인 | 완료 |
 | T-04 | Expo 앱 초기화: expo-router, TypeScript strict, Supabase 클라이언트, 환경 변수 | 앱 | T-01, D-01 | 웹·iOS·Android에서 빈 화면 실행. 확인: `tsc --noEmit` 0 오류, `npm run lint` 오류 0, `expo export --platform web` 성공, `expo-doctor` 20/20, 웹에서 탭 4개(대화·거울·리포트·설정) 라이트·다크 스크린샷. iOS·Android 실행은 개발 빌드가 필요해 T-28에서 확인한다(`eas.json`·`expo-dev-client`·`expo-notifications` 설정만 해 둠) | 완료 |
 | T-05 | 엔진 초기화: FastAPI, `settings.py`, `models.yaml` 로딩, `/health`, pytest | 엔진 | T-01 | `/health` 200, 테스트 1개 통과. 확인: uv run pytest -q 6 passed(경고 없음), /health 200 curl 확인. 컨테이너는 T-29 | 완료 |
-| T-06a | 엔진 DB 접근 계층: asyncpg Repo, FakeRepo 계약 테스트, 엔진 색인·pattern_reporters 마이그레이션 | 엔진, DB | T-03b, T-05 | 같은 계약 테스트가 FakeRepo와 임시 Postgres 둘 다 통과. 확인: `cd engine && uv run pytest -q tests/test_db.py` 22 passed(fake 11 + 임시 Postgres 16 클러스터 11, postgres 없으면 11 passed 11 skipped), 엔진 전체 78 passed 1 skipped, `cd supabase && npm test` 24 pass | 완료 |
+| T-06a | 엔진 DB 접근 계층: asyncpg Repo, FakeRepo 계약 테스트, 엔진 색인·pattern_reporters 마이그레이션 | 엔진, DB | T-03b, T-05 | 같은 계약 테스트가 FakeRepo와 임시 Postgres 둘 다 통과. 확인: `cd engine && uv run pytest -q tests/test_db.py` 24 passed(fake 12 + 임시 Postgres 16 클러스터 12, postgres 없으면 12 passed 12 skipped), 엔진 전체 106 passed, `cd supabase && npm test` 24 pass | 완료 |
 | T-06b | 엔진 인증: Supabase JWKS로 토큰 검증하는 의존성, 방 멤버 확인 헬퍼(room_members) | 엔진 | T-06a | 정상·만료·위조 토큰, 비참여자 403 테스트 | 대기 |
 
 ## 단계 1. 채팅
