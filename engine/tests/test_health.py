@@ -83,3 +83,4 @@ def test_lifespan_dead_db_still_serves_health(monkeypatch, tmp_path):
     with TestClient(app) as c:
         assert isinstance(app.state.repo, PgRepo)
         assert c.get("/health").status_code == 200
+    assert app.state.repo is None  # 닫은 풀을 남기지 않는다

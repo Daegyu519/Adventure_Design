@@ -3,6 +3,9 @@ import json
 from datetime import date, datetime, timedelta, timezone
 from uuid import uuid4
 
+import asyncpg
+import pytest
+
 from app.db import FeedbackWrite, TraceRow, week_start
 from harness.schemas import FeedbackPattern
 from tests.pg import w
@@ -256,4 +259,41 @@ def test_insert_trace_and_event(world):
         assert (e["user_id"], e["room_id"], e["kind"], e["top_reading"]) == (a, room, "detail_opened", "차갑게")
         assert e["risk"] is None
         assert e["signals"] == signals   # 문자열이 아니라 jsonb 객체
+
+        # 거울 경로 trace는 방이 없다
+        await repo.insert_trace(TraceRow(trace_id=uuid4(), path="mirror", user_id=a, room_id=None, experts={},
+                                         risk=None, alert=False, latency_ms=5))
+        assert [t["room_id"] for t in await w(seed.rows("tone.analysis_traces")) if t["path"] == "mirror"] == [None]
+    world(body)
+
+
+def test_check_domains(world):
+    """FakeRepo도 DB CHECK와 같은 값을 거부한다(라우트 테스트가 운영처럼 실패하게). 거부되면 아무것도 안 남는다."""
+    async def body(repo, seed):
+        a, b, c, room = await trio(seed)
+        msgs = [await w(seed.add_message(room, a, f"응{i}")) for i in range(4)]
+
+        def fb(i, *, trigger="짧은 답", feeling="차갑게", strength=1, relation="팀원"):
+            pat = FeedbackPattern.model_construct(trigger=trigger, feeling=feeling, strength=strength)
+            return FeedbackWrite(room_id=room, reporter_id=b, message_id=msgs[i], sender_id=a, relation=relation,
+                                 usable=True, patterns=[pat], to_sender=True, active_from=NOW)
+
+        bad = [
+            lambda: repo.insert_trace(TraceRow(uuid4(), "realtime", a, room, {}, None, False, 1)),  # path는 hint|detail|mirror
+            lambda: repo.insert_event(a, room, "opened", None, {}),
+            lambda: repo.insert_event(a, room, "hint_shown", "짜증", {}),
+            lambda: repo.insert_mirror_attempt(a, "quiz", "card:1", None, None, None, None),
+            lambda: repo.insert_mirror_attempt(a, "predict", "card:1", None, None, None, 5),     # gap 0~4
+            lambda: repo.update_baseline(a, -1, False, False),
+            lambda: repo.apply_feedback(fb(0, trigger="가" * 31)),
+            lambda: repo.apply_feedback(fb(1, feeling="짜증")),
+            lambda: repo.apply_feedback(fb(2, strength=5)),
+            lambda: repo.apply_feedback(fb(3, relation="남")),
+        ]
+        for make in bad:
+            with pytest.raises((ValueError, asyncpg.CheckViolationError)):
+                await make()
+        for t in ("tone.analysis_traces", "public.tone_events", "public.mirror_attempts", "tone.baselines",
+                  "tone.feedback_log", "tone.sender_patterns", "tone.global_patterns", "tone.pattern_reporters"):
+            assert await w(seed.rows(t)) == [], t
     world(body)

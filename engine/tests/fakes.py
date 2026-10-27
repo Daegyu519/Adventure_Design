@@ -13,6 +13,23 @@ from uuid import UUID
 from app.db import FeedbackWrite, Msg, PushTarget, Room, SentMsg, TraceRow, week_start
 
 
+# DB CHECK 제약과 같은 값 범위(supabase/migrations). 어긋나면 운영처럼 실패한다.
+RELATIONS = {"친구", "팀원", "선후배", "기타"}
+READINGS = {"차갑게", "성의없게", "화나게", "무난하게", "따뜻하게"}
+TRACE_PATHS = {"hint", "detail", "mirror"}
+EVENT_KINDS = {"hint_shown", "detail_opened", "option_chosen", "sent_with_hint", "sent_after_fix"}
+MIRROR_KINDS = {"roleplay", "receive", "predict"}
+
+
+def _check(ok: bool, what: str) -> None:
+    if not ok:
+        raise ValueError(f"check violation: {what}")
+
+
+def _in(v: int | None, lo: int, hi: int) -> bool:
+    return v is None or lo <= v <= hi
+
+
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -55,6 +72,7 @@ class FakeRepo:
         return uid
 
     def add_room(self, kind: str, relation: str, members: list[UUID], title: str | None = None) -> UUID:
+        _check(relation in RELATIONS, "rooms.relation")
         rid = uuid.uuid4()
         self.rooms[rid] = {"kind": kind, "relation": relation, "title": title}
         self.members[rid] = {m: False for m in members}
@@ -137,6 +155,7 @@ class FakeRepo:
         return dict(b) if b else None
 
     async def update_baseline(self, user_id: UUID, length: int, polite: bool, softener: bool) -> None:
+        _check(length >= 0, "baselines.avg_len")
         b = self.baselines.get(user_id)
         if b is None:
             self.baselines[user_id] = {"avg_len": float(length), "polite_rate": float(polite),
@@ -148,10 +167,17 @@ class FakeRepo:
         b["n"] = n + 1
 
     async def insert_trace(self, row: TraceRow) -> None:
+        _check(row.path in TRACE_PATHS, "analysis_traces.path")
+        _check(row.risk is None or 0 <= row.risk <= 1, "analysis_traces.risk")
+        _check(row.latency_ms >= 0, "analysis_traces.latency_ms")
+        _check(len(json.dumps(row.experts, ensure_ascii=False).encode()) <= 16384, "analysis_traces.experts")
         self.traces.append({**asdict(row), "experts": _jsonb(row.experts), "created_at": _now()})
 
     async def insert_event(self, user_id: UUID, room_id: UUID, kind: str, top_reading: str | None,
                            signals: dict) -> None:
+        _check(kind in EVENT_KINDS, "tone_events.kind")
+        _check(top_reading is None or top_reading in READINGS, "tone_events.top_reading")
+        _check(len(json.dumps(signals, ensure_ascii=False).encode()) <= 2000, "tone_events.signals")
         self.events.append({"id": next(self._ids), "room_id": room_id, "user_id": user_id, "kind": kind,
                             "risk": None, "top_reading": top_reading, "signals": _jsonb(signals), "choice": None,
                             "created_at": _now()})
@@ -164,6 +190,14 @@ class FakeRepo:
         return sum(1 for f in self.feedback_log if counts(f))
 
     async def apply_feedback(self, fb: FeedbackWrite) -> bool:
+        # PgRepo는 한 트랜잭션이라 CHECK에 걸리면 아무것도 안 남는다: 쓰기 전에 모두 검사한다.
+        # 칸이 실제로 쓰일 때만 검사한다(usable이 아니면 패턴 표에 안 쓰고, to_sender가 아니면 sender_patterns에 안 쓴다).
+        for p in fb.patterns if fb.usable else []:
+            _check(1 <= len(p.trigger) <= 30, "pattern trigger")
+            if fb.to_sender:
+                _check(fb.relation in RELATIONS, "sender_patterns.relation")
+                _check(p.feeling is None or p.feeling in READINGS, "sender_patterns.feeling")
+                _check(1 <= p.strength <= 3, "sender_patterns.strength")
         if any((f["reporter_id"], f["message_id"]) == (fb.reporter_id, fb.message_id) for f in self.feedback_log):
             return False
         self.feedback_log.append({"id": next(self._ids), "room_id": fb.room_id, "reporter_id": fb.reporter_id,
@@ -171,7 +205,7 @@ class FakeRepo:
                                   "pattern_count": len(fb.patterns) if fb.usable else 0, "created_at": _now()})
         if not fb.usable:
             return True
-        for p in fb.patterns:
+        for p in sorted(fb.patterns, key=lambda p: p.trigger):
             if (p.trigger, fb.reporter_id) not in self.pattern_reporters:
                 self.pattern_reporters.add((p.trigger, fb.reporter_id))
                 self.global_pats[p.trigger] = self.global_pats.get(p.trigger, 0) + 1
@@ -203,6 +237,9 @@ class FakeRepo:
 
     async def insert_mirror_attempt(self, user_id: UUID, kind: str, card_ref: str, answer_score: int | None,
                                     predicted: int | None, panel_bin: int | None, gap: int | None) -> None:
+        _check(kind in MIRROR_KINDS, "mirror_attempts.kind")
+        _check(1 <= len(card_ref) <= 200, "mirror_attempts.card_ref")
+        _check(all(_in(v, 1, 5) for v in (answer_score, predicted, panel_bin)) and _in(gap, 0, 4), "mirror_attempts score")
         self.mirror_attempts.append({"id": next(self._ids), "user_id": user_id, "kind": kind, "card_ref": card_ref,
                                      "answer_score": answer_score, "predicted": predicted, "panel_bin": panel_bin,
                                      "gap": gap, "created_at": _now()})

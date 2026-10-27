@@ -30,6 +30,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     finally:
         if repo:
             await repo.close()
+            app.state.repo = None
 
 
 app = FastAPI(title="tone-chat engine", lifespan=lifespan)

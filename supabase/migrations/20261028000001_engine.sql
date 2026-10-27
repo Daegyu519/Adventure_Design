@@ -9,11 +9,12 @@ create table if not exists tone.pattern_reporters (
   trigger text not null check (char_length(trigger) between 1 and 30),
   reporter_id uuid not null references public.profiles(id) on delete cascade,
   created_at timestamptz not null default now(),
-  primary key (trigger, reporter_id));
+  primary key (reporter_id, trigger)); -- reporter_id가 앞이라 FK(사용자 삭제 cascade)도 이 색인을 쓴다
 -- 다른 tone 표처럼 service_role만, RLS도 켠다(정책 없음).
 revoke all on tone.pattern_reporters from public, anon, authenticated;
 grant all on tone.pattern_reporters to service_role;
 alter table tone.pattern_reporters enable row level security;
 
 create index if not exists messages_room_created_idx on public.messages (room_id, created_at desc);
+create index if not exists messages_sender_created_idx on public.messages (sender_id, created_at desc); -- sent_messages
 create index if not exists tone_events_user_kind_idx on public.tone_events (user_id, kind, created_at);

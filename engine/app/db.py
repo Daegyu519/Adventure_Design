@@ -66,7 +66,7 @@ class TraceRow:
     trace_id: UUID
     path: str
     user_id: UUID
-    room_id: UUID
+    room_id: UUID | None  # 거울 경로는 방이 없다
     experts: dict
     risk: float | None
     alert: bool
@@ -123,8 +123,9 @@ class PgRepo:
     @classmethod
     async def connect(cls, dsn: str) -> "PgRepo":
         # min_size=0: 시작할 때 연결하지 않는다(DB가 죽어 있어도 /health는 뜬다).
-        # statement_cache_size=0: Supabase transaction pooler에서도 돈다.
-        pool = await asyncpg.create_pool(dsn, min_size=0, max_size=5, statement_cache_size=0, command_timeout=5)
+        # statement_cache_size=0: Supabase transaction pooler에서도 돈다. timeout은 연결, command_timeout은 쿼리.
+        pool = await asyncpg.create_pool(dsn, min_size=0, max_size=5, statement_cache_size=0, command_timeout=5,
+                                         timeout=3)
         return cls(pool)
 
     async def close(self) -> None:
@@ -219,7 +220,7 @@ class PgRepo:
                 return False
             if not fb.usable:
                 return True
-            for p in fb.patterns:
+            for p in sorted(fb.patterns, key=lambda p: p.trigger):  # 같은 순서로 잠가 동시 신고끼리 교착을 피한다
                 first = await conn.fetchval(
                     """insert into tone.pattern_reporters (trigger, reporter_id) values ($1, $2)
                        on conflict do nothing returning true""", p.trigger, fb.reporter_id)

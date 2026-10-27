@@ -234,7 +234,7 @@ sequenceDiagram
 | `tone.feedback_log` | id, room_id, reporter_id, message_id, usable, pattern_count, created_at | 엔진 | 엔진 |
 | `tone.sender_patterns` | sender_id, relation, trigger, count, strength, feeling, active_from, updated_at. PK(sender_id, relation, trigger) | 엔진 | 엔진 |
 | `tone.global_patterns` | trigger, count(서로 다른 신고자 수) | 엔진 | 엔진 |
-| `tone.pattern_reporters` | trigger, reporter_id, created_at. PK(trigger, reporter_id). 같은 신고자를 한 번만 세려고 둔다 | 엔진 | 엔진 |
+| `tone.pattern_reporters` | trigger, reporter_id, created_at. PK(reporter_id, trigger). 같은 신고자를 한 번만 세려고 둔다 | 엔진 | 엔진 |
 | `tone.baselines` | user_id, avg_len, polite_rate, softener_rate, n | 엔진 | 엔진 |
 | `tone.analysis_traces` | trace_id, path, user_id, room_id, experts(jsonb), risk, alert, latency_ms, created_at | 엔진 | 엔진 |
 
