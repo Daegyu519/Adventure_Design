@@ -2,13 +2,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { AppState, Platform } from 'react-native';
 
+import type { Database } from './types/db';
+
 const url = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
 // ponytail: 키 없이 화면 작업용, T-07에서 필수로 바꿈
-export const supabase: SupabaseClient | null =
+export const supabase: SupabaseClient<Database> | null =
   url && anonKey
-    ? createClient(url, anonKey, {
+    ? createClient<Database>(url, anonKey, {
         auth: {
           autoRefreshToken: true,
           persistSession: true,

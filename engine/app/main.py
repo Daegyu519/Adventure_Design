@@ -8,6 +8,7 @@ import yaml
 from fastapi import FastAPI
 from pydantic import BaseModel
 
+from app.auth import get_verifier
 from app.db import PgRepo
 from app.routes import hooks
 from app.settings import Settings
@@ -29,6 +30,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.repo = repo
     queue = app.state.queue = JobQueue()
     queue.start()
+    await get_verifier().warm()  # 첫 /v1/hint가 JWKS 받기를 기다리지 않게. 실패해도 시작은 한다
     try:
         yield
     finally:

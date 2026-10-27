@@ -1,0 +1,698 @@
+{
+  "components": {
+    "schemas": {
+      "DetailIn": {
+        "properties": {
+          "intent": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Intent"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reply_to": {
+            "anyOf": [
+              {
+                "format": "int64",
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "room_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 500,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "room_id",
+          "text"
+        ],
+        "type": "object"
+      },
+      "DetailOut": {
+        "properties": {
+          "alert": {
+            "type": "boolean"
+          },
+          "footnote": {
+            "type": "string"
+          },
+          "mismatch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/OptionOut"
+            },
+            "type": "array"
+          },
+          "readings": {
+            "$ref": "#/components/schemas/Readings"
+          },
+          "top_reading": {
+            "$ref": "#/components/schemas/Reading"
+          },
+          "trace_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "why": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "alert",
+          "top_reading",
+          "readings",
+          "why",
+          "options",
+          "footnote",
+          "trace_id"
+        ],
+        "type": "object"
+      },
+      "FeedbackIn": {
+        "properties": {
+          "message_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "room_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 1000,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "room_id",
+          "message_id",
+          "text"
+        ],
+        "type": "object"
+      },
+      "FeedbackOut": {
+        "properties": {
+          "ack": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ack"
+        ],
+        "type": "object"
+      },
+      "Freq": {
+        "enum": [
+          "자주",
+          "가끔",
+          "드물어요"
+        ],
+        "type": "string"
+      },
+      "HintBody": {
+        "properties": {
+          "detail": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "detail"
+        ],
+        "type": "object"
+      },
+      "HintIn": {
+        "properties": {
+          "reply_to": {
+            "anyOf": [
+              {
+                "format": "int64",
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "room_id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "seq": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "text": {
+            "maxLength": 500,
+            "minLength": 1,
+            "type": "string"
+          }
+        },
+        "required": [
+          "room_id",
+          "text",
+          "seq"
+        ],
+        "type": "object"
+      },
+      "HintOut": {
+        "properties": {
+          "hint": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HintBody"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "seq": {
+            "type": "integer"
+          },
+          "trace_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "seq",
+          "hint",
+          "trace_id"
+        ],
+        "type": "object"
+      },
+      "Intent": {
+        "enum": [
+          "단호하게",
+          "미안하게",
+          "가볍게"
+        ],
+        "type": "string"
+      },
+      "MirrorAnswerIn": {
+        "properties": {
+          "card_id": {
+            "type": "string"
+          },
+          "predicted": {
+            "anyOf": [
+              {
+                "maximum": 5,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reply": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "score": {
+            "anyOf": [
+              {
+                "maximum": 5,
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "card_id"
+        ],
+        "type": "object"
+      },
+      "MirrorAnswerOut": {
+        "properties": {
+          "gap": {
+            "anyOf": [
+              {
+                "maximum": 4,
+                "minimum": 0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "inner_voice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "options": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/OptionOut"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "readings": {
+            "$ref": "#/components/schemas/Readings"
+          },
+          "reveal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "readings"
+        ],
+        "type": "object"
+      },
+      "MirrorCard": {
+        "properties": {
+          "card_id": {
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "roleplay",
+              "receive",
+              "predict"
+            ],
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "persona": {
+            "type": "string"
+          },
+          "relation": {
+            "type": "string"
+          },
+          "situation": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "card_id",
+          "kind",
+          "persona",
+          "relation",
+          "situation",
+          "message"
+        ],
+        "type": "object"
+      },
+      "MirrorTodayOut": {
+        "properties": {
+          "cards": {
+            "items": {
+              "$ref": "#/components/schemas/MirrorCard"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "cards"
+        ],
+        "type": "object"
+      },
+      "OptionOut": {
+        "properties": {
+          "change": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "keep": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "label": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "text",
+          "keep",
+          "change"
+        ],
+        "type": "object"
+      },
+      "Reading": {
+        "enum": [
+          "차갑게",
+          "성의없게",
+          "화나게",
+          "무난하게",
+          "따뜻하게"
+        ],
+        "type": "string"
+      },
+      "Readings": {
+        "properties": {
+          "따뜻하게": {
+            "$ref": "#/components/schemas/Freq"
+          },
+          "무난하게": {
+            "$ref": "#/components/schemas/Freq"
+          },
+          "성의없게": {
+            "$ref": "#/components/schemas/Freq"
+          },
+          "차갑게": {
+            "$ref": "#/components/schemas/Freq"
+          },
+          "화나게": {
+            "$ref": "#/components/schemas/Freq"
+          }
+        },
+        "required": [
+          "차갑게",
+          "성의없게",
+          "화나게",
+          "무난하게",
+          "따뜻하게"
+        ],
+        "type": "object"
+      },
+      "StatsOut": {
+        "properties": {
+          "details": {
+            "type": "integer"
+          },
+          "fix_rate": {
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          },
+          "fixed": {
+            "type": "integer"
+          },
+          "hints": {
+            "type": "integer"
+          },
+          "hints_by_week": {
+            "items": {
+              "$ref": "#/components/schemas/WeekCount"
+            },
+            "type": "array"
+          },
+          "predict_gap_trend": {
+            "items": {
+              "$ref": "#/components/schemas/WeekGap"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "hints",
+          "details",
+          "fixed",
+          "fix_rate",
+          "hints_by_week",
+          "predict_gap_trend"
+        ],
+        "type": "object"
+      },
+      "WeekCount": {
+        "properties": {
+          "count": {
+            "type": "integer"
+          },
+          "week": {
+            "format": "date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "week",
+          "count"
+        ],
+        "type": "object"
+      },
+      "WeekGap": {
+        "properties": {
+          "avg_gap": {
+            "type": "number"
+          },
+          "week": {
+            "format": "date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "week",
+          "avg_gap"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "title": "tone-chat engine (seed, T-04b)",
+    "version": "0.0.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/v1/detail": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DetailIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetailOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Detail"
+      }
+    },
+    "/v1/feedback": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedbackIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Feedback"
+      }
+    },
+    "/v1/hint": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HintIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HintOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Hint"
+      }
+    },
+    "/v1/mirror/answer": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MirrorAnswerIn"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MirrorAnswerOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Mirror Answer"
+      }
+    },
+    "/v1/mirror/today": {
+      "post": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MirrorTodayOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Mirror Today"
+      }
+    },
+    "/v1/stats/me": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatsOut"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Stats Me"
+      }
+    }
+  }
+}
