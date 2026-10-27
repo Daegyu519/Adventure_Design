@@ -18,6 +18,7 @@ from app.contracts import DetailIn, DetailOut, OptionOut, Readings
 from app.db import Repo
 from app.deps import get_queue, get_registry, get_repo
 from experts.registry import Registry
+from jobs import events
 from jobs.queue import JobQueue
 
 log = logging.getLogger(__name__)
@@ -48,8 +49,9 @@ async def detail(body: DetailIn, user: UUID = Depends(current_user), repo: Repo 
 
     r, v = out.report, out.report.verdict
     # 큐 인자: id·읽힘 키·L0 신호 태그만(문장 없음). risk는 남기지 않는다.
-    if body.intent is None and not queue.enqueue("event", repo.insert_event, user, body.room_id, "detail_opened",
-                                                 v.top_reading, {"signals": out.gate.signals, "trace_id": str(trace_id)}):
+    signals = {"signals": out.gate.signals, "trace_id": str(trace_id)}
+    if body.intent is None and not queue.enqueue("event", events.record, repo, user, body.room_id, "detail_opened",
+                                                 v.top_reading, signals):
         log.warning("detail_opened enqueue rejected")
     return DetailOut(alert=v.alert, top_reading=v.top_reading, readings=Readings(**r.readings), why=r.why,
                      options=[OptionOut(**o.model_dump()) for o in r.options], mismatch=out.mismatch,

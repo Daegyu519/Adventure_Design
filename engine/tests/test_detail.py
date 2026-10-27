@@ -5,6 +5,7 @@ import json
 import logging
 import time
 from datetime import datetime, timezone
+from uuid import uuid4
 
 import pytest
 
@@ -13,6 +14,7 @@ from app.context import load_context
 from experts.base import ExpertRequest, ExpertResult
 from harness.router import NoResult
 from harness.schemas import READINGS, RewriteOption, ToneReading
+from jobs import events
 from layers import rewrite
 from layers.guard import FOOTNOTE, OPTION_LABELS, render_mismatch
 
@@ -133,6 +135,8 @@ def test_rewrite_restores_masked_values(client, login, fake, spy):
 
 @pytest.mark.parametrize("where,opt", [
     ("text", _opt("[이름7]야 " + SOFT)),                     # 모델이 지어낸 자리표시는 되돌릴 수 없다
+    ("text-unnumbered", _opt("[이름]야 " + SOFT)),           # 번호 없는 자리표시 모양도
+    ("change-unnumbered", _opt(SOFT, change=["[긴 숫자] 지움"])),
     ("keep", _opt(SOFT, keep=["[전화번호2] 그대로"])),
     ("keep-forbidden", _opt(SOFT, keep=["반드시 거절"])),
     ("change", _opt(SOFT, change=["분명히 부드럽게"])),       # 문구 검사(금지어)
@@ -224,6 +228,16 @@ def test_mismatch_in_response_body(client, login, fake, spy):
     assert _post(client, room).json()["mismatch"] is None   # 앱은 이 값을 그대로 보여 준다
 
 
+def test_member_named_like_intent_keeps_mismatch(client, login, fake, spy):
+    """의도 칩 값은 고정 Literal이라 어긋남은 원래 값으로 본다. 모델로 가는 의도만 가린 값이다."""
+    me, _, room = _room(fake, you_name="미안")
+    login(me)
+    b = _post(client, room, intent="미안하게").json()
+    assert b["mismatch"] == "미안하게 말하려던 것과 달리 차갑게 읽힐 수도 있어요" and b["options"]
+    rw = [c for c in spy.calls if c["model"] == "rewrite"]
+    assert rw and "[이름" in rw[0]["payload"]["intent"] and "미안" not in rw[0]["payload"]["intent"]
+
+
 def test_mismatch_alone_triggers_rewrite(fake, registry, spy):
     me, _, room = _room(fake)
     angry_but_mild = {"readings": {"화나게": .4, "무난하게": .3, "따뜻하게": .3}, "confidence": .6}
@@ -263,6 +277,17 @@ def test_judge_skipped_for_low_confidence_abstain(fake, registry, spy):
     assert out.report.options == []
 
 
+def test_judge_gate_uses_unrounded_confidence(fake, registry, spy):
+    """집계는 반올림 전 값으로 기권한다(0.3996 < 0.4). 반올림한 0.4로 심판을 부르면 자신 없는 기권이 풀린다."""
+    me, _, room = _room(fake)
+    spy.canned |= {"tone": lambda p: _tone(.9, conf=.0992), "tone_alt": lambda p: _tone(.1, conf=.0992),
+                   "judge": lambda p: {"alert": True, "reason": "r"}}
+    out = _detail(fake, registry, me, room)
+    assert out.verdict.confidence == registry.cfg["aggregate"]["min_confidence"]   # 보이는 값은 반올림된 경계
+    assert out.verdict.features["confidence"] < registry.cfg["aggregate"]["min_confidence"]
+    assert "judge" not in _models(spy) and out.verdict.abstain and not out.verdict.alert
+
+
 # ── 기록 · 오류 ────────────────────────────────────────
 
 def test_detail_opened_recorded_once(client, login, fake, queue):
@@ -270,8 +295,9 @@ def test_detail_opened_recorded_once(client, login, fake, queue):
     login(me)
     b = _post(client, room).json()
     assert queue.names() == ["event"]
-    _, _, args = queue.jobs[0]
-    assert args[:4] == (me, room, "detail_opened", b["top_reading"])
+    _, fn, args = queue.jobs[0]
+    assert fn is events.record and args[0] is fake   # 작업이 스스로 제한 시간을 둔다
+    assert args[1:5] == (me, room, "detail_opened", b["top_reading"])
     assert isinstance(args[-1], dict) and set(args[-1]) == {"signals", "trace_id"}
     assert isinstance(args[-1]["signals"], list) and args[-1]["trace_id"] == b["trace_id"]
     assert DRAFT not in json.dumps(args, ensure_ascii=False, default=str)   # 큐 인자에 문장 없음
@@ -279,6 +305,19 @@ def test_detail_opened_recorded_once(client, login, fake, queue):
     assert queue.names() == ["event"]   # 칩을 바꾼 재호출은 기록하지 않는다
     asyncio.run(queue.run_all())
     assert [(e["kind"], e["top_reading"], e["risk"]) for e in fake.events] == [("detail_opened", "차갑게", None)]
+
+
+def test_event_job_times_out_on_stalled_insert(monkeypatch):
+    """멈춘 DB 호출이 공유 워커를 붙들지 않게 기록 작업이 스스로 시간을 자른다(큐가 재시도한다)."""
+    monkeypatch.setattr(events, "EVENT_DEADLINE_S", 0.05)
+
+    class Stalled:
+        async def insert_event(self, *_a):
+            await asyncio.sleep(10)
+    t0 = time.monotonic()
+    with pytest.raises(TimeoutError):
+        asyncio.run(events.record(Stalled(), uuid4(), uuid4(), "detail_opened", "차갑게", {"signals": []}))
+    assert time.monotonic() - t0 < 1
 
 
 def test_no_tone_result_503(client, login, fake, spy, queue):
