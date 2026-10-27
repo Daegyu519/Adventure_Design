@@ -2,6 +2,7 @@
 surface() 특징 숫자만 `tone.baselines`에 더한다. 본문은 어디에도 남지 않는다. 사진만 있는 메시지는 건너뛴다."""
 import asyncio
 import logging
+import time
 from datetime import datetime, timezone
 
 import pytest
@@ -9,7 +10,7 @@ import pytest
 from app.context import load_context
 from jobs import baseline
 from layers import gate
-from tests.fakes import FakeQueue
+from tests.fakes import FakeQueue, FakeRepo
 
 HOOK = {"X-Hook-Secret": "test-secret"}
 ROOM = "6f1c2c9e-7a54-4a0e-9d57-0a3b1f7e2c11"
@@ -133,3 +134,33 @@ def test_deviation_after_ten_messages(fake):
     _update(fake, mids[9])
     got = signals()
     assert "평소보다 짧음" in got and "존댓말이 갑자기 빠짐" in got
+
+
+class _Hanging(FakeRepo):
+    """`hang`으로 고른 DB 호출이 끝나지 않는 저장소(풀 acquire이 영원히 기다리는 경우)."""
+
+    def __init__(self, hang: str) -> None:
+        super().__init__()
+        self.hang = hang
+
+    async def message(self, message_id):
+        if self.hang == "message":
+            await asyncio.sleep(3600)
+        return await super().message(message_id)
+
+    async def update_baseline(self, *a):
+        if self.hang == "update_baseline":
+            await asyncio.sleep(3600)
+        await super().update_baseline(*a)
+
+
+@pytest.mark.parametrize("hang", ["message", "update_baseline"])
+def test_hanging_db_times_out(monkeypatch, hang):
+    # 작업은 스스로 제한 시간을 둔다: 멈춘 DB 호출이 공유 워커 2개 중 하나를 붙들지 않게
+    monkeypatch.setattr(baseline, "BASELINE_DEADLINE_S", 0.05)
+    repo = _Hanging(hang)
+    room, me, mids = _talk(repo, 1)
+    t0 = time.monotonic()
+    with pytest.raises(TimeoutError):
+        asyncio.run(baseline.update(repo, mids[0]))
+    assert time.monotonic() - t0 < 1

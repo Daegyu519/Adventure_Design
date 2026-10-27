@@ -1,5 +1,6 @@
 import hmac
 import logging
+from collections.abc import Awaitable, Callable
 from datetime import datetime
 from uuid import UUID
 
@@ -68,7 +69,7 @@ async def hook_message(request: Request, settings: Settings = Depends(get_settin
     return {}
 
 
-def _enqueue(queue: JobQueue, name: str, fn, *args, message_id: int) -> None:
+def _enqueue(queue: JobQueue, name: str, fn: Callable[..., Awaitable[None]], *args, message_id: int) -> None:
     try:
         if not queue.enqueue(name, fn, *args, key=f"{name}:{message_id}"):
             log.warning("%s enqueue rejected id=%s", name, message_id)
