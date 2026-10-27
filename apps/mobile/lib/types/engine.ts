@@ -4,46 +4,6 @@
  */
 
 export interface paths {
-    "/v1/hint": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Hint */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["HintIn"];
-                };
-            };
-            responses: {
-                /** @description Successful Response */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["HintOut"];
-                    };
-                };
-            };
-        };
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/detail": {
         parameters: {
             query?: never;
@@ -124,43 +84,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/stats/me": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Stats Me */
-        get: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Successful Response */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["StatsOut"];
-                    };
-                };
-            };
-        };
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/mirror/today": {
+    "/v1/hint": {
         parameters: {
             query?: never;
             header?: never;
@@ -169,7 +93,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Mirror Today */
+        /** Hint */
         post: {
             parameters: {
                 query?: never;
@@ -177,7 +101,11 @@ export interface paths {
                 path?: never;
                 cookie?: never;
             };
-            requestBody?: never;
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["HintIn"];
+                };
+            };
             responses: {
                 /** @description Successful Response */
                 200: {
@@ -185,7 +113,7 @@ export interface paths {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["MirrorTodayOut"];
+                        "application/json": components["schemas"]["HintOut"];
                     };
                 };
             };
@@ -236,116 +164,188 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/mirror/today": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mirror Today */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Successful Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["MirrorTodayOut"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/stats/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Stats Me */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Successful Response */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["StatsOut"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
-        /** @enum {string} */
-        Reading: "차갑게" | "성의없게" | "화나게" | "무난하게" | "따뜻하게";
-        /** @enum {string} */
-        Freq: "자주" | "가끔" | "드물어요";
-        /** @enum {string} */
-        Intent: "단호하게" | "미안하게" | "가볍게";
-        HintIn: {
-            /** Format: uuid */
-            room_id: string;
-            text: string;
-            seq: number;
-            reply_to?: number | null;
-        };
-        HintBody: {
-            title: string;
-            detail: string;
-        };
-        HintOut: {
-            seq: number;
-            hint: components["schemas"]["HintBody"] | null;
-            /** Format: uuid */
-            trace_id: string;
-        };
-        Readings: {
-            "\uCC28\uAC11\uAC8C": components["schemas"]["Freq"];
-            "\uC131\uC758\uC5C6\uAC8C": components["schemas"]["Freq"];
-            "\uD654\uB098\uAC8C": components["schemas"]["Freq"];
-            "\uBB34\uB09C\uD558\uAC8C": components["schemas"]["Freq"];
-            "\uB530\uB73B\uD558\uAC8C": components["schemas"]["Freq"];
-        };
         DetailIn: {
-            /** Format: uuid */
-            room_id: string;
-            text: string;
             intent?: components["schemas"]["Intent"] | null;
             reply_to?: number | null;
-        };
-        OptionOut: {
-            label: string;
+            /** Format: uuid */
+            room_id: string;
             text: string;
-            keep: string[];
-            change: string[];
         };
         DetailOut: {
             alert: boolean;
-            top_reading: components["schemas"]["Reading"];
-            readings: components["schemas"]["Readings"];
-            why: string[];
-            options: components["schemas"]["OptionOut"][];
-            mismatch?: string | null;
             footnote: string;
+            mismatch?: string | null;
+            options: components["schemas"]["OptionOut"][];
+            readings: components["schemas"]["Readings"];
+            top_reading: components["schemas"]["Reading"];
             /** Format: uuid */
             trace_id: string;
+            why: string[];
         };
         FeedbackIn: {
-            /** Format: uuid */
-            room_id: string;
             /** Format: int64 */
             message_id: number;
+            /** Format: uuid */
+            room_id: string;
             text: string;
         };
         FeedbackOut: {
             ack: string;
         };
-        WeekCount: {
-            /** Format: date */
-            week: string;
-            count: number;
+        /** @enum {string} */
+        Freq: "자주" | "가끔" | "드물어요";
+        HintBody: {
+            detail: string;
+            title: string;
         };
-        WeekGap: {
-            /** Format: date */
-            week: string;
-            avg_gap: number;
+        HintIn: {
+            reply_to?: number | null;
+            /** Format: uuid */
+            room_id: string;
+            seq: number;
+            text: string;
         };
-        StatsOut: {
-            hints: number;
-            details: number;
-            fixed: number;
-            fix_rate: number;
-            hints_by_week: components["schemas"]["WeekCount"][];
-            predict_gap_trend: components["schemas"]["WeekGap"][];
+        HintOut: {
+            hint: components["schemas"]["HintBody"] | null;
+            seq: number;
+            /** Format: uuid */
+            trace_id: string;
+        };
+        /** @enum {string} */
+        Intent: "단호하게" | "미안하게" | "가볍게";
+        MirrorAnswerIn: {
+            card_id: string;
+            predicted?: number | null;
+            reply?: string | null;
+            score?: number | null;
+        };
+        MirrorAnswerOut: {
+            gap?: number | null;
+            inner_voice?: string | null;
+            options?: components["schemas"]["OptionOut"][] | null;
+            readings: components["schemas"]["Readings"];
+            reveal?: string | null;
         };
         MirrorCard: {
             card_id: string;
             /** @enum {string} */
             kind: "roleplay" | "receive" | "predict";
+            message: string;
             persona: string;
             relation: string;
             situation: string;
-            message: string;
         };
         MirrorTodayOut: {
             cards: components["schemas"]["MirrorCard"][];
         };
-        MirrorAnswerIn: {
-            card_id: string;
-            reply?: string | null;
-            score?: number | null;
-            predicted?: number | null;
+        OptionOut: {
+            change: string[];
+            keep: string[];
+            label: string;
+            text: string;
         };
-        MirrorAnswerOut: {
-            readings: components["schemas"]["Readings"];
-            inner_voice?: string | null;
-            reveal?: string | null;
-            options?: components["schemas"]["OptionOut"][] | null;
-            gap?: number | null;
+        /** @enum {string} */
+        Reading: "차갑게" | "성의없게" | "화나게" | "무난하게" | "따뜻하게";
+        Readings: {
+            "\uB530\uB73B\uD558\uAC8C": components["schemas"]["Freq"];
+            "\uBB34\uB09C\uD558\uAC8C": components["schemas"]["Freq"];
+            "\uC131\uC758\uC5C6\uAC8C": components["schemas"]["Freq"];
+            "\uCC28\uAC11\uAC8C": components["schemas"]["Freq"];
+            "\uD654\uB098\uAC8C": components["schemas"]["Freq"];
+        };
+        StatsOut: {
+            details: number;
+            fix_rate: number;
+            fixed: number;
+            hints: number;
+            hints_by_week: components["schemas"]["WeekCount"][];
+            predict_gap_trend: components["schemas"]["WeekGap"][];
+        };
+        WeekCount: {
+            count: number;
+            /** Format: date */
+            week: string;
+        };
+        WeekGap: {
+            avg_gap: number;
+            /** Format: date */
+            week: string;
         };
     };
     responses: never;

@@ -19,7 +19,7 @@
 | T-03a | 채팅 스키마: `profiles`, `rooms`, `room_members`, `messages`, `reactions`, `invites`, 함수(`is_member`, `create_group`, `create_invite`, `accept_invite`), RLS | DB | T-01 | PGlite RLS 테스트 통과. 확인: PGlite(node --test) 16 pass — RLS·초대·멤버 상한·메시지 제약. 동시성은 실제 Postgres에서 T-02 이후 재확인 | 완료 |
 | T-03b | `tone` 스키마(API 비공개), `tone_events`, `mirror_attempts`, `push_tokens`, Realtime·Storage(`chat-images`) platform 마이그레이션 | DB | T-03a | PGlite RLS 테스트 통과. 확인: PGlite 24 pass — tone 비공개, 본인 행 전용 표, 푸시 upsert·updated_at 트리거. _platform.sql(Storage·Realtime·typing 정책)은 T-02 이후 실제 프로젝트에서 재확인 | 완료 |
 | T-04 | Expo 앱 초기화: expo-router, TypeScript strict, Supabase 클라이언트, 환경 변수 | 앱 | T-01, D-01 | 웹·iOS·Android에서 빈 화면 실행. 확인: `tsc --noEmit` 0 오류, `npm run lint` 오류 0, `expo export --platform web` 성공, `expo-doctor` 20/20, 웹에서 탭 4개(대화·거울·리포트·설정) 라이트·다크 스크린샷. iOS·Android 실행은 개발 빌드가 필요해 T-28에서 확인한다(`eas.json`·`expo-dev-client`·`expo-notifications` 설정만 해 둠) | 완료 |
-| T-04b | 앱 바탕: 테스트 러너, 생성 타입 자리(engine OpenAPI, db seed), 엔진 클라이언트 + mock | 앱 | T-04 | `npm test` 통과, `scripts/check`가 앱 테스트·색 리터럴 검사를 돌림. 확인: npm test 7개, scripts/check 통과(앱 tsc → lint → jest → 색 리터럴 grep, 대비 검사, lockfile 스탬프로 npm ci, `uv run --locked`), 색 리터럴을 넣으면 check 실패, `bash scripts/test_coord.sh` ALL PASS(스탬프 테스트 추가). engine.openapi.json은 ARCHITECTURE 4장 seed(엔진 T-14 land 뒤 `gen:engine:pull`), db.ts seed, T-02 대기 | 완료 |
+| T-04b | 앱 바탕: 테스트 러너, 생성 타입 자리(engine OpenAPI, db seed), 엔진 클라이언트 + mock | 앱 | T-04 | `npm test` 통과, `scripts/check`가 앱 테스트·색 리터럴 검사를 돌림. 확인: npm test 20개(시간 초과·abort가 토큰 대기까지 덮음, hint 1700·detail 9000·나머지 10000 기본값, baseUrl 공백·끝 / 정리, 빈 URL이면 mock + 개발 경고, 성공 뒤 타이머·listener 정리), scripts/check 통과(앱 tsc → lint → jest → 색 리터럴 grep: 따옴표·템플릿 hex, rgb(a)·hsl(a), __tests__ 제외 · 대비 검사 · lockfile 스탬프 npm ci · `uv run --locked`), 색 리터럴을 넣으면 check 실패, `bash scripts/test_coord.sh` ALL PASS(스탬프 테스트 추가). 생성 스크립트는 .tmp에 쓰고 성공해야 mv(실패해도 기존 파일 그대로 확인). engine.openapi.json은 ARCHITECTURE 4장 seed(엔진 T-14 land 뒤 `gen:engine:pull`), db.ts seed, T-02 대기 | 완료 |
 | T-05 | 엔진 초기화: FastAPI, `settings.py`, `models.yaml` 로딩, `/health`, pytest | 엔진 | T-01 | `/health` 200, 테스트 1개 통과. 확인: uv run pytest -q 6 passed(경고 없음), /health 200 curl 확인. 컨테이너는 T-29 | 완료 |
 | T-06a | 엔진 DB 접근 계층: asyncpg Repo, FakeRepo 계약 테스트, 엔진 색인·pattern_reporters 마이그레이션 | 엔진, DB | T-03b, T-05 | 같은 계약 테스트가 FakeRepo와 임시 Postgres 둘 다 통과. 확인: `cd engine && uv run pytest -q tests/test_db.py` 24 passed(fake 12 + 임시 Postgres 16 클러스터 12, postgres 없으면 12 passed 12 skipped), 엔진 전체 106 passed, `cd supabase && npm test` 24 pass | 완료 |
 | T-06b | 엔진 인증: Supabase JWKS로 토큰 검증하는 의존성, 방 멤버 확인 헬퍼(room_members) | 엔진 | T-06a | 정상·만료·위조 토큰, 비참여자 403 테스트 | 대기 |
@@ -80,7 +80,7 @@
 | ID | 작업 | 영역 | 선행 | 완료 기준 | 상태 |
 |---|---|---|---|---|---|
 | T-29 | 엔진 배포: Dockerfile, 서버(학교 서버 또는 VM), 공개 HTTPS(Cloudflare Tunnel 등), pilot Supabase로 전환 | 배포 | T-24 | 컨테이너 실행, 외부 네트워크에서 `/health` 200, 웹훅 수신 | 대기 |
-| T-30 | 웹 빌드 배포(`npx expo export --platform web`, HTTPS, 웹 푸시 서비스 워커 포함), Android = EAS preview APK 배포, iOS 네이티브(TestFlight) = 선택(Apple 개발자 계정 필요) | 배포 | T-22, T-28a, T-28b | 참가자가 링크·APK로 접속, 아이폰은 홈 화면에 추가해서 실행 | 대기 |
+| T-30 | 웹 빌드 배포(`npx expo export --platform web`, HTTPS, 웹 푸시 서비스 워커 포함), Android = EAS preview APK 배포, iOS 네이티브(TestFlight) = 선택(Apple 개발자 계정 필요) | 배포 | T-22, T-28a, T-28b | 참가자가 링크·APK로 접속, 아이폰은 홈 화면에 추가해서 실행, 배포 빌드에서 `engine.isMock === false` 확인 | 대기 |
 | T-31 | 파일럿: 동의서, 10~15쌍 + 팀 그룹방 모집, 1주 운영, 이벤트 집계(알림 수 변화, 고친 비율) | 공통 | T-29, T-30 | 집계표와 발표용 그래프 | 대기 |
 
 ## 선택

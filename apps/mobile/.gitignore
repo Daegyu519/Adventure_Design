@@ -39,3 +39,6 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# 타입 생성 중간 파일(npm run gen:*). 생성이 실패하면 남는다
+*.tmp

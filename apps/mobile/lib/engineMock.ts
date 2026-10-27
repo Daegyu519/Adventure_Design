@@ -1,9 +1,8 @@
 // EXPO_PUBLIC_ENGINE_URL이 없을 때 쓰는 가짜 엔진. 모양은 생성 타입 그대로, 값은 고정 예시다.
+import { abortError } from './abort';
 import type { DetailRes, Engine } from './engine';
 
 const MOCK_DELAY_MS = 300;
-
-export const abortError = () => Object.assign(new Error('Aborted'), { name: 'AbortError' });
 
 // 엔진 응답처럼 조금 늦게 돌려주되, 호출자가 끊으면 바로 AbortError.
 function wait(signal?: AbortSignal) {

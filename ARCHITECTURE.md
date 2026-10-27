@@ -202,7 +202,7 @@ sequenceDiagram
 | 메서드 | 경로 | 요청 | 응답 |
 |---|---|---|---|
 | POST | `/v1/hint` | `{room_id, text(1~500자), seq, reply_to?}` | `{seq, hint: {title, detail} \| null, trace_id}` |
-| POST | `/v1/detail` | `{room_id, text, intent?, reply_to?}` | `{alert, top_reading, readings: {읽힘: "자주"\|"가끔"\|"드물어요"}, why: [str], options: [{label, text, keep, change}], footnote, trace_id}` |
+| POST | `/v1/detail` | `{room_id, text, intent?, reply_to?}` | `{alert, top_reading, readings: {읽힘: "자주"\|"가끔"\|"드물어요"}, why: [str], options: [{label, text, keep, change}], mismatch: str \| null, footnote, trace_id}` |
 | POST | `/v1/feedback` | `{room_id, message_id, text(1~1000자)}` | 202 `{ack}` |
 | POST | `/v1/mirror/today` | 없음 | `{cards: [{card_id, kind: "roleplay"\|"receive"\|"predict", persona, relation, situation, message}]}` |
 | POST | `/v1/mirror/answer` | `{card_id, reply?, score?, predicted?}` | `{readings, inner_voice?, reveal?, options?, gap?}` |
