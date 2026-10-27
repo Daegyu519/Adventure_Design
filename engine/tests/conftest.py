@@ -9,11 +9,12 @@ from fastapi.testclient import TestClient
 
 from app.auth import current_user
 from app.db import PgRepo
-from app.deps import get_queue, get_repo, get_settings
+from app.deps import get_queue, get_registry, get_repo, get_settings
 from app.main import app
 from app.settings import Settings
 from tests.fakes import FakeQueue, FakeRepo
 from tests.pg import Cluster, PgSeeder, missing_reason
+from tests.spy import SpyProvider, make_registry
 
 
 @pytest.fixture(autouse=True)
@@ -55,12 +56,25 @@ def queue() -> FakeQueue:
 
 
 @pytest.fixture
-def client(fake, queue):
-    """lifespan은 돌지 않는다(`with` 없이 만든다). DB·큐는 fake, 설정은 테스트 값."""
+def spy() -> SpyProvider:
+    """mock 공급자 자리에 들어가 모델로 나간 것을 기록한다."""
+    return SpyProvider()
+
+
+@pytest.fixture
+def registry(spy):
+    """테스트마다 새로 읽는다(cfg를 고쳐도, 라우터 캐시도 다른 테스트에 새지 않는다)."""
+    return make_registry(spy)
+
+
+@pytest.fixture
+def client(fake, queue, registry):
+    """lifespan은 돌지 않는다(`with` 없이 만든다). DB·큐·전문가는 fake, 설정은 테스트 값."""
     settings = dataclasses.replace(Settings.from_env(), hook_secret="test-secret",
                                    supabase_url="https://test.supabase.co")
     app.dependency_overrides[get_repo] = lambda: fake
     app.dependency_overrides[get_queue] = lambda: queue
+    app.dependency_overrides[get_registry] = lambda: registry
     app.dependency_overrides[get_settings] = lambda: settings
     yield TestClient(app)
     app.dependency_overrides.clear()

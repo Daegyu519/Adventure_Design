@@ -1,0 +1,46 @@
+"""판정 파이프라인의 입구. 외부 모델로 가는 문장은 여기서 요청마다 한 번 `Masker`(참여자 이름 + 개인정보 패턴)를
+거친다. 레이어·전문가는 가린 문장만 받는다. 대응표는 이 함수의 `Masker` 메모리에만 있고 밖으로 내보내지 않는다."""
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Literal
+
+from experts.base import ExpertRequest, ExpertResult
+from experts.registry import Registry, run_all
+from harness.pii import Masker
+from harness.schemas import Conversation, GateResult, Hint, Verdict
+from harness.store import ProfileStore
+from layers import gate
+from layers.aggregate import aggregate
+from layers.guard import render_hint
+
+
+@dataclass(frozen=True)
+class RealtimeOutcome:
+    gate: GateResult
+    verdict: Verdict | None
+    hint: Hint | None
+    results: list[ExpertResult]
+    outcome: Literal["gated", "abstain", "alert", "none"]
+
+
+async def realtime(reg: Registry, draft: str, convo: Conversation, store: ProfileStore, user_id: str,
+                   names: list[str], t0: float) -> RealtimeOutcome:
+    """t0는 요청이 들어온 time.monotonic(). 전문가는 t0 + expert_deadline_ms 안에 온 것만 쓴다."""
+    m = Masker(names)
+    draft, convo = m(draft), m.conversation(convo)
+    path, agg = reg.cfg["paths"]["realtime"], reg.cfg["aggregate"]
+
+    g = gate.score(draft, convo, store, user_id, path["gate_threshold"], agg["global_min_obs"])
+    if not g.passed:
+        return RealtimeOutcome(g, None, None, [], "gated")
+
+    experts = reg.for_path("realtime", "context") + reg.for_path("realtime", "tone")
+    req = ExpertRequest.from_convo("realtime", draft, convo, g.signals)
+    results = await run_all(experts, req, t0 + path["expert_deadline_ms"] / 1000)
+
+    ctx = next((r.output for r in results if r.role == "context"), None)
+    tones = [(r.output, reg.weight(r.expert_id)) for r in results if r.role == "tone"]
+    v = aggregate(draft, g, ctx, tones, store, convo, agg)
+    hint = render_hint(v)
+    return RealtimeOutcome(g, v, hint, results, "abstain" if v.abstain else "alert" if v.alert else "none")
