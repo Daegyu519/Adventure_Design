@@ -22,5 +22,6 @@ def render(name: str, **kw) -> tuple[str, str]:
     return system, user.format(**kw)
 
 
-def turns_text(turns: list[dict], n: int = 6) -> str:
-    return "\n".join(f"[{'나' if t['speaker'] == 'me' else '상대'}] {t['text']}" for t in turns[-n:])
+def turns_text(turns: list[dict]) -> str:
+    """[label 또는 나/상대] text. 자르지 않는다(DB가 8개로 자른다)."""
+    return "\n".join(f"[{t.get('label') or ('나' if t['speaker'] == 'me' else '상대')}] {t['text']}" for t in turns)

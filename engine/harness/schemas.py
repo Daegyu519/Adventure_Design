@@ -7,23 +7,36 @@ from pydantic import BaseModel, Field, field_validator
 
 READINGS = ("차갑게", "성의없게", "화나게", "무난하게", "따뜻하게")
 NEGATIVE = ("차갑게", "성의없게", "화나게")
+# 패턴 태그: gate 신호 7개 + feedback 프롬프트 태그
+TRIGGERS: frozenset[str] = frozenset({
+    "이유 없는 거절", "마침표로 끝남", "짧은 답", "감정 표현에 짧은 답", "상대 말에 비해 짧은 답",
+    "평소보다 짧음", "존댓말이 갑자기 빠짐",
+    "늦은 답에 사과 없음", "반말 전환", "농담에 정색",
+})
 
 
 class Turn(BaseModel):
     speaker: Literal["me", "them"]
     text: str
+    label: str = ""                   # 그룹방 화자 표시. 비면 나/상대
+
+
+def last_them(turns: list[Turn], reply_to: Turn | None) -> str:
+    """답장 대상이 상대 말이면 그것, 아니면 마지막 상대 말."""
+    if reply_to and reply_to.speaker == "them":
+        return reply_to.text
+    return next((t.text for t in reversed(turns) if t.speaker == "them"), "")
 
 
 class Conversation(BaseModel):
     pair_id: str                      # 관계 ID (두 사람 조합)
     relation: str = "친구"            # 친구, 동기, 선배, 팀원 등
     turns: list[Turn] = Field(default_factory=list)
+    reply_to: Turn | None = None
+    kind: Literal["direct", "group"] = "direct"
 
     def last_them(self) -> str:
-        for t in reversed(self.turns):
-            if t.speaker == "them":
-                return t.text
-        return ""
+        return last_them(self.turns, self.reply_to)
 
 
 # ---------- L0 ----------
@@ -66,6 +79,12 @@ class ToneReading(BaseModel):
         return max(self.readings, key=self.readings.get)
 
 
+# ---------- 심판 ----------
+class JudgeOut(BaseModel):
+    alert: bool
+    reason: str = ""
+
+
 # ---------- L3 ----------
 class Verdict(BaseModel):
     risk: float
@@ -102,6 +121,14 @@ class FeedbackResult(BaseModel):
     usable: bool
     patterns: list[FeedbackPattern] = Field(default_factory=list)
     dropped_reason: str | None = None  # 욕설, 인신공격, 무관한 내용
+
+    @field_validator("patterns")
+    @classmethod
+    def first_three_unique(cls, v: list[FeedbackPattern]) -> list[FeedbackPattern]:
+        first: dict[str, FeedbackPattern] = {}
+        for p in v:
+            first.setdefault(p.trigger, p)    # trigger가 겹치면 첫 것만
+        return list(first.values())[:3]
 
 
 # ---------- 출력 ----------

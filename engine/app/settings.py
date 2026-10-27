@@ -23,4 +23,5 @@ class Settings:
             supabase_db_url=os.environ.get("SUPABASE_DB_URL", ""),
             hook_secret=os.environ.get("HOOK_SECRET", ""),
             force_mock=os.environ.get("FORCE_MOCK", "").lower() in {"1", "true"},
+            models_path=Path(os.environ.get("MODELS_PATH") or DEFAULT_MODELS_PATH),
         )
