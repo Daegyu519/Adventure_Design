@@ -65,3 +65,22 @@ class DetailOut(BaseModel):
     mismatch: str | None = None   # 엔진이 만든 어긋남 한 줄. 앱은 그대로 보여 준다
     footnote: str
     trace_id: UUID
+
+
+class WeekCount(BaseModel):
+    week: str   # KST ISO 주 시작(월요일) YYYY-MM-DD
+    count: int
+
+
+class WeekGap(BaseModel):
+    week: str
+    avg_gap: float
+
+
+class StatsOut(BaseModel):
+    hints: int
+    details: int
+    fixed: int
+    fix_rate: float = Field(ge=0, le=1)
+    hints_by_week: list[WeekCount]
+    predict_gap_trend: list[WeekGap]

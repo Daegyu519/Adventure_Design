@@ -527,29 +527,35 @@
       "StatsOut": {
         "properties": {
           "details": {
+            "title": "Details",
             "type": "integer"
           },
           "fix_rate": {
-            "maximum": 1,
-            "minimum": 0,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Fix Rate",
             "type": "number"
           },
           "fixed": {
+            "title": "Fixed",
             "type": "integer"
           },
           "hints": {
+            "title": "Hints",
             "type": "integer"
           },
           "hints_by_week": {
             "items": {
               "$ref": "#/components/schemas/WeekCount"
             },
+            "title": "Hints By Week",
             "type": "array"
           },
           "predict_gap_trend": {
             "items": {
               "$ref": "#/components/schemas/WeekGap"
             },
+            "title": "Predict Gap Trend",
             "type": "array"
           }
         },
@@ -561,6 +567,7 @@
           "hints_by_week",
           "predict_gap_trend"
         ],
+        "title": "StatsOut",
         "type": "object"
       },
       "ValidationError": {
@@ -606,10 +613,11 @@
       "WeekCount": {
         "properties": {
           "count": {
+            "title": "Count",
             "type": "integer"
           },
           "week": {
-            "format": "date",
+            "title": "Week",
             "type": "string"
           }
         },
@@ -617,15 +625,17 @@
           "week",
           "count"
         ],
+        "title": "WeekCount",
         "type": "object"
       },
       "WeekGap": {
         "properties": {
           "avg_gap": {
+            "title": "Avg Gap",
             "type": "number"
           },
           "week": {
-            "format": "date",
+            "title": "Week",
             "type": "string"
           }
         },
@@ -633,6 +643,7 @@
           "week",
           "avg_gap"
         ],
+        "title": "WeekGap",
         "type": "object"
       }
     },
@@ -867,6 +878,25 @@
     },
     "/v1/stats/me": {
       "get": {
+        "operationId": "stats_me_v1_stats_me_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -877,13 +907,18 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "summary": "Stats Me"
       }
     }
