@@ -106,6 +106,32 @@ def test_text_1001_422(client, login, fake, queue, bad):
     assert post(client, room, mid, "가" * 1000).status_code == 202   # 1000자는 받는다
 
 
+def test_same_report_twice_is_one_job(client, login, fake, queue):
+    (_, jieun, _), room, mid = group(fake)
+    login(jieun)
+    first, second = post(client, room, mid), post(client, room, mid)
+    assert (first.status_code, first.json()) == (second.status_code, second.json()) == (202, {"ack": guard.ACK})
+    assert queue.names() == ["feedback"] and queue.keys == [f"feedback:{jieun}:{mid}"]
+    assert queue.max_attempts == [1]          # 느린 모델에 재시도 폭주를 만들지 않는다
+
+
+def test_already_reported_or_capped_acks_without_enqueue(client, login, fake, queue, registry, spy):
+    """이미 남긴 신고, 또는 이번 주 상한에 걸린 (보낸 사람, 관계): 같은 202를 주고 큐에 넣지 않는다(어느 쪽인지 안 알림)."""
+    (minsu, jieun, haneul), room, mid = group(fake)
+    report(fake, registry, room, jieun, mid)            # 키 기억 밖에서 이미 남긴 신고(예: 재시작 뒤)
+    login(jieun)
+    r = post(client, room, mid)
+    assert (r.status_code, r.json()) == (202, {"ack": guard.ACK}) and queue.jobs == []
+    for _ in range(job.WEEKLY_CAP - 1):
+        report(fake, registry, room, haneul, fake.add_message(room, minsu, "ㅇㅇ"))
+    calls = len(feedback_calls(spy))
+    r = post(client, room, fake.add_message(room, minsu, "ㅇㅇ"))
+    assert (r.status_code, r.json()) == (202, {"ack": guard.ACK}) and queue.jobs == []
+    assert len(feedback_calls(spy)) == calls            # L4도 부르지 않는다
+    other = fake.add_message(room, haneul, "ㅇㅇ")       # 다른 보낸 사람은 그대로 받는다
+    assert post(client, room, other).status_code == 202 and queue.names() == ["feedback"]
+
+
 def test_queue_full_503(client, login, fake, queue):
     (_, jieun, _), room, mid = group(fake)
     queue.accepting = False

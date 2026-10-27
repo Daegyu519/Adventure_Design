@@ -14,10 +14,19 @@ from harness.schemas import NEGATIVE, TRIGGERS
 
 WEEKLY_CAP = 5     # 한 (보낸 사람, 관계)에 일주일(KST ISO 주) 동안 반영하는 신고 수(악용 방지)
 DB_SLACK_S = 10.0  # L4 deadline 위에 DB 읽기·쓰기 몫. 작업 전체가 이보다 오래 공유 워커를 붙들지 않는다
+# ponytail: 털어놓기 작업(최대 L4 60초 + DB)은 push·baseline과 같은 워커 2개를 나눠 쓴다. 라우트가 같은 (신고자, 메시지)와
+#   상한에 걸린 (보낸 사람, 관계)는 큐에 안 넣고 재시도도 없지만(max_attempts=1), 한 사람이 서로 다른 메시지로 몰아치면 워커가 찬다.
+#   사용자별 요청 한도는 T-38(429)에서, push가 늦어지면 작업 종류별 워커 풀로 나눈다.
 
 
 def next_midnight_kst(now: datetime) -> datetime:
     return datetime.combine(now.astimezone(KST).date() + timedelta(days=1), time(0), KST)
+
+
+async def at_weekly_cap(repo: Repo, sender_id: UUID, relation: str, now: datetime) -> bool:
+    """이번 주(KST ISO 주의 월요일 0시부터, 주 번호만으로 세지 않는다) 이 (보낸 사람, 관계)에 반영한 신고가 상한인지."""
+    since = datetime.combine(week_start(now), time(0), KST)
+    return await repo.weekly_feedback_count(sender_id, relation, since) >= WEEKLY_CAP
 
 
 async def run(repo: Repo, reg: Registry, room_id: UUID, reporter_id: UUID, message_id: int, complaint: str,
@@ -32,10 +41,9 @@ async def run(repo: Repo, reg: Registry, room_id: UUID, reporter_id: UUID, messa
         result = await pipeline.feedback(reg, complaint, msg.text, room.relation, list(names.values()))
         patterns = [p for p in result.patterns if p.trigger in TRIGGERS and p.feeling in NEGATIVE] \
             if result is not None and result.usable else []
-        since = datetime.combine(week_start(now), time(0), KST)   # 주 번호가 아니라 KST 월요일 0시부터 센다
         # ponytail: 상한 확인과 apply_feedback이 한 트랜잭션이 아니라 동시에 도는 작업 수(워커 2개)만큼 넘칠 수 있다
         #   (최대 WEEKLY_CAP + 워커 수 - 1 = 6건). 정확해야 하면 apply_feedback 안에서 (보낸 사람, 관계) advisory lock 뒤에 센다.
-        if patterns and await repo.weekly_feedback_count(msg.sender_id, room.relation, since) >= WEEKLY_CAP:
+        if patterns and await at_weekly_cap(repo, msg.sender_id, room.relation, now):
             patterns = []
         # 호출자의 요청일 뿐이다: 보낸 사람·관계·그룹 규칙은 apply_feedback이 SQL에서 다시 판정한다
         to_sender = room.kind == "group" and room.member_count >= GROUP_MIN_MEMBERS

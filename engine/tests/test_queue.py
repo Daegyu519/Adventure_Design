@@ -476,3 +476,34 @@ def test_fake_queue_dedupes_same_key():
     assert fq.enqueue("t", _noop) and fq.enqueue("t", _noop)  # 키 없는 작업은 그대로
     assert fq.names() == ["push", "push", "t", "t"]
     assert fq.keys == ["push:1", "push:2"]
+
+
+def test_per_job_max_attempts_override(caplog):
+    """작업마다 시도 횟수를 줄일 수 있다(털어놓기: 느린 모델에 재시도 폭주를 만들지 않게 1번)."""
+    calls = []
+
+    async def boom():
+        calls.append(1)
+        raise RuntimeError(SECRET)
+
+    async def main():
+        q = JobQueue(workers=1, max_attempts=3, backoff_s=0.001)
+        q.start()
+        assert q.enqueue("feedback", boom, max_attempts=1) is True
+        await q.join()
+        await q.stop()
+
+    with caplog.at_level(logging.WARNING):
+        asyncio.run(main())
+    assert calls == [1]
+    assert "job feedback dropped after 1 attempts: RuntimeError" in caplog.text and SECRET not in caplog.text
+
+
+def test_fake_queue_records_max_attempts():
+    q = FakeQueue()
+
+    async def job():
+        pass
+    q.enqueue("a", job)
+    q.enqueue("b", job, max_attempts=1)
+    assert q.max_attempts == [None, 1]

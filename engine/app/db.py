@@ -111,6 +111,7 @@ class Repo(Protocol):
     async def insert_trace(self, row: TraceRow) -> None: ...
     async def insert_event(self, user_id: UUID, room_id: UUID, kind: str, top_reading: str | None,
                            signals: dict) -> None: ...
+    async def has_feedback(self, reporter_id: UUID, message_id: int) -> bool: ...
     async def weekly_feedback_count(self, sender_id: UUID, relation: str, since: datetime) -> int: ...
     async def apply_feedback(self, fb: FeedbackWrite) -> bool: ...
     async def push_targets(self, room_id: UUID, sender_id: UUID) -> list[PushTarget]: ...
@@ -216,6 +217,11 @@ class PgRepo:
             """insert into public.tone_events (user_id, room_id, kind, top_reading, signals)
                values ($1, $2, $3, $4, $5::jsonb)""",
             user_id, room_id, kind, top_reading, json.dumps(signals, ensure_ascii=False))
+
+    async def has_feedback(self, reporter_id: UUID, message_id: int) -> bool:
+        return await self._pool.fetchval(
+            "select exists(select 1 from tone.feedback_log where reporter_id = $1 and message_id = $2)",
+            reporter_id, message_id)
 
     async def weekly_feedback_count(self, sender_id: UUID, relation: str, since: datetime) -> int:
         # feedback_log에는 보낸 사람·관계 칸이 없다: 메시지와 방에서 찾는다.

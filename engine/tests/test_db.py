@@ -458,3 +458,14 @@ def test_sender_patterns_count_distinct_reporters(world):
         assert (await repo.sender_patterns(a, "친구", later))["짧은 답"]["count"] == 1
         assert (await repo.sender_patterns(c, "팀원", later))["짧은 답"]["count"] == 1
     world(body)
+
+
+def test_has_feedback(world):
+    async def body(repo, seed):
+        a, b, c, room = await trio(seed)
+        m = await w(seed.add_message(room, a, "응"))
+        assert await repo.has_feedback(b, m) is False
+        await repo.apply_feedback(FeedbackWrite(room, b, m, False, [], False, TOMORROW))
+        assert await repo.has_feedback(b, m) is True
+        assert await repo.has_feedback(c, m) is False
+    world(body)

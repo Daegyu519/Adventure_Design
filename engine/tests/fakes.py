@@ -193,6 +193,9 @@ class FakeRepo:
                             "risk": None, "top_reading": top_reading, "signals": _jsonb(signals), "choice": None,
                             "created_at": _now()})
 
+    async def has_feedback(self, reporter_id: UUID, message_id: int) -> bool:
+        return any((f["reporter_id"], f["message_id"]) == (reporter_id, message_id) for f in self.feedback_log)
+
     async def weekly_feedback_count(self, sender_id: UUID, relation: str, since: datetime) -> int:
         def counts(f: dict) -> bool:
             m = self.messages.get(f["message_id"])
@@ -287,9 +290,11 @@ class FakeQueue:
         self.accepting = accepting  # False면 가득 찬 큐처럼 거절한다(호출하는 쪽의 503 경로 테스트용)
         self.jobs: list[tuple[str, Callable[..., Awaitable[None]], tuple]] = []
         self.keys: list[str] = []  # 받은 멱등 키(JobQueue처럼 같은 키는 한 번만 받는다)
+        self.max_attempts: list[int | None] = []  # 받은 작업마다 enqueue(max_attempts=)
         self._ran = 0
 
-    def enqueue(self, name: str, fn: Callable[..., Awaitable[None]], *args: Any, key: str | None = None) -> bool:
+    def enqueue(self, name: str, fn: Callable[..., Awaitable[None]], *args: Any, key: str | None = None,
+                max_attempts: int | None = None) -> bool:
         if not self.accepting:
             return False
         if key is not None:
@@ -297,6 +302,7 @@ class FakeQueue:
                 return True
             self.keys.append(key)
         self.jobs.append((name, fn, args))
+        self.max_attempts.append(max_attempts)
         return True
 
     def names(self) -> list[str]:

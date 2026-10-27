@@ -3,6 +3,8 @@ L4는 큐 작업(jobs/feedback.py)이 돈다. 큐 인자는 id와 가린 하소�
 싣지 않고, 실패 로그도 예외 종류만). 하소연은 로그·trace·DB 어디에도 남기지 않는다."""
 from __future__ import annotations
 
+import asyncio
+from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -27,9 +29,15 @@ async def feedback(body: FeedbackIn, user: UUID = Depends(current_user), repo: R
     msg = await repo.message(body.message_id)
     if msg is None or msg.room_id != body.room_id or msg.sender_id == user:   # 이 방에서 받은 메시지만
         raise HTTPException(status_code=403, detail="not_received")
-    masked = pipeline.mask_complaint(body.text, list((await repo.member_names(body.room_id)).values()))
+    done, room, names = await asyncio.gather(repo.has_feedback(user, msg.id), repo.room(body.room_id),
+                                             repo.member_names(body.room_id))
+    # 이미 남긴 신고이거나 이번 주 상한에 걸린 (보낸 사람, 관계)면 큐(공유 워커·L4)를 쓰지 않는다. 어느 쪽인지 알리지 않는다
+    if done or room is None or await job.at_weekly_cap(repo, msg.sender_id, room.relation, datetime.now(timezone.utc)):
+        return FeedbackOut(ack=ACK)
+    masked = pipeline.mask_complaint(body.text, list(names.values()))
     # ponytail: 메모리 큐라 가린 하소연을 인자로 넘긴다. 큐가 Redis 같은 저장형으로 바뀌면 여기서(요청 안에서) 분류하고
     #   id와 분류 결과만 넣는다.
-    if not queue.enqueue("feedback", job.run, repo, reg, body.room_id, user, body.message_id, masked):
+    if not queue.enqueue("feedback", job.run, repo, reg, body.room_id, user, msg.id, masked,
+                         key=f"feedback:{user}:{msg.id}", max_attempts=1):   # 재시도 없음: 느린 모델에 폭주하지 않게
         raise HTTPException(status_code=503, detail="queue_full")
     return FeedbackOut(ack=ACK)
