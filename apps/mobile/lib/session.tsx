@@ -10,7 +10,9 @@ type SessionLike = { user: { id: string; email?: string } } | null;
 export type SessionValue = Auth & {
   profile: Profile | null;
   profileStatus: 'loading' | 'missing' | 'ok';
-  refreshProfile(): Promise<void>;
+  // 읽기 자체가 실패했다(오프라인 등). 이때 profileStatus는 'missing'이지만 "행이 없다"는 뜻이 아니다. 화면은 이름 입력 대신 다시 불러오기를 보여 준다.
+  profileFailed: boolean;
+  refreshProfile(): Promise<void>; // 결과는 상태(profile·profileStatus·profileFailed)로 알린다
 };
 
 const Ctx = createContext<SessionValue | null>(null);
@@ -22,14 +24,17 @@ const toAuth = (s: SessionLike): Auth =>
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [auth, setAuth] = useState<Auth>(() => (supabase ? { status: 'loading', userId: null, email: null } : toAuth(null)));
   // 읽은 행은 어느 사용자의 것인지 같이 들고 있다. 사용자가 바뀌면 이전 행은 보이지 않는다.
-  const [loaded, setLoaded] = useState<{ userId: string; row: Profile | null } | null>(null);
+  const [loaded, setLoaded] = useState<{ userId: string; row: Profile | null; failed: boolean } | null>(null);
   const userIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!supabase) return;
     let alive = true;
     let evented = false; // 이벤트가 이미 상태를 정했다면 늦게 온 getSession 결과가 덮어쓰지 않는다
-    const apply = (s: SessionLike) => setAuth(toAuth(s)); // 같은 사용자의 토큰 갱신은 userId가 같아 프로필을 다시 읽지 않는다
+    const apply = (s: SessionLike) => {
+      setAuth(toAuth(s)); // 같은 사용자의 토큰 갱신은 userId가 같아 프로필을 다시 읽지 않는다
+      if (!s) setLoaded(null); // 로그아웃하면 읽어 둔 행도 지운다(같은 사람이 다시 들어와도 새로 읽는다)
+    };
     // 콜백 안에서는 supabase 호출을 하지 않고 상태만 바꾼다(콜백 안의 await는 supabase-js 잠금과 교착할 수 있다).
     const { data } = supabase.auth.onAuthStateChange((_event, s) => {
       evented = true;
@@ -46,14 +51,17 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const loadProfile = useCallback(async (id: string) => {
+    if (!supabase) return;
     let row: Profile | null = null;
+    let failed = false;
     try {
-      // 읽기에 실패해도 'missing'으로 본다. 이름 화면의 insert는 이미 행이 있으면 기본 키 충돌로 실패하므로 덮어쓰지 않는다.
-      row = (await supabase?.from('profiles').select('*').eq('id', id).maybeSingle())?.data ?? null;
+      const res = await supabase.from('profiles').select('*').eq('id', id).maybeSingle();
+      failed = res.error !== null;
+      row = failed ? null : res.data;
     } catch {
-      row = null;
+      failed = true;
     }
-    if (userIdRef.current === id) setLoaded({ userId: id, row }); // 그 사이 로그아웃·교체됐다면 버린다
+    if (userIdRef.current === id) setLoaded({ userId: id, row, failed }); // 그 사이 로그아웃·교체됐다면 버린다
   }, []);
 
   useEffect(() => {
@@ -70,7 +78,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<SessionValue>(() => {
     const mine = loaded && loaded.userId === auth.userId ? loaded : null;
-    return { ...auth, profile: mine?.row ?? null, profileStatus: mine ? (mine.row ? 'ok' : 'missing') : 'loading', refreshProfile };
+    return {
+      ...auth,
+      profile: mine?.row ?? null,
+      profileStatus: mine ? (mine.row ? 'ok' : 'missing') : 'loading',
+      profileFailed: mine?.failed ?? false,
+      refreshProfile,
+    };
   }, [auth, loaded, refreshProfile]);
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

@@ -22,6 +22,7 @@ export default function Login() {
   const [error, setError] = useState<string | null>(null);
 
   const send = async () => {
+    if (busy) return;
     const e = email.trim();
     if (!isValidEmail(e)) return setError('이메일 주소를 확인해 주세요');
     if (!supabase) return; // 키가 없으면 게이트가 이 화면을 열지 않는다
@@ -41,6 +42,7 @@ export default function Login() {
   };
 
   const verify = async () => {
+    if (busy) return;
     const token = normalizeOtp(code);
     if (!token) return setError(`${OTP_LENGTH}자리 숫자를 적어 주세요`);
     if (!supabase) return;

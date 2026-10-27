@@ -31,7 +31,13 @@ test('otpErrorMessage: 429 on either step asks to wait', () => {
 });
 test('otpErrorMessage: wrong or expired code', () =>
   expect(otpErrorMessage('verify', { status: 403 })).toBe('코드가 맞지 않거나 시간이 지났어요. 다시 받아 주세요.'));
-test('otpErrorMessage: verify with no status (offline) still gives the code message, never raw error text', () =>
-  expect(otpErrorMessage('verify', {})).toBe('코드가 맞지 않거나 시간이 지났어요. 다시 받아 주세요.'));
+test('otpErrorMessage: 400 and 422 on verify are still a wrong or expired code', () => {
+  expect(otpErrorMessage('verify', { status: 400 })).toBe('코드가 맞지 않거나 시간이 지났어요. 다시 받아 주세요.');
+  expect(otpErrorMessage('verify', { status: 422 })).toBe('코드가 맞지 않거나 시간이 지났어요. 다시 받아 주세요.');
+});
+test('otpErrorMessage: verify with no status, 0 or 5xx is a connection problem, not a wrong code', () => {
+  const CONNECTION = '연결이 불안정할 수도 있어요. 잠시 뒤 다시 해 주세요.';
+  for (const status of [undefined, 0, 500, 503]) expect(otpErrorMessage('verify', { status })).toBe(CONNECTION);
+});
 test('otpErrorMessage: send failure', () =>
   expect(otpErrorMessage('send', { status: 500 })).toBe('코드를 보내지 못했어요. 잠시 뒤 다시 해 주세요.'));

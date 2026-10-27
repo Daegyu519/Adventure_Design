@@ -3,6 +3,7 @@ import { act } from 'react';
 import { createRoot } from 'test-renderer';
 
 import RootLayout from '../app/_layout';
+import tokens from '../lib/tokens.json';
 
 // 글꼴·스플래시·라우터는 가짜로 바꾼다. 가짜 Stack.Protected는 진짜처럼 guard가 거짓이면 화면을 아예 그리지 않는다.
 jest.mock('expo-font', () => ({ useFonts: () => [true, null] }));
@@ -55,7 +56,9 @@ async function mount() {
     root.container
       .queryAll((n) => typeof n.props.testID === 'string' && n.props.testID.startsWith('screen:'))
       .map((n) => String(n.props.testID).slice('screen:'.length));
-  return { root, screens };
+  // 읽는 동안에는 화면 대신 바탕색만 칠한 빈 화면을 그린다(스플래시가 걷힌 뒤 흰 프레임이 번쩍이지 않게).
+  const blank = () => root.container.queryAll((n) => n.props.style?.flex === 1 && n.props.style?.backgroundColor === tokens.light.background);
+  return { root, screens, blank };
 }
 
 beforeEach(() => {
@@ -64,9 +67,9 @@ beforeEach(() => {
   jest.clearAllMocks();
 });
 
-test('layout: consent not read yet → draws nothing and keeps the splash', async () => {
-  const { root, screens } = await mount();
-  expect(root.container.children).toHaveLength(0);
+test('layout: consent not read yet → only the background-colored blank view, and the splash stays', async () => {
+  const { screens, blank } = await mount();
+  expect(blank()).toHaveLength(1);
   expect(screens()).toEqual([]);
   expect(SplashScreen.hide).not.toHaveBeenCalled();
 });
@@ -85,23 +88,26 @@ test('layout: no supabase keys → straight to the tabs, no login', async () => 
   expect(screens()).toEqual(['(tabs)']);
 });
 
-test('layout: keys + session still loading → draws nothing (no login flash), then login once known to be signed out', async () => {
+test('layout: keys + session still loading → blank (no login flash), then login once known to be signed out', async () => {
   mockConsented = true;
   const fake = fakeSupabase();
-  const { root, screens } = await mount();
-  expect(root.container.children).toHaveLength(0);
+  const { screens, blank } = await mount();
+  expect(blank()).toHaveLength(1);
+  expect(screens()).toEqual([]);
   expect(SplashScreen.hide).not.toHaveBeenCalled();
   await fake.session(null);
+  expect(blank()).toHaveLength(0);
   expect(screens()).toEqual(['login']);
   expect(SplashScreen.hide).toHaveBeenCalled();
 });
 
-test('layout: signed in → nothing while the profile loads, then profile screen or tabs', async () => {
+test('layout: signed in → blank while the profile loads (after the splash is gone too), then profile screen', async () => {
   mockConsented = true;
   const fake = fakeSupabase();
-  const { root, screens } = await mount();
+  const { screens, blank } = await mount();
   await fake.session(SESSION);
-  expect(root.container.children).toHaveLength(0); // 로그인 화면이 번쩍이지 않는다
+  expect(blank()).toHaveLength(1); // 로그인 화면도, 아무것도 없는 흰 프레임도 아니다
+  expect(screens()).toEqual([]);
   await fake.profile(null);
   expect(screens()).toEqual(['profile']);
 });

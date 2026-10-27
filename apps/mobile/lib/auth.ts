@@ -23,6 +23,10 @@ export function validateName(s: string): Checked {
 
 // 서버 오류 문구는 그대로 보여 주지 않는다(내부 정보·영문). 상태 코드만 보고 고정 문구를 고른다.
 export function otpErrorMessage(step: 'send' | 'verify', err: { status?: number }): string {
-  if (err.status === 429) return '잠시 뒤 다시 받아 주세요';
-  return step === 'verify' ? '코드가 맞지 않거나 시간이 지났어요. 다시 받아 주세요.' : '코드를 보내지 못했어요. 잠시 뒤 다시 해 주세요.';
+  const s = err.status;
+  if (s === 429) return '잠시 뒤 다시 받아 주세요';
+  if (step === 'send') return '코드를 보내지 못했어요. 잠시 뒤 다시 해 주세요.';
+  // 상태가 없거나(0 포함) 5xx면 서버에 닿지 못했거나 서버 문제다. 코드가 틀렸다고 말하지 않는다.
+  if (!s || s >= 500) return '연결이 불안정할 수도 있어요. 잠시 뒤 다시 해 주세요.';
+  return '코드가 맞지 않거나 시간이 지났어요. 다시 받아 주세요.';
 }

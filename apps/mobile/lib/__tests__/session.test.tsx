@@ -98,18 +98,37 @@ test('session: profile read still pending → profileStatus loading (not missing
   expect(get()).toMatchObject({ status: 'in', profileStatus: 'loading', profile: null });
 });
 
-test('session: signed in without a row → missing', async () => {
+test('session: signed in without a row → missing, and that is not a failure', async () => {
   const s = setup(SESSION);
   s.maybeSingle.mockResolvedValue({ data: null, error: null });
   const { get } = await mount();
-  expect(get()).toMatchObject({ status: 'in', profileStatus: 'missing', profile: null });
+  expect(get()).toMatchObject({ status: 'in', profileStatus: 'missing', profile: null, profileFailed: false });
 });
 
-test('session: a failed profile read → missing (the name form; its insert will not overwrite an existing row)', async () => {
+test('session: a profile read that errors is profileFailed, not a silent missing (gate still sees missing)', async () => {
+  const s = setup(SESSION);
+  s.maybeSingle.mockResolvedValue({ data: null, error: { code: '08006', message: 'connection' } });
+  const { get } = await mount();
+  expect(get()).toMatchObject({ profileStatus: 'missing', profile: null, profileFailed: true });
+});
+
+test('session: a profile read that throws is profileFailed too', async () => {
   const s = setup(SESSION);
   s.maybeSingle.mockRejectedValue(new Error('offline'));
   const { get } = await mount();
-  expect(get().profileStatus).toBe('missing');
+  expect(get()).toMatchObject({ profileStatus: 'missing', profileFailed: true });
+});
+
+test('session: refreshProfile after a failure clears profileFailed when the read works; a second failure keeps it', async () => {
+  const s = setup(SESSION);
+  s.maybeSingle.mockRejectedValue(new Error('offline'));
+  const { get } = await mount();
+  expect(get().profileFailed).toBe(true);
+  await act(async () => get().refreshProfile()); // 아직 오프라인
+  expect(get().profileFailed).toBe(true);
+  s.maybeSingle.mockResolvedValue({ data: ROW, error: null });
+  await act(async () => get().refreshProfile());
+  expect(get()).toMatchObject({ profileFailed: false, profileStatus: 'ok', profile: ROW });
 });
 
 test('session: SIGNED_IN after login → in, profile read for that user', async () => {
@@ -165,6 +184,36 @@ test('session: unmount unsubscribes from auth changes', async () => {
   const { root } = await mount();
   await act(async () => root.unmount());
   expect(s.unsubscribe).toHaveBeenCalledTimes(1);
+});
+
+test('session: after sign-out the old profile is cleared, so the same user signing back in waits for a fresh read', async () => {
+  const s = setup(SESSION);
+  s.maybeSingle.mockResolvedValue({ data: ROW, error: null });
+  const { get } = await mount();
+  expect(get().profileStatus).toBe('ok');
+  await act(async () => s.emit('SIGNED_OUT', null));
+  s.maybeSingle.mockReturnValue(new Promise(() => {}));
+  await act(async () => s.emit('SIGNED_IN', SESSION));
+  expect(get()).toMatchObject({ status: 'in', userId: 'u1', profileStatus: 'loading', profile: null });
+});
+
+test('session: a getSession result that arrives after an auth event does not overwrite it', async () => {
+  const s = setup('pending');
+  s.maybeSingle.mockResolvedValue({ data: ROW, error: null });
+  const { get } = await mount();
+  await act(async () => s.emit('SIGNED_IN', SESSION)); // 이벤트가 먼저
+  await act(async () => s.finishSession(null)); // 늦게 온 옛 결과
+  expect(get()).toMatchObject({ status: 'in', userId: 'u1' });
+});
+
+test('session: an auth event after unmount starts no profile read and logs nothing', async () => {
+  const error = jest.spyOn(console, 'error').mockImplementation(() => {});
+  const s = setup(null);
+  const { root } = await mount();
+  await act(async () => root.unmount());
+  await act(async () => s.emit('SIGNED_IN', SESSION));
+  expect(s.fake.from).not.toHaveBeenCalled();
+  expect(error).not.toHaveBeenCalled();
 });
 
 test('session: never logs the email', async () => {

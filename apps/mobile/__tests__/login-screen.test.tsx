@@ -125,3 +125,34 @@ test('login: 이메일과 코드를 로그에 남기지 않는다', async () => 
   expect(logged).not.toContain('987654');
   jest.restoreAllMocks();
 });
+
+test('login: 확인이 네트워크 오류로 던져지면 코드가 틀렸다고 하지 않고 연결 문구를 보여 준다', async () => {
+  mockVerify.mockRejectedValue(new Error('network'));
+  const { type, press, texts } = await setup();
+  await type('이메일', 'a@b.co');
+  await press('코드 받기');
+  await type(SENT, '123456');
+  await press('로그인');
+  expect(texts()).toContain('연결이 불안정할 수도 있어요. 잠시 뒤 다시 해 주세요.');
+  expect(texts()).not.toContain('코드가 맞지 않거나');
+});
+
+test('login: 코드 받기를 보내는 중에 다시 제출(Enter)해도 한 번만 보낸다', async () => {
+  mockOtp.mockReturnValue(new Promise(() => {})); // 응답이 올 때까지 멈춤
+  const { type, press, field } = await setup();
+  await type('이메일', 'a@b.co');
+  await press('코드 받기');
+  await act(async () => field('이메일').props.onSubmitEditing());
+  expect(mockOtp).toHaveBeenCalledTimes(1);
+});
+
+test('login: 확인하는 중에 다시 제출(Enter)해도 한 번만 확인한다', async () => {
+  mockVerify.mockReturnValue(new Promise(() => {}));
+  const { type, press, field } = await setup();
+  await type('이메일', 'a@b.co');
+  await press('코드 받기');
+  await type(SENT, '123456');
+  await press('로그인');
+  await act(async () => field(SENT).props.onSubmitEditing());
+  expect(mockVerify).toHaveBeenCalledTimes(1);
+});
