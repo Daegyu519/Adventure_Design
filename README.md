@@ -19,7 +19,7 @@
 
 ## 실행
 
-명령은 `CLAUDE.md`의 "명령" 표를 본다. 환경 변수 이름은 `.env.example`에 있고, 값은 `.env`(git에 넣지 않음)에 직접 넣는다.
+명령은 `CLAUDE.md`의 "명령" 표를 본다. 환경 변수 이름은 `.env.example`(엔진·협업)과 `apps/mobile/.env.example`(앱)에 있고, 값은 각각 `.env`·`apps/mobile/.env`(git에 넣지 않음)에 직접 넣는다.
 
 ## 협업
 
