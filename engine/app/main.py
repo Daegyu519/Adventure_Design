@@ -8,6 +8,7 @@ import yaml
 from fastapi import FastAPI
 from pydantic import BaseModel
 
+from app.db import PgRepo
 from app.settings import Settings
 from harness.providers import available
 from harness.router import chains
@@ -19,9 +20,16 @@ def load_config() -> dict:
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     load_config()  # 파일이 없거나 깨졌으면 요청이 아니라 시작할 때 실패한다
-    yield
+    dsn = Settings.from_env().supabase_db_url
+    repo = await PgRepo.connect(dsn) if dsn else None  # 풀은 min_size=0: DB가 죽어 있어도 시작한다
+    app.state.repo = repo
+    try:
+        yield
+    finally:
+        if repo:
+            await repo.close()
 
 
 app = FastAPI(title="tone-chat engine", lifespan=lifespan)

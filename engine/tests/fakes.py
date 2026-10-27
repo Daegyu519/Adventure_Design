@@ -1,0 +1,231 @@
+"""메모리 Repo. tests/test_db.py의 계약 테스트가 PgRepo와 같은 동작을 강제한다.
+시드 메서드는 동기, Repo 메서드는 async. 상태는 공개 속성이다(fake.traces, fake.events, fake.feedback_log, …)."""
+from __future__ import annotations
+
+import copy
+import json
+import uuid
+from dataclasses import asdict, dataclass
+from datetime import date, datetime, timezone
+from itertools import count
+from uuid import UUID
+
+from app.db import FeedbackWrite, Msg, PushTarget, Room, SentMsg, TraceRow, week_start
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _jsonb(v: dict) -> dict:
+    """DB의 jsonb처럼: 직렬화할 수 있어야 하고, 넣은 객체와 따로 논다."""
+    return json.loads(json.dumps(v, ensure_ascii=False))
+
+
+@dataclass
+class SenderPat:
+    count: int
+    strength: float
+    feeling: str | None
+    active_from: datetime
+
+
+class FakeRepo:
+    def __init__(self) -> None:
+        self.users: dict[UUID, str] = {}
+        self.rooms: dict[UUID, dict] = {}                      # {kind, relation, title}
+        self.members: dict[UUID, dict[UUID, bool]] = {}        # room → {user: muted}
+        self.messages: dict[int, Msg] = {}
+        self.push_tokens: list[PushTarget] = []
+        self.events: list[dict] = []                           # public.tone_events 행
+        self.mirror_attempts: list[dict] = []
+        self.traces: list[dict] = []                           # tone.analysis_traces 행
+        self.feedback_log: list[dict] = []
+        self.sender_pats: dict[tuple[UUID, str, str], SenderPat] = {}
+        self.global_pats: dict[str, int] = {}
+        self.pattern_reporters: set[tuple[str, UUID]] = set()
+        self.baselines: dict[UUID, dict] = {}
+        self._ids = count(1)
+
+    # ── 시드 ───────────────────────────────────────────
+
+    def add_user(self, name: str) -> UUID:
+        uid = uuid.uuid4()
+        self.users[uid] = name
+        return uid
+
+    def add_room(self, kind: str, relation: str, members: list[UUID], title: str | None = None) -> UUID:
+        rid = uuid.uuid4()
+        self.rooms[rid] = {"kind": kind, "relation": relation, "title": title}
+        self.members[rid] = {m: False for m in members}
+        return rid
+
+    def add_message(self, room_id: UUID, sender_id: UUID, text: str, *, image_path: str | None = None,
+                    reply_to: int | None = None, at: datetime | None = None) -> int:
+        mid = next(self._ids)
+        self.messages[mid] = Msg(mid, room_id, sender_id, text, image_path, reply_to, at or _now())
+        return mid
+
+    def set_muted(self, room_id: UUID, user_id: UUID) -> None:
+        self.members[room_id][user_id] = True
+
+    def add_push_token(self, user_id: UUID, token: str, platform: str) -> None:
+        self.push_tokens.append(PushTarget(user_id, token, platform))
+
+    def add_event(self, user_id: UUID, room_id: UUID, kind: str, *, at: datetime | None = None) -> None:
+        self.events.append({"id": next(self._ids), "room_id": room_id, "user_id": user_id, "kind": kind,
+                            "risk": None, "top_reading": None, "signals": None, "choice": None,
+                            "created_at": at or _now()})
+
+    def add_mirror_attempt(self, user_id: UUID, kind: str, card_ref: str, *, gap: int | None = None,
+                           at: datetime | None = None) -> None:
+        self.mirror_attempts.append({"id": next(self._ids), "user_id": user_id, "kind": kind, "card_ref": card_ref,
+                                     "answer_score": None, "predicted": None, "panel_bin": None, "gap": gap,
+                                     "created_at": at or _now()})
+
+    def add_sender_pattern(self, sender_id: UUID, relation: str, trigger: str, *, count: int = 1,
+                           strength: float = 1.0, feeling: str | None = "차갑게", active_from: datetime) -> None:
+        self.sender_pats[(sender_id, relation, trigger)] = SenderPat(count, strength, feeling, active_from)
+
+    def set_global(self, trigger: str, count: int) -> None:
+        self.global_pats[trigger] = count
+
+    def rows(self, table: str) -> list[dict]:
+        tables = {
+            "public.tone_events": lambda: self.events,
+            "public.mirror_attempts": lambda: self.mirror_attempts,
+            "public.push_tokens": lambda: [asdict(t) for t in self.push_tokens],
+            "tone.analysis_traces": lambda: self.traces,
+            "tone.feedback_log": lambda: self.feedback_log,
+            "tone.sender_patterns": lambda: [{"sender_id": s, "relation": r, "trigger": t, **asdict(p)}
+                                             for (s, r, t), p in self.sender_pats.items()],
+            "tone.global_patterns": lambda: [{"trigger": t, "count": n} for t, n in self.global_pats.items()],
+            "tone.pattern_reporters": lambda: [{"trigger": t, "reporter_id": u} for t, u in self.pattern_reporters],
+            "tone.baselines": lambda: [{"user_id": u, **b} for u, b in self.baselines.items()],
+        }
+        return copy.deepcopy(tables[table]())
+
+    # ── Repo ──────────────────────────────────────────
+
+    async def is_member(self, room_id: UUID, user_id: UUID) -> bool:
+        return user_id in self.members.get(room_id, {})
+
+    async def room(self, room_id: UUID) -> Room | None:
+        r = self.rooms.get(room_id)
+        return Room(room_id, r["kind"], r["relation"], r["title"], len(self.members[room_id])) if r else None
+
+    async def recent_messages(self, room_id: UUID, limit: int = 8) -> list[Msg]:
+        msgs = sorted((m for m in self.messages.values() if m.room_id == room_id), key=lambda m: (m.created_at, m.id))
+        return msgs[-limit:] if limit > 0 else []
+
+    async def message(self, message_id: int) -> Msg | None:
+        return self.messages.get(message_id)
+
+    async def member_names(self, room_id: UUID) -> dict[UUID, str]:
+        return {u: self.users[u] for u in self.members.get(room_id, {})}
+
+    async def sender_patterns(self, sender_id: UUID, relation: str, now: datetime) -> dict[str, dict]:
+        return {t: {"count": p.count, "strength": p.strength, "feeling": p.feeling}
+                for (s, r, t), p in self.sender_pats.items()
+                if (s, r) == (sender_id, relation) and p.active_from <= now}
+
+    async def global_patterns(self) -> dict[str, int]:
+        return dict(self.global_pats)
+
+    async def baseline(self, user_id: UUID) -> dict | None:
+        b = self.baselines.get(user_id)
+        return dict(b) if b else None
+
+    async def update_baseline(self, user_id: UUID, length: int, polite: bool, softener: bool) -> None:
+        b = self.baselines.get(user_id)
+        if b is None:
+            self.baselines[user_id] = {"avg_len": float(length), "polite_rate": float(polite),
+                                       "softener_rate": float(softener), "n": 1}
+            return
+        n = b["n"]
+        for key, v in (("avg_len", length), ("polite_rate", polite), ("softener_rate", softener)):
+            b[key] = ((b[key] or 0.0) * n + float(v)) / (n + 1)
+        b["n"] = n + 1
+
+    async def insert_trace(self, row: TraceRow) -> None:
+        self.traces.append({**asdict(row), "experts": _jsonb(row.experts), "created_at": _now()})
+
+    async def insert_event(self, user_id: UUID, room_id: UUID, kind: str, top_reading: str | None,
+                           signals: dict) -> None:
+        self.events.append({"id": next(self._ids), "room_id": room_id, "user_id": user_id, "kind": kind,
+                            "risk": None, "top_reading": top_reading, "signals": _jsonb(signals), "choice": None,
+                            "created_at": _now()})
+
+    async def weekly_feedback_count(self, sender_id: UUID, relation: str, since: datetime) -> int:
+        def counts(f: dict) -> bool:
+            m = self.messages.get(f["message_id"])
+            return (f["usable"] and f["created_at"] >= since and m is not None and m.sender_id == sender_id
+                    and self.rooms[f["room_id"]]["relation"] == relation)
+        return sum(1 for f in self.feedback_log if counts(f))
+
+    async def apply_feedback(self, fb: FeedbackWrite) -> bool:
+        if any((f["reporter_id"], f["message_id"]) == (fb.reporter_id, fb.message_id) for f in self.feedback_log):
+            return False
+        self.feedback_log.append({"id": next(self._ids), "room_id": fb.room_id, "reporter_id": fb.reporter_id,
+                                  "message_id": fb.message_id, "usable": fb.usable,
+                                  "pattern_count": len(fb.patterns) if fb.usable else 0, "created_at": _now()})
+        if not fb.usable:
+            return True
+        for p in fb.patterns:
+            if (p.trigger, fb.reporter_id) not in self.pattern_reporters:
+                self.pattern_reporters.add((p.trigger, fb.reporter_id))
+                self.global_pats[p.trigger] = self.global_pats.get(p.trigger, 0) + 1
+            if fb.to_sender:
+                key = (fb.sender_id, fb.relation, p.trigger)
+                old = self.sender_pats.get(key)
+                if old is None:
+                    self.sender_pats[key] = SenderPat(1, float(p.strength), p.feeling, fb.active_from)
+                else:
+                    self.sender_pats[key] = SenderPat(old.count + 1, (old.strength * old.count + p.strength) / (old.count + 1),
+                                                      p.feeling, fb.active_from)
+        return True
+
+    async def push_targets(self, room_id: UUID, sender_id: UUID) -> list[PushTarget]:
+        members = self.members.get(room_id, {})
+        return [t for t in self.push_tokens
+                if t.user_id in members and t.user_id != sender_id and not members[t.user_id]]
+
+    async def delete_push_token(self, user_id: UUID, token: str) -> None:
+        self.push_tokens = [t for t in self.push_tokens if (t.user_id, t.token) != (user_id, token)]
+
+    async def sent_messages(self, user_id: UUID, since: datetime, limit: int = 50) -> list[SentMsg]:
+        mine = [m for m in self.messages.values() if m.sender_id == user_id and m.text and m.created_at >= since]
+        mine.sort(key=lambda m: (m.created_at, m.id), reverse=True)
+        return [SentMsg(m.id, m.room_id, m.text, self.rooms[m.room_id]["relation"], m.created_at) for m in mine[:limit]]
+
+    async def mirror_refs(self, user_id: UUID) -> set[str]:
+        return {f"{a['kind']}|{a['card_ref']}" for a in self.mirror_attempts if a["user_id"] == user_id}
+
+    async def insert_mirror_attempt(self, user_id: UUID, kind: str, card_ref: str, answer_score: int | None,
+                                    predicted: int | None, panel_bin: int | None, gap: int | None) -> None:
+        self.mirror_attempts.append({"id": next(self._ids), "user_id": user_id, "kind": kind, "card_ref": card_ref,
+                                     "answer_score": answer_score, "predicted": predicted, "panel_bin": panel_bin,
+                                     "gap": gap, "created_at": _now()})
+
+    async def event_counts(self, user_id: UUID) -> dict[str, int]:
+        out: dict[str, int] = {}
+        for e in self.events:
+            if e["user_id"] == user_id:
+                out[e["kind"]] = out.get(e["kind"], 0) + 1
+        return out
+
+    async def hints_by_week(self, user_id: UUID, since: datetime) -> dict[date, int]:
+        out: dict[date, int] = {}
+        for e in self.events:
+            if e["user_id"] == user_id and e["kind"] == "hint_shown" and e["created_at"] >= since:
+                wk = week_start(e["created_at"])
+                out[wk] = out.get(wk, 0) + 1
+        return out
+
+    async def predict_gap_by_week(self, user_id: UUID, since: datetime) -> dict[date, float]:
+        gaps: dict[date, list[int]] = {}
+        for a in self.mirror_attempts:
+            if (a["user_id"] == user_id and a["kind"] == "predict" and a["gap"] is not None
+                    and a["created_at"] >= since):
+                gaps.setdefault(week_start(a["created_at"]), []).append(a["gap"])
+        return {wk: sum(g) / len(g) for wk, g in gaps.items()}

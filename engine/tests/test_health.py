@@ -1,6 +1,11 @@
+from types import SimpleNamespace
+
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
+from app.db import PgRepo
+from app.deps import get_repo
 from app.main import app, load_config, model_status
 
 
@@ -56,3 +61,25 @@ def test_startup_fails_when_models_yaml_missing(monkeypatch, tmp_path):
         with TestClient(app):
             pass
     load_config.cache_clear()
+
+
+def test_get_repo_503_without_db():
+    request = SimpleNamespace(app=SimpleNamespace(state=SimpleNamespace()))
+    with pytest.raises(HTTPException) as e:
+        get_repo(request)
+    assert e.value.status_code == 503
+
+
+def test_lifespan_without_db_url_has_no_repo(monkeypatch):
+    monkeypatch.setenv("SUPABASE_DB_URL", "")
+    with TestClient(app) as c:
+        assert app.state.repo is None
+        assert c.get("/health").status_code == 200
+
+
+def test_lifespan_dead_db_still_serves_health(monkeypatch, tmp_path):
+    """풀은 min_size=0이라 시작할 때 연결하지 않는다: DB가 죽어 있어도 /health는 뜬다."""
+    monkeypatch.setenv("SUPABASE_DB_URL", f"postgresql://postgres@/nope?host={tmp_path}")
+    with TestClient(app) as c:
+        assert isinstance(app.state.repo, PgRepo)
+        assert c.get("/health").status_code == 200
