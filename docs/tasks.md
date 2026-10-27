@@ -30,7 +30,7 @@
 | T-07 | 로그인 화면(이메일 OTP 또는 매직링크), 첫 로그인 시 `profiles` 생성 | 앱 | T-02, T-03a, T-04 | 웹과 폰에서 로그인 후 프로필 행 생성 | 대기 |
 | T-08 | 방 만들기·초대 화면: 초대 코드 만들기·입력, `accept_invite`로 1:1 방 생성 또는 그룹 참여, 그룹 만들기(3~8명), 관계(친구·팀원 등) 선택 | 앱, DB | T-07 | 두 계정이 초대 코드로 연결되어 1:1 방 1개 생성, 세 계정이 그룹방 하나에 참여 | 대기 |
 | T-09 | 대화 목록(1:1·그룹, 안 읽은 수) + 대화방, 메시지 보내기, Realtime 수신, 과거 메시지 불러오기. 답장, 공감, 읽음, 입력 중(Presence), 사진, 멘션, 방 정보 화면(멤버, 방 안 검색, 알림 끄기) | 앱 | T-08, T-03b | 두 기기에서 서로 보낸 메시지가 1초 안에 보임. 답장·공감·읽음·입력 중·사진·멘션·검색·알림 끄기가 1:1 방과 그룹방에서 동작 | 대기 |
-| T-10 | DB 웹훅 → `POST /hooks/message`, `X-Hook-Secret` 검증 | 엔진, DB | T-03a, T-05 | mock/로컬 기준: TestClient로 INSERT 수신 로그, 비밀값 틀리면 401, 다른 이벤트 무시(test_hooks.py 통과). 확인: `cd engine && uv run pytest -q tests/test_hooks.py` 11개 통과(브리프의 6개 + 비ASCII 비밀값·UPDATE/DELETE/다른 스키마 무시·422), 전체 `uv run pytest -q` 117개 통과; 비밀값 비교는 `hmac.compare_digest`(bytes), 설정값이 비면 항상 401, 로그에는 id·room만(본문 없음), 변이 4건(빈 비밀값 허용, str 비교, text 로깅, 무시 검사 제거)이 각각 테스트에 걸림 | 완료 |
+| T-10 | DB 웹훅 → `POST /hooks/message`, `X-Hook-Secret` 검증 | 엔진, DB | T-03a, T-05 | mock/로컬 기준: TestClient로 INSERT 수신 로그, 비밀값 틀리면 401, 다른 이벤트 무시(test_hooks.py 통과). 확인: `cd engine && uv run pytest -q tests/test_hooks.py` 17개 통과(브리프의 6개 + 비ASCII 비밀값·UPDATE/DELETE/다른 스키마 무시·422·id 범위·거절 로그 구분), 전체 `uv run pytest -q` 123개 통과; 비밀값 비교는 `hmac.compare_digest`(bytes), 설정값이 비면 항상 401, 로그에는 id·room만(본문 없음), 변이 4건(빈 비밀값 허용, str 비교, text 로깅, 무시 검사 제거)이 각각 테스트에 걸림 | 완료 |
 | T-10-live | 웹훅 실제 연결: Supabase 대시보드 Webhooks(public.messages INSERT) → cloudflared 터널 → 엔진, README 절차대로 | 엔진, DB | T-02, T-10 | 실제 메시지를 보내면 엔진 로그에 수신 기록, 비밀값 틀리면 401 | 대기 |
 | T-34 | 첫 실행 동의 화면: 파일럿 동의, AI 데이터 처리(하소연 원문 미저장 등 개인정보 규칙), iOS 홈 화면 추가 안내(웹 푸시는 iOS 16.4 이상) | 앱 | T-04 | 첫 실행에만 뜨고, 동의해야 로그인으로 넘어감 | 대기 |
 
@@ -63,9 +63,9 @@
 | T-23 | 작업 큐: asyncio 기반, Redis로 바꿀 수 있는 인터페이스 | 엔진 | T-05 | 작업 넣기·실패 재시도 테스트 | 대기 |
 | T-24 | `POST /v1/feedback` → 큐 → L4 → 그룹방(3명 이상) 하소연은 `sender_patterns`(보낸 사람·관계·신호, 다음 날 0시부터 반영), 1:1 하소연은 `global_patterns`에만. `feedback_log`, 관계별 주간 상한 | 엔진 | T-03b, T-12, T-23 | 원문이 어디에도 저장되지 않음, 1:1 하소연이 `sender_patterns`에 들어가지 않음을 테스트로 확인 | 대기 |
 | T-25 | 털어놓기 시트: 받은 메시지에만 "⋯", 안내 문구 표시 | 앱 | T-09, T-24 | 내가 보낸 메시지에는 버튼이 없음 | 대기 |
-| T-26 | 기준선 갱신: 웹훅 → 큐 → `tone.baselines`, L0에 반영 | 엔진 | T-10, T-23 | 메시지 10개 이후 기준선 이탈 신호가 동작 | 대기 |
+| T-26 | 기준선 갱신: 웹훅 → 큐 → `tone.baselines`, L0에 반영 | 엔진 | T-10, T-23 | 메시지 10개 이후 기준선 이탈 신호가 동작. 같은 message_id 웹훅 두 번 → 작업 1개 | 대기 |
 | T-27 | `GET /v1/stats/me` + 리포트 화면(알림 수, 살펴보기 수, 고친 비율, 예측 차이 추이, 주별 힌트 수) | 앱, 엔진 | T-15, T-35 | 이벤트 수와 화면 숫자가 일치, 예측 차이가 `mirror_attempts`와 일치 | 대기 |
-| T-28 | 푸시: `push_tokens` 등록, 웹훅 → 방 멤버(보낸 사람·알림 끈 사람 제외)에게 Android = EAS preview APK + FCM(Expo Push 경유), 웹 = 웹 푸시(서비스 워커, VAPID, `pywebpush`), iOS 네이티브(APNs) = 선택(Apple 개발자 계정 필요), Android 개발 빌드 | 앱, 엔진 | T-03b, T-10, T-23 | 앱을 닫은 상태에서 새 메시지 알림(Android, 웹), 알림 끈 방은 오지 않음 | 대기 |
+| T-28 | 푸시: `push_tokens` 등록, 웹훅 → 방 멤버(보낸 사람·알림 끈 사람 제외)에게 Android = EAS preview APK + FCM(Expo Push 경유), 웹 = 웹 푸시(서비스 워커, VAPID, `pywebpush`), iOS 네이티브(APNs) = 선택(Apple 개발자 계정 필요), Android 개발 빌드 | 앱, 엔진 | T-03b, T-10, T-23 | 앱을 닫은 상태에서 새 메시지 알림(Android, 웹), 알림 끈 방은 오지 않음. 같은 message_id 웹훅 두 번 → 작업 1개 | 대기 |
 | T-35 | 거울 엔진 API: `/v1/mirror/today`, `/v1/mirror/answer`, 엔진 서명 `card_id`, 상황 카드 20장(`engine/content/mirror_cards.yaml`) | 엔진 | T-03b, T-21 | mock 테스트 통과, 위조한 `card_id`는 거부, 실제 대화에서 뽑은 카드는 Gemini로 가지 않음 | 대기 |
 | T-36 | 거울 화면 3종: 역할극, 되돌려 받기, 예측 맞히기 | 앱 | T-07, T-35 | 카드 3장을 끝까지 풀 수 있고, 점수는 차이로만 보임("예측과 한 칸 차이"), `mirror_attempts`에 기록됨 | 대기 |
 

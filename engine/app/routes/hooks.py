@@ -13,13 +13,16 @@ log = logging.getLogger(__name__)
 router = APIRouter()
 
 
+BIGINT = dict(gt=0, lt=2**63)  # messages.id/reply_to는 양수 bigint
+
+
 class MessageRecord(BaseModel):
-    id: int
+    id: int = Field(**BIGINT)
     room_id: UUID
     sender_id: UUID
     text: str = ""
     image_path: str | None = None
-    reply_to: int | None = None
+    reply_to: int | None = Field(None, **BIGINT)
     created_at: datetime
 
 
@@ -40,7 +43,8 @@ def _secret_ok(got: str, want: str) -> bool:
 async def hook_message(request: Request, settings: Settings = Depends(get_settings)) -> dict:
     # 비밀값을 본문보다 먼저 본다: 인증 전에는 본문을 읽지도 않는다.
     if not _secret_ok(request.headers.get("x-hook-secret", ""), settings.hook_secret):
-        log.warning("hook rejected: bad secret")
+        # 헤더 값은 남기지 않는다. 설정이 빈 경우와 값이 틀린 경우만 구분한다.
+        log.warning("hook rejected: %s", "bad secret" if settings.hook_secret else "secret not configured")
         raise HTTPException(status_code=401, detail="unauthorized")
     # 검증 오류(ValidationError)는 입력값(메시지 본문)을 담으므로 응답·로그에 싣지 않고 고정 문구만 낸다.
     try:
@@ -51,5 +55,7 @@ async def hook_message(request: Request, settings: Settings = Depends(get_settin
     except ValidationError:
         raise HTTPException(status_code=422, detail="invalid_payload") from None
     log.info("hook message id=%s room=%s", rec.id, rec.room_id)  # text는 남기지 않는다
-    # 작업 넣기: T-26 기준선, T-28b 푸시
+    # 작업 넣기: T-26 기준선, T-28b 푸시. 뒤 작업은 아래를 지킨다.
+    # - 큐 인자는 `{message_id}`만(멱등 키 f"{kind}:{message_id}"). 본문은 워커가 DB에서 다시 읽고, 큐 인자에는 text를 넣지 않는다.
+    # - enqueue가 실패해도 항상 202를 돌려준다(Supabase pg_net은 재시도하지 않는다).
     return {}

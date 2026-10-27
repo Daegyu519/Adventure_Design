@@ -72,5 +72,26 @@ def test_malformed_payload_422_does_not_echo_text(client):
     assert "비밀문장" not in bad.text
 
 
+@pytest.mark.parametrize("patch", [{"id": 0}, {"id": -1}, {"id": 2**63}, {"reply_to": 0}, {"reply_to": 2**63}],
+                         ids=["id-zero", "id-negative", "id-overflow", "reply-zero", "reply-overflow"])
+def test_ids_outside_bigint_range_422(client, patch):
+    # messages.id/reply_to는 양수 bigint: 범위 밖 값은 큐·DB로 넘어가기 전에 거절한다
+    r = client.post("/hooks/message", json=_insert(**patch), headers=SECRET)
+    assert r.status_code == 422
+
+
+def test_secret_rejection_log_distinguishes_unset_from_wrong(client, caplog):
+    caplog.set_level(logging.DEBUG)
+    client.post("/hooks/message", json=_insert(), headers={"X-Hook-Secret": "wrong-value-xyz"})
+    assert "bad secret" in caplog.text
+    assert "wrong-value-xyz" not in caplog.text
+    caplog.clear()
+    base = app.dependency_overrides[get_settings]()
+    app.dependency_overrides[get_settings] = lambda: dataclasses.replace(base, hook_secret="")
+    client.post("/hooks/message", json=_insert(), headers={"X-Hook-Secret": "wrong-value-xyz"})
+    assert "secret not configured" in caplog.text
+    assert "wrong-value-xyz" not in caplog.text
+
+
 def test_hook_not_in_openapi():
     assert "/hooks/message" not in app.openapi()["paths"]
