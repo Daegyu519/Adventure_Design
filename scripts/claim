@@ -26,5 +26,8 @@ if ! git -C "$ROOT" worktree add -q -b "$BRANCH" "$WT" main; then
   rm -rf "$CLAIM"   # worktree를 못 만들면 잡은 것도 취소
   exit 1
 fi
+# 키 파일은 복사하지 않고 심볼릭 링크만 건다. 원본이 있을 때만, apps/mobile이 worktree에 있을 때만.
+[[ -f "$ROOT/.env" ]] && ln -sf "$ROOT/.env" "$WT/.env"
+[[ -f "$ROOT/apps/mobile/.env" && -d "$WT/apps/mobile" ]] && ln -sf "$ROOT/apps/mobile/.env" "$WT/apps/mobile/.env"
 echo "$NOW | $ACCT | $ID | claimed | $BRANCH | $SLUG" >> "$ROOT/.coord/log.md"
 echo "$WT"
