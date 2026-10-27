@@ -1,0 +1,698 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "tone-chat engine (seed, T-04b)",
+    "version": "0.0.0"
+  },
+  "paths": {
+    "/v1/hint": {
+      "post": {
+        "summary": "Hint",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HintIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HintOut"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/v1/detail": {
+      "post": {
+        "summary": "Detail",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DetailIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetailOut"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/v1/feedback": {
+      "post": {
+        "summary": "Feedback",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedbackIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackOut"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/v1/stats/me": {
+      "get": {
+        "summary": "Stats Me",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatsOut"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/v1/mirror/today": {
+      "post": {
+        "summary": "Mirror Today",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MirrorTodayOut"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/v1/mirror/answer": {
+      "post": {
+        "summary": "Mirror Answer",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MirrorAnswerIn"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MirrorAnswerOut"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Reading": {
+        "type": "string",
+        "enum": [
+          "차갑게",
+          "성의없게",
+          "화나게",
+          "무난하게",
+          "따뜻하게"
+        ]
+      },
+      "Freq": {
+        "type": "string",
+        "enum": [
+          "자주",
+          "가끔",
+          "드물어요"
+        ]
+      },
+      "Intent": {
+        "type": "string",
+        "enum": [
+          "단호하게",
+          "미안하게",
+          "가볍게"
+        ]
+      },
+      "HintIn": {
+        "type": "object",
+        "properties": {
+          "room_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "seq": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "reply_to": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "format": "int64"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "room_id",
+          "text",
+          "seq"
+        ]
+      },
+      "HintBody": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "detail"
+        ]
+      },
+      "HintOut": {
+        "type": "object",
+        "properties": {
+          "seq": {
+            "type": "integer"
+          },
+          "hint": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/HintBody"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "trace_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "seq",
+          "hint",
+          "trace_id"
+        ]
+      },
+      "Readings": {
+        "type": "object",
+        "properties": {
+          "차갑게": {
+            "$ref": "#/components/schemas/Freq"
+          },
+          "성의없게": {
+            "$ref": "#/components/schemas/Freq"
+          },
+          "화나게": {
+            "$ref": "#/components/schemas/Freq"
+          },
+          "무난하게": {
+            "$ref": "#/components/schemas/Freq"
+          },
+          "따뜻하게": {
+            "$ref": "#/components/schemas/Freq"
+          }
+        },
+        "required": [
+          "차갑게",
+          "성의없게",
+          "화나게",
+          "무난하게",
+          "따뜻하게"
+        ]
+      },
+      "DetailIn": {
+        "type": "object",
+        "properties": {
+          "room_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "intent": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Intent"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reply_to": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "format": "int64"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "room_id",
+          "text"
+        ]
+      },
+      "OptionOut": {
+        "type": "object",
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "keep": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "change": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "label",
+          "text",
+          "keep",
+          "change"
+        ]
+      },
+      "DetailOut": {
+        "type": "object",
+        "properties": {
+          "alert": {
+            "type": "boolean"
+          },
+          "top_reading": {
+            "$ref": "#/components/schemas/Reading"
+          },
+          "readings": {
+            "$ref": "#/components/schemas/Readings"
+          },
+          "why": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/OptionOut"
+            }
+          },
+          "mismatch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "footnote": {
+            "type": "string"
+          },
+          "trace_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "alert",
+          "top_reading",
+          "readings",
+          "why",
+          "options",
+          "footnote",
+          "trace_id"
+        ]
+      },
+      "FeedbackIn": {
+        "type": "object",
+        "properties": {
+          "room_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "message_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1000
+          }
+        },
+        "required": [
+          "room_id",
+          "message_id",
+          "text"
+        ]
+      },
+      "FeedbackOut": {
+        "type": "object",
+        "properties": {
+          "ack": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "ack"
+        ]
+      },
+      "WeekCount": {
+        "type": "object",
+        "properties": {
+          "week": {
+            "type": "string",
+            "format": "date"
+          },
+          "count": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "week",
+          "count"
+        ]
+      },
+      "WeekGap": {
+        "type": "object",
+        "properties": {
+          "week": {
+            "type": "string",
+            "format": "date"
+          },
+          "avg_gap": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "week",
+          "avg_gap"
+        ]
+      },
+      "StatsOut": {
+        "type": "object",
+        "properties": {
+          "hints": {
+            "type": "integer"
+          },
+          "details": {
+            "type": "integer"
+          },
+          "fixed": {
+            "type": "integer"
+          },
+          "fix_rate": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "hints_by_week": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WeekCount"
+            }
+          },
+          "predict_gap_trend": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WeekGap"
+            }
+          }
+        },
+        "required": [
+          "hints",
+          "details",
+          "fixed",
+          "fix_rate",
+          "hints_by_week",
+          "predict_gap_trend"
+        ]
+      },
+      "MirrorCard": {
+        "type": "object",
+        "properties": {
+          "card_id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "roleplay",
+              "receive",
+              "predict"
+            ]
+          },
+          "persona": {
+            "type": "string"
+          },
+          "relation": {
+            "type": "string"
+          },
+          "situation": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "card_id",
+          "kind",
+          "persona",
+          "relation",
+          "situation",
+          "message"
+        ]
+      },
+      "MirrorTodayOut": {
+        "type": "object",
+        "properties": {
+          "cards": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MirrorCard"
+            }
+          }
+        },
+        "required": [
+          "cards"
+        ]
+      },
+      "MirrorAnswerIn": {
+        "type": "object",
+        "properties": {
+          "card_id": {
+            "type": "string"
+          },
+          "reply": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 5
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "predicted": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 5
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "card_id"
+        ]
+      },
+      "MirrorAnswerOut": {
+        "type": "object",
+        "properties": {
+          "readings": {
+            "$ref": "#/components/schemas/Readings"
+          },
+          "inner_voice": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reveal": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "options": {
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/OptionOut"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "gap": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "readings"
+        ]
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    }
+  }
+}

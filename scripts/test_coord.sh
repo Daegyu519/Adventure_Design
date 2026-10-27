@@ -105,4 +105,12 @@ assert "! (cd \"$WT2\" && scripts/check >/dev/null 2>&1)" "check must fail when 
 ( cd "$WT2" && echo '{"precision": 0.4}' > eval/baseline.json && git commit -qam base )
 assert "(cd \"$WT2\" && scripts/check >/dev/null 2>&1)" "check must pass when precision >= baseline"
 
+# 6) npm 영역: lockfile이 그대로면 npm ci를 다시 하지 않고, 바뀌면 다시 한다(가짜 npm이 호출을 기록)
+printf '#!/bin/sh\necho "$*" >> "%s/npm.log"\n[ "$1" = ci ] && mkdir -p node_modules\nexit 0\n' "$TMP" > "$TMP/bin/npm" && chmod +x "$TMP/bin/npm"
+( cd "$WT2" && mkdir supabase && echo '{}' > supabase/package.json && echo v1 > supabase/package-lock.json && git add -A && git commit -qm npm )
+(cd "$WT2" && scripts/check >/dev/null 2>&1 && scripts/check >/dev/null 2>&1)
+assert "[ \$(grep -c '^ci' \"$TMP/npm.log\") -eq 1 ]" "npm ci runs once while lockfile is unchanged"
+( cd "$WT2" && echo v2 > supabase/package-lock.json && scripts/check >/dev/null 2>&1 )
+assert "[ \$(grep -c '^ci' \"$TMP/npm.log\") -eq 2 ]" "npm ci runs again after lockfile changes"
+
 echo ALL PASS

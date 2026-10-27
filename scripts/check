@@ -4,12 +4,16 @@
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
-# 새 worktree에는 node_modules가 없다.
-npm_ready() { [ -d "$1/node_modules" ] || (cd "$1" && npm install --silent); }
+# node_modules가 lockfile과 다르면(새 worktree, main을 합쳐 lock이 바뀜) npm ci로 다시 깐다.
+npm_ready() { cmp -s "$1/package-lock.json" "$1/node_modules/.lock-stamp" || (cd "$1" && npm ci --silent && cp package-lock.json node_modules/.lock-stamp); }
 
-if [ -f engine/pyproject.toml ]; then (cd engine && uv run pytest -q); fi
+# --locked: uv.lock이 pyproject와 어긋나면 조용히 고치지 않고 실패한다.
+if [ -f engine/pyproject.toml ]; then (cd engine && uv run --locked pytest -q); fi
 if [ -f supabase/package.json ]; then npm_ready supabase; (cd supabase && npm test --silent); fi
-if [ -f apps/mobile/package.json ]; then npm_ready apps/mobile; (cd apps/mobile && npx tsc --noEmit); fi
+# 앱: 타입 → lint → 테스트 → 색 리터럴 금지(색은 useTheme().colors에서만). grep이 찾으면 그 줄을 보이고 실패한다.
+if [ -f apps/mobile/package.json ]; then npm_ready apps/mobile; (cd apps/mobile && npx tsc --noEmit && npm run lint --silent && npm test --silent \
+  && ! grep -rnE "['\"]#[0-9A-Fa-f]{3,8}['\"]|rgba?\(" app components lib --include='*.ts' --include='*.tsx' 2>/dev/null); fi
+if [ -f design/check_contrast.py ]; then python3 design/check_contrast.py; fi
 
 # 프롬프트·모델 설정을 바꿨으면 정밀도가 baseline보다 낮을 때 실패.
 if [ -f eval/run_eval.py ] && [ -n "$(git diff --name-only "$(git merge-base main HEAD)" -- engine/prompts engine/config/models.yaml)" ]; then
