@@ -21,7 +21,8 @@
 | T-04 | Expo 앱 초기화: expo-router, TypeScript strict, Supabase 클라이언트, 환경 변수 | 앱 | T-01, D-01 | 웹·iOS·Android에서 빈 화면 실행. 확인: `tsc --noEmit` 0 오류, `npm run lint` 오류 0, `expo export --platform web` 성공, `expo-doctor` 20/20, 웹에서 탭 4개(대화·거울·리포트·설정) 라이트·다크 스크린샷. iOS·Android 실행은 개발 빌드가 필요해 T-28에서 확인한다(`eas.json`·`expo-dev-client`·`expo-notifications` 설정만 해 둠) | 완료 |
 | T-04b | 앱 바탕: 테스트 러너, 생성 타입 자리(engine OpenAPI, db seed), 엔진 클라이언트 + mock | 앱 | T-04 | `npm test` 통과, `scripts/check`가 앱 테스트·색 리터럴 검사를 돌림. 확인: npm test 7개, scripts/check 통과(앱 tsc → lint → jest → 색 리터럴 grep, 대비 검사, lockfile 스탬프로 npm ci, `uv run --locked`), 색 리터럴을 넣으면 check 실패, `bash scripts/test_coord.sh` ALL PASS(스탬프 테스트 추가). engine.openapi.json은 ARCHITECTURE 4장 seed(엔진 T-14 land 뒤 `gen:engine:pull`), db.ts seed, T-02 대기 | 완료 |
 | T-05 | 엔진 초기화: FastAPI, `settings.py`, `models.yaml` 로딩, `/health`, pytest | 엔진 | T-01 | `/health` 200, 테스트 1개 통과. 확인: uv run pytest -q 6 passed(경고 없음), /health 200 curl 확인. 컨테이너는 T-29 | 완료 |
-| T-06 | 엔진 인증: Supabase JWKS로 토큰 검증하는 의존성, 방 멤버 확인 헬퍼(`room_members`) | 엔진 | T-05 | 정상·만료·위조 토큰, 비참여자 403 테스트 | 대기 |
+| T-06a | 엔진 DB 접근 계층: asyncpg Repo, FakeRepo 계약 테스트, 엔진 색인·pattern_reporters 마이그레이션 | 엔진, DB | T-03b, T-05 | 같은 계약 테스트가 FakeRepo와 임시 Postgres 둘 다 통과. 확인: `cd engine && uv run pytest -q tests/test_db.py` 24 passed(fake 12 + 임시 Postgres 16 클러스터 12, postgres 없으면 12 passed 12 skipped), 엔진 전체 106 passed, `cd supabase && npm test` 24 pass | 완료 |
+| T-06b | 엔진 인증: Supabase JWKS로 토큰 검증하는 의존성, 방 멤버 확인 헬퍼(room_members) | 엔진 | T-06a | 정상·만료·위조 토큰, 비참여자 403 테스트 | 대기 |
 
 ## 단계 1. 채팅
 
@@ -43,8 +44,8 @@
 |---|---|---|---|---|---|
 | T-11 | 프로토타입 하네스 이전: router, providers, schemas, korean, pii, prompts, mock_rules, gate, guard | 엔진 | T-05 | 프로토타입의 해당 테스트가 `engine`에서 통과. 확인: uv run pytest -q 12 passed, 1 skipped(경고 없음) — 프로토타입 test_basic 5개 + Gemini 금지 테스트 + health 6개. 6번째(단일 신고 부스트 없음)는 judge가 T-13에서 `layers/aggregate.py`로 옮겨질 때 켜지도록 importorskip 처리(judge.py를 임시로 두면 13 passed 확인) | 완료 |
 | T-12 | 전문가 인터페이스(`experts/base.py`), 레지스트리, `LLMExpert`. `models.yaml`의 `experts` 형식. `pii.mask` 입구 한 곳 + 이름 복원 | 엔진 | T-11 | 설정만 바꿔 전문가를 추가·제거할 수 있음, 전문가에는 가린 문장만 가고 응답의 이름은 복원되며 대응표가 로그·trace에 없음을 테스트로 확인. 확인: uv run pytest -q 53 passed, 1 skipped(-W error, 경고 없음, conftest가 네트워크 차단) — test_experts.py 40개 통과: 설정만으로 추가·제거(test_add_remove_expert_by_config_only), 가린 문장만 감(test_name_survives_rewrite_round_trip의 spy.seen()에 이름 없음, test_router_masks_before_third_party의 외부 공급자 안전망), 이름 복원(test_masker_tokens_and_restore, rewrite 왕복), trace에 이름 없음, pii import는 router만, 캐시는 복사본을 돌려줌(test_router_cache_returns_copies), 패턴 확장(test_pii_patterns) | 완료 |
-| T-13 | 집계기: 말투 전문가 N개 가중 평균, 의견 차이, 늦은 전문가 제외, 기권, 보낸 사람 패턴 조건(`sender_patterns`, `active_from`, `global_min_obs`) | 엔진 | T-12 | 전문가 1개·2개·0개, 의견 갈림 케이스 테스트 | 대기 |
-| T-14 | `POST /v1/hint`: 토큰 → 방 확인 → 최근 대화 8개 → 실시간 경로 → 문구 검사. OpenAPI 타입 생성 | 엔진 | T-06, T-13 | mock으로 1.5초 안 응답, 시간 초과 시 `hint=null` | 대기 |
+| T-13 | 집계기: 말투 전문가 N개 가중 평균, 의견 차이, 늦은 전문가 제외, 기권, 보낸 사람 패턴 조건(`sender_patterns`, `active_from`, `global_min_obs`) | 엔진 | T-12 | 전문가 1개·2개·0개, 의견 갈림 케이스 테스트. 확인: uv run pytest -q 79 passed, skipped 0 — 전문가 1·2·0개, 의견 갈림, 알림이면 부정 셋 중 최대 읽힘, 읽힘에 Infinity·NaN이 오면 스키마 실패로 폴백, z ±1e4에서도 넘침 없음, α=0 제외, confidence 범위 밖은 [0,1]로 자르고 NaN·무한대는 0, 신고 하나(전체 1·4건)로는 L0·L3 둘 다 안 오르고 5건부터 오름 통과. `test_single_report_alone_does_not_boost`가 aggregate로 켜짐. `active_from`은 저장소 조회(T-06a·T-14)에서 거른다 | 완료 |
+| T-14 | `POST /v1/hint`: 토큰 → 방 확인 → 최근 대화 8개 → 실시간 경로 → 문구 검사. OpenAPI 타입 생성 | 엔진 | T-06b, T-13 | mock으로 1.5초 안 응답, 시간 초과 시 `hint=null` | 대기 |
 | T-15 | 앱 입력 중 힌트: 0.5초 디바운스, seq, AbortController, 입력창 위 힌트 영역, `hint_shown`·`sent_with_hint`·`sent_after_fix` 기록 | 앱 | T-09c, T-14, T-03b | 지은·민수 시나리오에서 힌트가 보낸 사람에게만 뜸 | 대기 |
 | T-16 | 대조 세트 30쌍 라벨링 (같은 문장, 다른 맥락). 팀원이 각자 블라인드로 라벨 후 합의 | 평가 | - | `eval/contrast_set.jsonl` 30쌍 이상, 라벨 일치율 기록 | 대기 |
 | T-17 | 평가 스크립트: 엔진 실시간·상세 경로로 정밀도·재현율·기권률·맥락 구분 계산. `scripts/check`(land)에서 mock으로 실행, `eval/baseline.json` 생성 | 평가 | T-14, T-16 | 실제 키로 1회 실행한 결과표 저장, `eval/baseline.json` 있음 | 대기 |

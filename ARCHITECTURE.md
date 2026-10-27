@@ -235,7 +235,8 @@ sequenceDiagram
 | Storage `chat-images` | 경로 `<room_id>/…` | 방 멤버 | 방 멤버 |
 | `tone.feedback_log` | id, room_id, reporter_id, message_id, usable, pattern_count, created_at | 엔진 | 엔진 |
 | `tone.sender_patterns` | sender_id, relation, trigger, count, strength, feeling, active_from, updated_at. PK(sender_id, relation, trigger) | 엔진 | 엔진 |
-| `tone.global_patterns` | trigger, count | 엔진 | 엔진 |
+| `tone.global_patterns` | trigger, count(서로 다른 신고자 수) | 엔진 | 엔진 |
+| `tone.pattern_reporters` | trigger, reporter_id, created_at. PK(reporter_id, trigger). 같은 신고자를 한 번만 세려고 둔다 | 엔진 | 엔진 |
 | `tone.baselines` | user_id, avg_len, polite_rate, softener_rate, n | 엔진 | 엔진 |
 | `tone.analysis_traces` | trace_id, path, user_id, room_id, experts(jsonb), risk, alert, latency_ms, created_at | 엔진 | 엔진 |
 
@@ -440,4 +441,5 @@ risk = sigmoid( w0 + w1·prior + w2·Σk(αk·negk)/Σk(αk) + w3·violation + w
 | Realtime은 postgres_changes | 설정 간단, 파일럿 규모에 충분 | Broadcast (구독자 수천 명 이상일 때) |
 | 그룹방 도입 (3~8명) | 누가 털어놓았는지는 3명 이상 방에서만 감출 수 있다. 파일럿의 팀플 상황 | 1:1 방만 |
 | Gemini는 실제 문장 경로에서 뺌 | 상세 경로의 `tone_gem`이 실제 대화를 Gemini 무료 등급에 보내지 않는 규칙(CLAUDE.md 9)과 충돌했다. 합성 문장 평가에만 쓴다 | 상세 경로의 두 번째 말투 전문가로 Gemini |
+| 엔진 DB 접근은 asyncpg + app/db.py 한 곳 | SQL이 한 파일에 모이고, 가짜와 진짜에 같은 테스트 | ORM, Supabase REST(tone 비공개) |
 | PR 대신 `scripts/land` | 원격 저장소가 없다. 같은 맥의 두 계정이 worktree와 잠금으로 나눠 일하고, land가 테스트와 평가 게이트를 돌린다 | GitHub PR (사람 팀원이 다른 컴퓨터에서 같이 쓰게 되면 전환) |

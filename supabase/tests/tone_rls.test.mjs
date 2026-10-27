@@ -19,7 +19,7 @@ const columns = async (db, schema, table) =>
     'select column_name from information_schema.columns where table_schema = $1 and table_name = $2 order by ordinal_position',
     [schema, table])).rows.map((r) => r.column_name)
 
-const TONE_TABLES = ['feedback_log', 'sender_patterns', 'global_patterns', 'baselines', 'analysis_traces']
+const TONE_TABLES = ['feedback_log', 'sender_patterns', 'global_patterns', 'baselines', 'analysis_traces', 'pattern_reporters']
 
 test('authenticated and anon cannot touch the tone schema', async () => {
   const { db, a, room } = await abc()
@@ -71,6 +71,9 @@ test('service_role can write tone tables', async () => {
   await assert.rejects(svc(`insert into tone.global_patterns(trigger, count) values ($1, 1)`, ['가'.repeat(31)]), /check constraint/)
   await svc(`insert into tone.global_patterns(trigger, count) values ('curt_reply', 3)`)
   await svc('insert into tone.baselines(user_id, avg_len, polite_rate, softener_rate, n) values ($1, 12.5, 0.8, 0.1, 10)', [a])
+  await assert.rejects(svc('insert into tone.pattern_reporters(trigger, reporter_id) values ($1, $2)', ['가'.repeat(31), b]),
+    /check constraint/)
+  await svc(`insert into tone.pattern_reporters(trigger, reporter_id) values ('curt_reply', $1)`, [b])
   await svc(
     `insert into tone.feedback_log(room_id, reporter_id, message_id, usable, pattern_count) values ($1, $2, null, true, 1)`,
     [room, b])
@@ -266,6 +269,6 @@ test('no column stores raw complaint text', async () => {
     `select table_name || '.' || column_name as c from information_schema.columns
      where table_schema = 'tone' and data_type in ('text', 'character varying', 'character') order by 1`)
   assert.deepEqual(rows.map((r) => r.c), [
-    'analysis_traces.path', 'global_patterns.trigger', 'sender_patterns.feeling',
+    'analysis_traces.path', 'global_patterns.trigger', 'pattern_reporters.trigger', 'sender_patterns.feeling',
     'sender_patterns.relation', 'sender_patterns.trigger'])
 })

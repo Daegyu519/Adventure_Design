@@ -69,6 +69,7 @@
 | 평가 | (T-17) |
 | 마이그레이션 | `supabase/migrations/*.sql` (적용은 T-02 이후 `supabase db push`) |
 | DB 테스트 | `cd supabase && npm test` |
+| 엔진 DB 테스트 준비 | `brew install postgresql@16` (없으면 pg 계약 테스트만 건너뜀) |
 | 작업 잡기 | `scripts/claim T-07 login` (마지막 줄이 worktree 경로) |
 | 합치기 | worktree 안에서 `scripts/land T-07` |
 | 검사 | `scripts/check` |
