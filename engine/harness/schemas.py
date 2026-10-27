@@ -96,6 +96,7 @@ class Verdict(BaseModel):
     alert: bool
     pattern_used: bool = False
     reason: str = ""                  # 기록용. 사용자에게는 안 보임
+    features: dict[str, float] = Field(default_factory=dict)  # prior, neg, violation, pattern, disagreement, confidence
 
 
 # ---------- 고쳐 쓰기 ----------
