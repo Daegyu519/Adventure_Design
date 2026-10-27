@@ -47,6 +47,8 @@ flowchart LR
 | AI 엔진 (`engine`) | `/v1/hint`, `/v1/detail`, `/v1/feedback`, `/v1/mirror/*`, `/v1/stats/me`, `/hooks/message`. 하네스, 전문가 레지스트리, 집계기, 작업 큐, 푸시(Expo · 웹), trace 기록 | 메시지 저장·전달, 로그인 |
 | 모델 공급자 | OpenAI 호환 `/chat/completions` | 상태 저장 |
 
+**배포 형태**: 앱은 Expo 개발 빌드/EAS 빌드로 만든 네이티브 앱으로 배포한다(Expo Go 아님). 앱이 열려 있을 때는 Supabase Realtime으로, 닫혀 있을 때는 푸시(Android FCM, iOS APNs, 웹은 웹 푸시)로 새 메시지를 알리고, 다시 열리면 재연결해 놓친 메시지를 불러온다. 빌드 설정은 `apps/mobile/eas.json`(development · preview · production), 푸시 자격 증명(FCM `google-services.json`, APNs 키)은 T-28에서 넣는다.
+
 **경계 규칙**
 - 채팅은 엔진 없이 돈다. 엔진이 죽어도 메시지는 오간다.
 - 엔진은 앱이 보낸 맥락을 믿지 않는다. 최근 대화는 엔진이 DB에서 직접 읽는다.
