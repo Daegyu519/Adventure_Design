@@ -3,9 +3,12 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
+import { View } from 'react-native';
 
 import { useConsented } from '../lib/consent';
 import { gate } from '../lib/gate';
+import { SessionProvider, useSession } from '../lib/session';
+import { supabase } from '../lib/supabase';
 import { useTheme } from '../lib/theme';
 import tokens from '../lib/tokens.json';
 
@@ -26,10 +29,19 @@ const fonts = [
 ];
 
 export default function RootLayout() {
+  return (
+    <SessionProvider>
+      <Gated />
+    </SessionProvider>
+  );
+}
+
+function Gated() {
   const { colors } = useTheme();
   const [loaded, error] = useFonts(fonts);
-  const g = gate({ consented: useConsented() });
-  // 글꼴이 실패해도 시스템 글꼴로 계속 가고, 동의 여부를 읽기 전(g === 'loading')에는 스플래시를 붙잡는다.
+  const { status, profileStatus } = useSession();
+  const g = gate({ consented: useConsented(), backend: supabase !== null, session: status, profile: profileStatus });
+  // 글꼴이 실패해도 시스템 글꼴로 계속 가고, 동의·세션·프로필을 읽기 전(g === 'loading')에는 스플래시를 붙잡는다.
   const ready = (loaded || error !== null) && g !== 'loading';
 
   useEffect(() => {
@@ -40,13 +52,20 @@ export default function RootLayout() {
     if (ready) SplashScreen.hide();
   }, [ready]);
 
-  if (!ready) return null;
+  // 읽는 동안에는 바탕색만 칠한 빈 화면을 둔다. 스플래시가 걷힌 뒤(로그인 직후 프로필을 읽는 동안)에 흰 프레임이 번쩍이지 않게.
+  if (!ready) return <View style={{ flex: 1, backgroundColor: colors.background }} />;
   return (
     <>
       <StatusBar style="auto" />
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}>
         <Stack.Protected guard={g === 'consent'}>
           <Stack.Screen name="consent" />
+        </Stack.Protected>
+        <Stack.Protected guard={g === 'login'}>
+          <Stack.Screen name="login" />
+        </Stack.Protected>
+        <Stack.Protected guard={g === 'profile'}>
+          <Stack.Screen name="profile" />
         </Stack.Protected>
         <Stack.Protected guard={g === 'app'}>
           <Stack.Screen name="(tabs)" />
