@@ -28,6 +28,8 @@ class _Job:
 
 class JobQueue:
     def __init__(self, workers: int = 2, max_attempts: int = 3, backoff_s: float = 1.0, maxsize: int = 1000) -> None:
+        if workers < 1:  # 워커가 없으면 받은 작업이 영원히 안 돈다
+            raise ValueError("workers must be >= 1")
         self._q: asyncio.Queue[_Job] = asyncio.Queue(maxsize)
         self._n_workers = workers
         self._max_attempts = max_attempts
@@ -60,34 +62,39 @@ class JobQueue:
     async def stop(self, drain_s: float = 5.0) -> None:
         """새 작업을 막고 `drain_s`초까지 남은 작업(재시도 포함)을 비운다. 그래도 남으면 버리고 개수만 로그에 남긴다."""
         self._closed = True
-        if self._workers:
-            try:
-                await asyncio.wait_for(self._q.join(), drain_s)
-            except TimeoutError:
-                pass
-        if self._open:
-            log.warning("queue stopped with %d unfinished jobs", self._open)
-        for h in self._timers:
-            h.cancel()
-        self._timers.clear()
-        for t in self._workers:
-            t.cancel()
-        await asyncio.gather(*self._workers, return_exceptions=True)
-        self._workers = []
+        try:
+            if self._workers:
+                try:
+                    await asyncio.wait_for(self._q.join(), drain_s)
+                except TimeoutError:
+                    pass
+            if self._open:
+                log.warning("queue stopped with %d unfinished jobs", self._open)
+        finally:  # drain을 기다리다 취소돼도 정리는 한다
+            for h in self._timers:
+                h.cancel()
+            self._timers.clear()
+            for t in self._workers:
+                t.cancel()
+            await asyncio.gather(*self._workers, return_exceptions=True)
+            self._workers = []
 
     async def _work(self) -> None:
         while True:
-            job = await self._q.get()
-            try:
-                await job.fn(*job.args)
-            except Exception as e:  # 예외 객체·메시지·traceback은 로그에 넣지 않는다
-                if job.attempt < self._max_attempts:
-                    self._retry_later(job, self._backoff_s * 2 ** (job.attempt - 1))
-                    job.attempt += 1
-                    continue  # task_done은 다시 넣을 때 한다: 백오프 동안에도 join이 끝나지 않는다
-                log.warning("job %s dropped after %d attempts: %s", job.name, job.attempt, type(e).__name__)
-            self._open -= 1
-            self._q.task_done()
+            # job을 지역 변수로 두지 않는다: 끝난 작업의 인자(하소연 원문)를 다음 get을 기다리는 동안 붙들지 않게.
+            await self._run(await self._q.get())
+
+    async def _run(self, job: _Job) -> None:
+        try:
+            await job.fn(*job.args)
+        except Exception as e:  # 예외 객체·메시지·traceback은 로그에 넣지 않는다
+            if job.attempt < self._max_attempts:
+                self._retry_later(job, self._backoff_s * 2 ** (job.attempt - 1))
+                job.attempt += 1
+                return  # task_done은 다시 넣을 때 한다: 백오프 동안에도 join이 끝나지 않는다
+            log.warning("job %s dropped after %d attempts: %s", job.name, job.attempt, type(e).__name__)
+        self._open -= 1
+        self._q.task_done()
 
     def _retry_later(self, job: _Job, delay: float) -> None:
         def fire() -> None:

@@ -31,10 +31,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
-        await queue.stop()  # 남은 작업이 repo를 쓸 수 있으니 repo보다 먼저 비운다
-        if repo:
-            await repo.close()
-            app.state.repo = None
+        try:
+            await queue.stop()  # 남은 작업이 repo를 쓸 수 있으니 repo보다 먼저 비운다
+        finally:
+            if repo:
+                await repo.close()
+                app.state.repo = None
 
 
 app = FastAPI(title="tone-chat engine", lifespan=lifespan)

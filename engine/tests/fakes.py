@@ -273,11 +273,14 @@ class FakeRepo:
 class FakeQueue:
     """JobQueue 대역: 넣기만 하고, 테스트가 `run_all()`로 직접 돌린다. 인자는 로그가 아니라 `.jobs`에만 있다."""
 
-    def __init__(self) -> None:
+    def __init__(self, accepting: bool = True) -> None:
+        self.accepting = accepting  # False면 가득 찬 큐처럼 거절한다(호출하는 쪽의 503 경로 테스트용)
         self.jobs: list[tuple[str, Callable[..., Awaitable[None]], tuple]] = []
         self._ran = 0
 
     def enqueue(self, name: str, fn: Callable[..., Awaitable[None]], *args: Any) -> bool:
+        if not self.accepting:
+            return False
         self.jobs.append((name, fn, args))
         return True
 
