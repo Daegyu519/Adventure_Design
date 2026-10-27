@@ -6,6 +6,8 @@ import { useEffect } from 'react';
 
 import { useConsented } from '../lib/consent';
 import { gate } from '../lib/gate';
+import { SessionProvider, useSession } from '../lib/session';
+import { supabase } from '../lib/supabase';
 import { useTheme } from '../lib/theme';
 import tokens from '../lib/tokens.json';
 
@@ -26,10 +28,19 @@ const fonts = [
 ];
 
 export default function RootLayout() {
+  return (
+    <SessionProvider>
+      <Gated />
+    </SessionProvider>
+  );
+}
+
+function Gated() {
   const { colors } = useTheme();
   const [loaded, error] = useFonts(fonts);
-  const g = gate({ consented: useConsented() });
-  // 글꼴이 실패해도 시스템 글꼴로 계속 가고, 동의 여부를 읽기 전(g === 'loading')에는 스플래시를 붙잡는다.
+  const { status, profileStatus } = useSession();
+  const g = gate({ consented: useConsented(), backend: supabase !== null, session: status, profile: profileStatus });
+  // 글꼴이 실패해도 시스템 글꼴로 계속 가고, 동의·세션·프로필을 읽기 전(g === 'loading')에는 스플래시를 붙잡는다.
   const ready = (loaded || error !== null) && g !== 'loading';
 
   useEffect(() => {
@@ -47,6 +58,12 @@ export default function RootLayout() {
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}>
         <Stack.Protected guard={g === 'consent'}>
           <Stack.Screen name="consent" />
+        </Stack.Protected>
+        <Stack.Protected guard={g === 'login'}>
+          <Stack.Screen name="login" />
+        </Stack.Protected>
+        <Stack.Protected guard={g === 'profile'}>
+          <Stack.Screen name="profile" />
         </Stack.Protected>
         <Stack.Protected guard={g === 'app'}>
           <Stack.Screen name="(tabs)" />
