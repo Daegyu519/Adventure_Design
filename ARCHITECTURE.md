@@ -210,7 +210,8 @@ sequenceDiagram
 | POST | `/hooks/message` | Supabase 웹훅 페이로드 `{type, table, schema, record, old_record}` + `X-Hook-Secret` 헤더 | 202 |
 | GET | `/health` | 없음 | `{ok, models: {id: "up"\|"down"}}` |
 
-- 오류: 401(토큰), 403(방 멤버 아님 / 받은 메시지 아님), 422(형식), 429(사용자별 요청 한도).
+- 오류: 401(토큰), 403(방 멤버 아님 / 받은 메시지 아님), 422(형식), 429(사용자별 요청 한도), 503 `auth_unavailable`(공개키를 받지 못해 토큰을 검증할 수 없음. 앱이 다시 시도한다).
+- 토큰은 서명·`exp`·`aud`(authenticated)·`iss`와 `role=authenticated`를 모두 통과해야 한다. 익명 로그인(`is_anonymous`)과 `anon`·`service_role` 토큰은 401이다. 알고리즘은 ES256·RS256만 받는다.
 - 방 멤버 확인은 `room_members`로 한다.
 - `reply_to`는 답장 대상 메시지 id다. 엔진은 같은 방 메시지인지 확인하고(아니면 거부), 그 문장은 DB에서 읽는다. 앱이 보낸 문장은 믿지 않는다. 이 메시지를 맥락 맨 앞에 넣는다.
 - 읽힘 키는 `차갑게, 성의없게, 화나게, 무난하게, 따뜻하게` 다섯 개로 고정.
