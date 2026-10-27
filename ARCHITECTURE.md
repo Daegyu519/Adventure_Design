@@ -202,7 +202,7 @@ sequenceDiagram
 | 메서드 | 경로 | 요청 | 응답 |
 |---|---|---|---|
 | POST | `/v1/hint` | `{room_id, text(1~500자), seq, reply_to?}` | `{seq, hint: {title, detail} \| null, trace_id}` |
-| POST | `/v1/detail` | `{room_id, text, intent?, reply_to?}` | `{alert, top_reading, readings: {읽힘: "자주"\|"가끔"\|"드물어요"}, why: [str], options: [{label, text, keep, change}], footnote, trace_id}` |
+| POST | `/v1/detail` | `{room_id, text, intent?, reply_to?}` | `{alert, top_reading, readings: {읽힘: "자주"\|"가끔"\|"드물어요"}, why: [str], options: [{label, text, keep, change}], mismatch: str \| null, footnote, trace_id}` |
 | POST | `/v1/feedback` | `{room_id, message_id, text(1~1000자)}` | 202 `{ack}` |
 | POST | `/v1/mirror/today` | 없음 | `{cards: [{card_id, kind: "roleplay"\|"receive"\|"predict", persona, relation, situation, message}]}` |
 | POST | `/v1/mirror/answer` | `{card_id, reply?, score?, predicted?}` | `{readings, inner_voice?, reveal?, options?, gap?}` |
@@ -402,6 +402,7 @@ risk = sigmoid( w0 + w1·prior + w2·Σk(αk·negk)/Σk(αk) + w3·violation + w
 | 앱 (`apps/mobile/.env`) | `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`, `EXPO_PUBLIC_ENGINE_URL`, `EXPO_PUBLIC_VAPID_PUBLIC_KEY` |
 | 엔진 (루트 `.env`) | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_DB_URL`, `HOOK_SECRET`, `NVIDIA_API_KEY`, `GEMINI_API_KEY`(합성 문장 평가만), `GITHUB_TOKEN`, `LOCAL_API_KEY`, `USE_LOCAL_MODEL`(`1`이면 로컬 모델 사용), `MODELS_PATH`(선택, 기본 `engine/config/models.yaml`), `EXPO_ACCESS_TOKEN`(선택), `FORCE_MOCK`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` |
 | 협업 스크립트 | `TONE_ACCOUNT`(`a`·`b`, 셸에서 설정) |
+| 개발 도구 | SUPABASE_PROJECT_REF (npm run gen:db 전용, 번들에 안 들어감) |
 
 - 이름 목록은 `.env.example`(엔진·협업)과 `apps/mobile/.env.example`(앱)에 있다. 값은 `.env`(git 밖)에만 넣는다.
 - **앱 변수는 `apps/mobile/.env`에 둔다.** Expo는 프로젝트 루트(`apps/mobile`)의 dotenv 파일만 읽으므로, 저장소 루트 `.env`에 채워도 앱의 `supabase`는 `null`로 남는다(개발 중에는 콘솔 경고가 뜬다). 엔진은 `--env-file ../.env`로 루트 `.env`를 읽는다. 값을 바꾼 뒤에는 `npx expo start -c`.
