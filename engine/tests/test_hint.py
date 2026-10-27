@@ -123,12 +123,19 @@ def test_unexpected_error_returns_null_and_logs_type_only(client, login, fake, m
 
 
 def test_no_raw_pii_reaches_experts(client, login, fake, spy):
-    me, _, room = _room(fake, "요즘 힘들다 민수야 010-1234-5678로 연락줘", me_name="민수", you_name="이지은")
+    me, you, room = _room(fake, "요즘 힘들다 민수야 010-1234-5678로 연락줘", me_name="민수", you_name="이지은")
+    # 답장 대상은 최근 8개 밖에 둔다: 이 문장은 reply_to 경로로만 전문가에게 간다
+    target = fake.add_message(room, you, "요즘 너무 힘들어 민수야 지은이 번호 010-9876-5432로 연락해줘", at=NOW - timedelta(hours=1))
+    for i in range(8):
+        fake.add_message(room, you, "응", at=NOW - timedelta(minutes=50 - i))
     login(me)
-    assert _post(client, room, "민수 ㅇㅇ").status_code == 200
+    assert _post(client, room, "민수 ㅇㅇ", reply_to=target).status_code == 200
     assert len(spy.calls) >= 1
     seen = spy.seen()
-    assert "민수" not in seen and "010-1234" not in seen and "지은" not in seen
+    assert "민수" not in seen and "지은" not in seen
+    assert "010-1234" not in seen and "010-9876" not in seen and "9876-5432" not in seen
+    replies = [c["payload"]["reply_to"]["text"] for c in spy.calls if c["payload"].get("reply_to")]
+    assert replies and all("[전화번호" in t and "[이름" in t for t in replies)   # 답장 대상이 가려진 채로 갔다
 
 
 def test_group_room_prompts_name_the_room_and_speakers(client, login, fake, spy):
