@@ -18,6 +18,7 @@ from app.auth import current_user, ensure_member
 from app.context import load_context
 from app.contracts import DetailIn, DetailOut, OptionOut, Readings
 from app.db import Repo
+from app.ratelimit import RATE_LIMITED, limited
 from app.deps import get_queue, get_registry, get_repo
 from experts.registry import Registry
 from jobs import events
@@ -28,7 +29,7 @@ router = APIRouter()
 UNAVAILABLE = "engine_unavailable"
 
 
-@router.post("/v1/detail")
+@router.post("/v1/detail", dependencies=[Depends(limited("default"))], responses=RATE_LIMITED)
 async def detail(body: DetailIn, user: UUID = Depends(current_user), repo: Repo = Depends(get_repo),
                  reg: Registry = Depends(get_registry), queue: JobQueue = Depends(get_queue)) -> DetailOut:
     t0 = time.monotonic()

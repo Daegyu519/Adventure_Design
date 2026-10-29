@@ -751,6 +751,9 @@
               }
             },
             "description": "Validation Error"
+          },
+          "429": {
+            "description": "rate_limited: 분당 요청 한도를 넘었다. Retry-After(초) 뒤에 다시 시도한다."
           }
         },
         "summary": "Detail"
@@ -807,6 +810,9 @@
               }
             },
             "description": "Validation Error"
+          },
+          "429": {
+            "description": "rate_limited: 분당 요청 한도를 넘었다. Retry-After(초) 뒤에 다시 시도한다."
           }
         },
         "summary": "Feedback"
@@ -863,6 +869,9 @@
               }
             },
             "description": "Validation Error"
+          },
+          "429": {
+            "description": "rate_limited: 분당 요청 한도를 넘었다. Retry-After(초) 뒤에 다시 시도한다."
           }
         },
         "summary": "Hint"
@@ -919,6 +928,9 @@
               }
             },
             "description": "Validation Error"
+          },
+          "429": {
+            "description": "rate_limited: 분당 요청 한도를 넘었다. Retry-After(초) 뒤에 다시 시도한다."
           }
         },
         "summary": "Mirror Answer"
@@ -965,6 +977,9 @@
               }
             },
             "description": "Validation Error"
+          },
+          "429": {
+            "description": "rate_limited: 분당 요청 한도를 넘었다. Retry-After(초) 뒤에 다시 시도한다."
           }
         },
         "summary": "Mirror Today"
@@ -1011,6 +1026,9 @@
               }
             },
             "description": "Validation Error"
+          },
+          "429": {
+            "description": "rate_limited: 분당 요청 한도를 넘었다. Retry-After(초) 뒤에 다시 시도한다."
           }
         },
         "summary": "Stats Me"

@@ -17,6 +17,7 @@ from app.auth import current_user, ensure_member
 from app.context import load_context
 from app.contracts import HintBody, HintIn, HintOut
 from app.db import Repo
+from app.ratelimit import RATE_LIMITED, limited
 from app.deps import get_queue, get_registry, get_repo
 from experts.registry import Registry
 from jobs.queue import JobQueue
@@ -25,7 +26,7 @@ log = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.post("/v1/hint")
+@router.post("/v1/hint", dependencies=[Depends(limited("hint"))], responses=RATE_LIMITED)
 async def hint(body: HintIn, user: UUID = Depends(current_user), repo: Repo = Depends(get_repo),
                reg: Registry = Depends(get_registry), queue: JobQueue = Depends(get_queue)) -> HintOut:
     t0 = time.monotonic()
