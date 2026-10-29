@@ -152,13 +152,18 @@ sequenceDiagram
 ### 3-3. 살펴보기 (상세 경로, 8초)
 1. `POST /v1/detail`.
 2. 큰 맥락 전문가 + 말투 전문가 여러 개 → 집계. 의견 차이가 크면 심판 전문가. 이 판정 단계에는 의도(`intent`)를 넣지 않는다.
-3. 위험하면 고쳐 쓰기 후보 2개(의도는 여기에만 넣는다) → 세 가지 확인(의도 유지, 존댓말·반말 유지, 실제로 덜 부정적) → 통과한 것만 보낸다.
+   - 심판은 의견이 갈린 기권(반올림 전 disagreement > `max_disagreement`)만 푼다. 자신 없는 기권(confidence < `min_confidence`)은 심판을 부르지 않고 기권으로 둔다. 심판이 실패해도 기권 그대로다.
+3. 알림(`alert`)이거나 어긋남(아래 표, 의도 칩 원래 값으로 본다)이 있으면 고쳐 쓰기 후보(앞의 2개만 본다. 의도는 여기에만, 가린 값으로 넣는다) → 세 가지 확인(의도 유지: 괄호 빈칸을 빼고 거절은 거절로, 존댓말·반말 유지, 원문을 읽은 첫 말투 전문가로 다시 읽어 부정 확률이 0.1 이상 낮음) → 통과한 것만 보낸다. 라벨은 원래 순번대로 "조금만 바꾼 문장" / "가장 부드럽게 바꾼 문장"이다.
+   - 후보의 자리표시는 응답 직전에 `Masker.restore`로 되돌린다. 되돌리지 못한 자리표시 모양(모델이 지어낸 `[이름7]`, 번호 없는 `[이름]`, 기호가 붙은 `[이름_7]` 등. 사용자가 원문에 직접 쓴 대괄호 말은 제외)이 남았거나 `keep`·`change`가 문구 검사에 걸리면 그 후보를 버린다.
 4. 점수 계산 근거(`reason`, 가중치)는 응답에 넣지 않는다.
+5. 시간 안에 못 끝나거나(`paths.detail.deadline_ms`) 말투 전문가가 하나도 답하지 못하면 503 `engine_unavailable`이다.
+6. `detail_opened`(`public.tone_events`)는 시트를 처음 열 때(`intent` 없는 호출)만 작업 큐로 남긴다. risk는 넣지 않고 `top_reading`과 `signals: {signals: [L0 신호 태그], trace_id}`만 둔다. 칩을 바꾼 재호출은 기록하지 않는다.
 
 **의도 칩과 바뀐 곳 강조**
 - 시트 맨 위에 "단호하게 / 미안하게 / 가볍게" 칩이 있다. 고르지 않아도 된다.
 - 시트가 열린 뒤 칩을 누르면 `/v1/detail`을 `intent`만 바꿔 다시 부른다. 판정 전문가 입력에는 의도가 없으므로 라우터 캐시(같은 전문가, 같은 입력)에 걸리고 고쳐 쓰기만 새로 돈다. 별도 API는 없다.
-- 어긋남 표시는 가장 많이 읽힌 뜻(`top_reading`)이 아래 표에 해당할 때만 한 줄 띄운다. 단호한 거절이 "차갑게" 읽히는 것은 어긋남으로 보지 않는다(단호함을 지키는 것도 사용자의 선택이다).
+- 어긋남 표시는 가장 많이 읽힌 뜻(다섯 읽힘 중 최대)이 아래 표에 해당할 때만 한 줄 띄운다. 단호한 거절이 "차갑게" 읽히는 것은 어긋남으로 보지 않는다(단호함을 지키는 것도 사용자의 선택이다).
+- 그 한 줄은 엔진이 만들어 응답의 `mismatch` 칸에 넣는다("단호하게 말하려던 것과 달리 화난 것처럼 읽힐 수도 있어요"처럼, 문구 검사 통과). 앱은 이 값을 그대로 보여 주고, 없으면(`null`) 아무것도 띄우지 않는다.
 
 | 의도 칩 | 어긋남으로 보는 읽힘 |
 |---|---|
@@ -202,7 +207,7 @@ sequenceDiagram
 | 메서드 | 경로 | 요청 | 응답 |
 |---|---|---|---|
 | POST | `/v1/hint` | `{room_id, text(1~500자, 앞뒤 공백 제외), seq(0 이상), reply_to?(같은 방이 아니면 422)}` | `{seq, hint: {title, detail} \| null, trace_id}` |
-| POST | `/v1/detail` | `{room_id, text, intent?, reply_to?(같은 방이 아니면 422)}` | `{alert, top_reading, readings: {읽힘: "자주"\|"가끔"\|"드물어요"}, why: [str], options: [{label, text, keep, change}], mismatch: str \| null, footnote, trace_id}` |
+| POST | `/v1/detail` | `{room_id, text, intent?, reply_to?(같은 방이 아니면 422)}` | `{alert, top_reading, readings: {읽힘: "자주"\|"가끔"\|"드물어요"}, why: [str], options: [{label, text, keep, change}], mismatch?: str \| null, footnote, trace_id}` |
 | POST | `/v1/feedback` | `{room_id, message_id(이 방에서 받은 메시지), text(1~1000자)}` | 202 `{ack}`(큐가 가득 차도 같은 202) |
 | POST | `/v1/mirror/today` | 없음 | `{cards: [{card_id, kind: "roleplay"\|"receive"\|"predict", persona, relation, situation, message}]}` |
 | POST | `/v1/mirror/answer` | `{card_id, reply?, score?, predicted?}` | `{readings, inner_voice?, reveal?, options?, gap?}` |
@@ -210,7 +215,7 @@ sequenceDiagram
 | POST | `/hooks/message` | Supabase 웹훅 페이로드 `{type, table, schema, record, old_record}` + `X-Hook-Secret` 헤더 | 202 |
 | GET | `/health` | 없음 | `{ok, models: {id: "up"\|"down"}}` |
 
-- 오류: 401(토큰), 403(방 멤버 아님 / 받은 메시지 아님), 422(형식), 429(사용자별 요청 한도), 503 `auth_unavailable`(공개키를 받지 못해 토큰을 검증할 수 없음. 앱이 다시 시도한다).
+- 오류: 401(토큰), 403(방 멤버 아님 / 받은 메시지 아님), 422(형식), 503(엔진·모델 일시 불가: `engine_unavailable`, 그리고 공개키를 받지 못해 토큰을 검증할 수 없는 `auth_unavailable`. 앱이 다시 시도한다); 429는 단계 1에서 미구현.
 - 토큰은 서명·`exp`·`aud`(authenticated)·`iss`와 `role=authenticated`를 모두 통과해야 한다. 익명 로그인(`is_anonymous`)과 `anon`·`service_role` 토큰은 401이다. 알고리즘은 ES256·RS256만 받는다.
 - 방 멤버 확인은 `room_members`로 한다. `room_id`를 받는 모든 `/v1/*`는 방을 읽기 전에 `ensure_member`를 거친다(`test_every_room_route_checks_membership_before_reading`이 라우트를 모두 돈다).
 - CORS: 허용 origin은 `CORS_ORIGINS`(쉼표로 나눔, 기본 `http://localhost:8081`), 메서드 GET·POST·OPTIONS, 헤더 Authorization·Content-Type. 쿠키를 쓰지 않아 credentials는 켜지 않는다.
@@ -359,7 +364,7 @@ risk = sigmoid( w0 + w1·prior + w2·Σk(αk·negk)/Σk(αk) + w3·violation + w
 - `negk`: k번째 말투 전문가의 부정 읽힘(차갑게 + 성의없게 + 화나게) 확률. `αk = weight × confidence`.
 - `violation`: 맥락 전문가의 기대 요소 중 문장에 없는 비율.
 - `pattern`: 보낸 사람 패턴(`tone.sender_patterns`, `active_from`이 지난 것) 일치 점수. `global_patterns[trigger] ≥ global_min_obs`일 때만 반영.
-- 의견 차이 = 말투 전문가 `neg`의 최대 − 최소. `max_disagreement`를 넘으면 실시간은 기권, 상세는 심판.
+- 의견 차이 = 말투 전문가 `neg`의 최대 − 최소. `max_disagreement`를 넘으면 실시간은 기권, 상세는 심판. 심판은 의견이 갈린 기권만 풀고, 자신 없는 기권(confidence < `min_confidence`)은 심판 없이 기권으로 둔다. 둘 다 반올림 전 값(`features`)으로 본다(3-3).
 - 시간 안에 못 온 전문가는 빼고 계산한다. 말투 전문가가 하나도 없으면 기권.
 - 가중치(w, α)는 평가 세트가 30쌍 이상 모이면 trace에서 학습한다(로지스틱 회귀). 기준값은 정밀도 0.8 이상이 되는 값.
 

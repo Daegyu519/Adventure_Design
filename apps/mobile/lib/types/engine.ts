@@ -31,30 +31,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Detail */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["DetailIn"];
-                };
-            };
-            responses: {
-                /** @description Successful Response */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["DetailOut"];
-                    };
-                };
-            };
-        };
+        post: operations["detail_v1_detail_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -192,22 +169,42 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** DetailIn */
         DetailIn: {
-            intent?: components["schemas"]["Intent"] | null;
+            /** Intent */
+            intent?: ("단호하게" | "미안하게" | "가볍게") | null;
+            /** Reply To */
             reply_to?: number | null;
-            /** Format: uuid */
+            /**
+             * Room Id
+             * Format: uuid
+             */
             room_id: string;
+            /** Text */
             text: string;
         };
+        /** DetailOut */
         DetailOut: {
+            /** Alert */
             alert: boolean;
+            /** Footnote */
             footnote: string;
+            /** Mismatch */
             mismatch?: string | null;
+            /** Options */
             options: components["schemas"]["OptionOut"][];
             readings: components["schemas"]["Readings"];
-            top_reading: components["schemas"]["Reading"];
-            /** Format: uuid */
+            /**
+             * Top Reading
+             * @enum {string}
+             */
+            top_reading: "차갑게" | "성의없게" | "화나게" | "무난하게" | "따뜻하게";
+            /**
+             * Trace Id
+             * Format: uuid
+             */
             trace_id: string;
+            /** Why */
             why: string[];
         };
         /** FeedbackIn */
@@ -227,8 +224,6 @@ export interface components {
             /** Ack */
             ack: string;
         };
-        /** @enum {string} */
-        Freq: "자주" | "가끔" | "드물어요";
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -275,8 +270,6 @@ export interface components {
              */
             trace_id: string;
         };
-        /** @enum {string} */
-        Intent: "단호하게" | "미안하게" | "가볍게";
         MirrorAnswerIn: {
             card_id: string;
             predicted?: number | null;
@@ -302,20 +295,47 @@ export interface components {
         MirrorTodayOut: {
             cards: components["schemas"]["MirrorCard"][];
         };
+        /** OptionOut */
         OptionOut: {
+            /** Change */
             change: string[];
+            /** Keep */
             keep: string[];
+            /** Label */
             label: string;
+            /** Text */
             text: string;
         };
-        /** @enum {string} */
-        Reading: "차갑게" | "성의없게" | "화나게" | "무난하게" | "따뜻하게";
+        /**
+         * Readings
+         * @description 읽힘 키 다섯 개 모두 필수. 값은 자주/가끔/드물어요로만(확률 없음).
+         */
         Readings: {
-            "\uB530\uB73B\uD558\uAC8C": components["schemas"]["Freq"];
-            "\uBB34\uB09C\uD558\uAC8C": components["schemas"]["Freq"];
-            "\uC131\uC758\uC5C6\uAC8C": components["schemas"]["Freq"];
-            "\uCC28\uAC11\uAC8C": components["schemas"]["Freq"];
-            "\uD654\uB098\uAC8C": components["schemas"]["Freq"];
+            /**
+             * 따뜻하게
+             * @enum {string}
+             */
+            "\uB530\uB73B\uD558\uAC8C": "자주" | "가끔" | "드물어요";
+            /**
+             * 무난하게
+             * @enum {string}
+             */
+            "\uBB34\uB09C\uD558\uAC8C": "자주" | "가끔" | "드물어요";
+            /**
+             * 성의없게
+             * @enum {string}
+             */
+            "\uC131\uC758\uC5C6\uAC8C": "자주" | "가끔" | "드물어요";
+            /**
+             * 차갑게
+             * @enum {string}
+             */
+            "\uCC28\uAC11\uAC8C": "자주" | "가끔" | "드물어요";
+            /**
+             * 화나게
+             * @enum {string}
+             */
+            "\uD654\uB098\uAC8C": "자주" | "가끔" | "드물어요";
         };
         /** StatsOut */
         StatsOut: {
@@ -384,6 +404,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HealthResponse"];
+                };
+            };
+        };
+    };
+    detail_v1_detail_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DetailIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

@@ -1,7 +1,8 @@
 """L3 집계. L0·L1·L2 결과를 계산식으로 합치고, 의견이 갈리거나 자신 없으면 기권한다(ARCHITECTURE 6-3).
 
 경로 구분은 호출자가 한다. 시간 안에 못 온 전문가는 `run_all`이 이미 뺐다. 기권(`abstain`)이면 실시간은 힌트를 내지
-않고, 상세는 `verdict.disagreement > max_disagreement`일 때만 심판에 묻는다.
+않고, 상세는 의견이 갈린 기권(`features`의 반올림 전 disagreement > max_disagreement이고 confidence ≥ min_confidence)만
+심판에 묻는다. 자신 없는 기권은 심판 없이 기권으로 둔다.
 """
 from __future__ import annotations
 

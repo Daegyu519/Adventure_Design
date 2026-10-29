@@ -6,6 +6,7 @@ JSON만 출력한다.
 {"alert": true|false, "reason": "한 문장"}
 
 ## user
+방: {room}
 관계: {relation}
 최근 대화:
 {turns}

@@ -6,31 +6,41 @@
           "intent": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/Intent"
+                "enum": [
+                  "단호하게",
+                  "미안하게",
+                  "가볍게"
+                ],
+                "type": "string"
               },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Intent"
           },
           "reply_to": {
             "anyOf": [
               {
-                "format": "int64",
+                "exclusiveMaximum": 9.223372036854776e+18,
+                "exclusiveMinimum": 0.0,
                 "type": "integer"
               },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Reply To"
           },
           "room_id": {
             "format": "uuid",
+            "title": "Room Id",
             "type": "string"
           },
           "text": {
             "maxLength": 500,
             "minLength": 1,
+            "title": "Text",
             "type": "string"
           }
         },
@@ -38,14 +48,17 @@
           "room_id",
           "text"
         ],
+        "title": "DetailIn",
         "type": "object"
       },
       "DetailOut": {
         "properties": {
           "alert": {
+            "title": "Alert",
             "type": "boolean"
           },
           "footnote": {
+            "title": "Footnote",
             "type": "string"
           },
           "mismatch": {
@@ -56,28 +69,40 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Mismatch"
           },
           "options": {
             "items": {
               "$ref": "#/components/schemas/OptionOut"
             },
+            "title": "Options",
             "type": "array"
           },
           "readings": {
             "$ref": "#/components/schemas/Readings"
           },
           "top_reading": {
-            "$ref": "#/components/schemas/Reading"
+            "enum": [
+              "차갑게",
+              "성의없게",
+              "화나게",
+              "무난하게",
+              "따뜻하게"
+            ],
+            "title": "Top Reading",
+            "type": "string"
           },
           "trace_id": {
             "format": "uuid",
+            "title": "Trace Id",
             "type": "string"
           },
           "why": {
             "items": {
               "type": "string"
             },
+            "title": "Why",
             "type": "array"
           }
         },
@@ -90,6 +115,7 @@
           "footnote",
           "trace_id"
         ],
+        "title": "DetailOut",
         "type": "object"
       },
       "FeedbackIn": {
@@ -132,14 +158,6 @@
         ],
         "title": "FeedbackOut",
         "type": "object"
-      },
-      "Freq": {
-        "enum": [
-          "자주",
-          "가끔",
-          "드물어요"
-        ],
-        "type": "string"
       },
       "HTTPValidationError": {
         "properties": {
@@ -266,14 +284,6 @@
         ],
         "title": "HintOut",
         "type": "object"
-      },
-      "Intent": {
-        "enum": [
-          "단호하게",
-          "미안하게",
-          "가볍게"
-        ],
-        "type": "string"
       },
       "MirrorAnswerIn": {
         "properties": {
@@ -434,18 +444,22 @@
             "items": {
               "type": "string"
             },
+            "title": "Change",
             "type": "array"
           },
           "keep": {
             "items": {
               "type": "string"
             },
+            "title": "Keep",
             "type": "array"
           },
           "label": {
+            "title": "Label",
             "type": "string"
           },
           "text": {
+            "title": "Text",
             "type": "string"
           }
         },
@@ -455,34 +469,56 @@
           "keep",
           "change"
         ],
+        "title": "OptionOut",
         "type": "object"
       },
-      "Reading": {
-        "enum": [
-          "차갑게",
-          "성의없게",
-          "화나게",
-          "무난하게",
-          "따뜻하게"
-        ],
-        "type": "string"
-      },
       "Readings": {
+        "description": "읽힘 키 다섯 개 모두 필수. 값은 자주/가끔/드물어요로만(확률 없음).",
         "properties": {
           "따뜻하게": {
-            "$ref": "#/components/schemas/Freq"
+            "enum": [
+              "자주",
+              "가끔",
+              "드물어요"
+            ],
+            "title": "따뜻하게",
+            "type": "string"
           },
           "무난하게": {
-            "$ref": "#/components/schemas/Freq"
+            "enum": [
+              "자주",
+              "가끔",
+              "드물어요"
+            ],
+            "title": "무난하게",
+            "type": "string"
           },
           "성의없게": {
-            "$ref": "#/components/schemas/Freq"
+            "enum": [
+              "자주",
+              "가끔",
+              "드물어요"
+            ],
+            "title": "성의없게",
+            "type": "string"
           },
           "차갑게": {
-            "$ref": "#/components/schemas/Freq"
+            "enum": [
+              "자주",
+              "가끔",
+              "드물어요"
+            ],
+            "title": "차갑게",
+            "type": "string"
           },
           "화나게": {
-            "$ref": "#/components/schemas/Freq"
+            "enum": [
+              "자주",
+              "가끔",
+              "드물어요"
+            ],
+            "title": "화나게",
+            "type": "string"
           }
         },
         "required": [
@@ -492,6 +528,7 @@
           "무난하게",
           "따뜻하게"
         ],
+        "title": "Readings",
         "type": "object"
       },
       "StatsOut": {
@@ -650,6 +687,25 @@
     },
     "/v1/detail": {
       "post": {
+        "operationId": "detail_v1_detail_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -670,13 +726,18 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "summary": "Detail"
       }
     },

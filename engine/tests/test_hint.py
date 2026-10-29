@@ -179,7 +179,8 @@ def test_realtime_outcomes(fake, registry):
 def test_every_room_route_checks_membership_before_reading(client, login, fake, monkeypatch):
     """room_id를 받는 모든 /v1/* 라우트: 비멤버는 403이고, 멤버 확인 말고는 아무것도 읽지 않는다.
     새 라우트를 더하면 SAMPLES에 예시 본문을 더해야 이 테스트가 통과한다."""
-    samples = {"/v1/hint": {"text": "ㅇㅇ", "seq": 0}, "/v1/feedback": {"message_id": 1, "text": "ㅇㅇ"}}
+    samples = {"/v1/hint": {"text": "ㅇㅇ", "seq": 0}, "/v1/detail": {"text": "ㅇㅇ"},
+               "/v1/feedback": {"message_id": 1, "text": "ㅇㅇ"}}
     spec = app.openapi()
 
     def takes_room(op: dict) -> bool:

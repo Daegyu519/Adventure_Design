@@ -47,6 +47,20 @@ def render_hint(v: Verdict) -> Hint | None:
     return Hint(title=guard(TITLES.get(v.top_reading, "다르게 읽힐 수도 있어요")), detail=guard(detail))
 
 
+# 의도 칩별로 어긋남으로 보는 읽힘(ARCHITECTURE 3-3). 단호한 거절이 차갑게 읽히는 것은 어긋남이 아니다.
+MISMATCH = {"단호하게": {"화나게", "성의없게"}, "미안하게": {"차갑게", "화나게", "성의없게"}, "가볍게": {"차갑게", "화나게"}}
+PHRASE = {"차갑게": "차갑게", "성의없게": "성의 없게", "화나게": "화난 것처럼"}
+OPTION_LABELS = ("조금만 바꾼 문장", "가장 부드럽게 바꾼 문장")   # 고쳐 쓰기 후보의 원래 순번대로
+
+
+def render_mismatch(intent: str | None, readings: dict[str, float]) -> str | None:
+    """가장 많이 읽힌 뜻(다섯 중 최대)이 그 의도와 어긋날 때만 한 줄. 앱은 이 문구를 그대로 보여 준다."""
+    top = max(readings, key=readings.__getitem__)
+    if intent is None or top not in MISMATCH.get(intent, ()):
+        return None
+    return guard(f"{intent} 말하려던 것과 달리 {PHRASE[top]} 읽힐 수도 있어요")
+
+
 def freq(p: float) -> str:
     return "자주" if p >= 0.35 else "가끔" if p >= 0.15 else "드물어요"
 
