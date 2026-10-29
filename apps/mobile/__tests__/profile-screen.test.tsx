@@ -131,6 +131,6 @@ test('profile: 다시 불러오는 중에 한 번 더 눌러도 한 번만 읽�
   mockRefresh.mockReturnValue(new Promise(() => {}));
   const { press } = await setup();
   await press('다시 불러오기');
-  await press('다시 불러오기');
+  await press('다시 불러오기, 처리 중'); // 처리 중 버튼은 disabled가 아니라 눌림만 무시한다
   expect(mockRefresh).toHaveBeenCalledTimes(1);
 });

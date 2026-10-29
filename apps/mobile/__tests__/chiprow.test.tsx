@@ -5,6 +5,8 @@ import { createRoot } from 'test-renderer';
 import { ChipRow } from '../components/ChipRow';
 import tokens from '../lib/tokens.json';
 
+jest.mock('lucide-react-native/icons/check', () => () => null); // jest가 lucide의 ESM 파일을 읽지 못해서 가짜로 바꾼다
+
 const OPTIONS = ['친구', '팀원', '기타'] as const;
 type Opt = (typeof OPTIONS)[number];
 
@@ -58,4 +60,17 @@ test('ChipRow: labels로 보이는 글과 스크린리더 라벨을 바꾸고, �
   expect(chips().map((c) => c.props.accessibilityState.checked)).toEqual([false, false, false]);
   await press(1);
   expect(onChange).toHaveBeenLastCalledWith('팀원');
+});
+
+test('ChipRow: Space 키로 고른다(웹 radio는 기본으로 안 됨), 다른 키는 무시, allowNone이면 다시 눌러 해제', async () => {
+  const { chips, onChange } = await setup({ value: '팀원', allowNone: true });
+  const preventDefault = jest.fn();
+  await act(async () => chips()[0].props.onKeyDown({ key: ' ', preventDefault }));
+  expect(onChange).toHaveBeenLastCalledWith('친구');
+  expect(preventDefault).toHaveBeenCalledTimes(1); // 페이지가 스크롤되지 않게
+  await act(async () => chips()[1].props.onKeyDown({ key: ' ', preventDefault }));
+  expect(onChange).toHaveBeenLastCalledWith(null);
+  onChange.mockClear();
+  await act(async () => chips()[0].props.onKeyDown({ key: 'a', preventDefault }));
+  expect(onChange).not.toHaveBeenCalled();
 });

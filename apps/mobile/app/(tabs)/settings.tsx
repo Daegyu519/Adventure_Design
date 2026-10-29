@@ -18,7 +18,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   const { colors, radius, space } = useTheme();
   return (
     <View style={{ gap: space[1] }}>
-      <AppText accessibilityRole="header" variant="small" color="textMuted" weight="600">
+      <AppText accessibilityRole="header" aria-level={2} variant="small" color="textMuted" weight="600">
         {title}
       </AppText>
       <View style={{ backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: radius.card, padding: space[3], gap: space[2] }}>
@@ -80,7 +80,7 @@ export default function Settings() {
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: colors.background }}>
       <ScrollView contentContainerStyle={{ padding: space[3], gap: space[5] }}>
-        <AppText accessibilityRole="header" variant="title">
+        <AppText accessibilityRole="header" aria-level={1} variant="title">
           설정
         </AppText>
 
@@ -95,7 +95,7 @@ export default function Settings() {
               accessibilityLabel="보내기 전 말투 힌트"
               value={hintOn}
               onValueChange={setHint}
-              disabled={!connected || pending !== null}
+              disabled={!connected} // 저장하는 동안 disabled로 바꾸면 포커스를 잃는다. 겹친 호출은 setHint가 막는다
               hitSlop={space[1]}
               trackColor={{ false: colors.textMuted, true: colors.primary }}
               thumbColor={colors.background}
@@ -113,7 +113,7 @@ export default function Settings() {
             </AppText>
           )}
           {hintError && (
-            <AppText variant="small" color="danger" accessibilityLiveRegion="polite">
+            <AppText variant="small" color="danger" accessibilityRole="alert" accessibilityLiveRegion="polite">
               바꾸지 못했어요. 연결을 확인하고 다시 해 주세요.
             </AppText>
           )}
@@ -128,7 +128,7 @@ export default function Settings() {
           <InfoRow label="이름" value={profile?.name ?? '-'} />
           <Button label="로그아웃" kind="secondary" onPress={logout} loading={signingOut} disabled={!connected} />
           {signOutError && (
-            <AppText variant="small" color="danger" accessibilityLiveRegion="polite">
+            <AppText variant="small" color="danger" accessibilityRole="alert" accessibilityLiveRegion="polite">
               로그아웃하지 못했어요. 연결을 확인하고 다시 해 주세요.
             </AppText>
           )}

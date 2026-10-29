@@ -1,3 +1,4 @@
+import Check from 'lucide-react-native/icons/check';
 import { Pressable, View } from 'react-native';
 
 import { focusRing, useTheme } from '../lib/theme';
@@ -29,6 +30,15 @@ export function ChipRow<T extends string>({ options, value, onChange, accessibil
             accessibilityLabel={label}
             accessibilityState={{ checked }}
             aria-checked={checked} // react-native-web은 accessibilityState를 aria-*로 옮기지 않는다
+            // react-native-web의 Pressable은 role=radio에서 Space를 누름으로 바꿔 주지 않는다. 키보드로 고를 수 있게 직접 잇는다(WCAG 2.1.1).
+            {...({
+              onKeyDown: (e: { key: string; preventDefault(): void }) => {
+                if (e.key === ' ') {
+                  e.preventDefault();
+                  onChange(checked && allowNone ? null : o);
+                }
+              },
+            } as object)}
             style={({ pressed }) => ({
               minHeight: 44,
               minWidth: 44,
@@ -44,9 +54,13 @@ export function ChipRow<T extends string>({ options, value, onChange, accessibil
               ...focusRing(colors.primary),
             })}
           >
-            <AppText weight="600" color={checked ? 'onPrimary' : 'text'}>
-              {label}
-            </AppText>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[0] }}>
+              {/* 선택은 색만으로 알리지 않는다(강제 색 모드 · 색 구분이 어려운 사람): 작은 체크도 같이 보인다 */}
+              {checked && <Check color={colors.onPrimary} size={14} aria-hidden />}
+              <AppText weight="600" color={checked ? 'onPrimary' : 'text'}>
+                {label}
+              </AppText>
+            </View>
           </Pressable>
         );
       })}

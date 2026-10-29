@@ -1,9 +1,10 @@
 import { act } from 'react';
-import { Share } from 'react-native';
+import { AccessibilityInfo, Platform, Share } from 'react-native';
 import { createRoot, type TestInstance, type TestNode } from 'test-renderer';
 
 import RoomsNew from '../app/rooms/new';
 
+jest.mock('lucide-react-native/icons/check', () => () => null); // jest가 lucide의 ESM 파일을 읽지 못해서 가짜로 바꾼다
 jest.mock('lucide-react-native/icons/arrow-left', () => () => null); // jest가 lucide의 ESM 파일을 읽지 못해서 가짜로 바꾼다
 jest.mock('react-native-safe-area-context', () => ({ SafeAreaView: ({ children }: { children: unknown }) => children }));
 
@@ -99,13 +100,16 @@ test('rooms/new: 세 갈래는 radio 묶음이고 고르면 화면이 바뀐다'
 
 test('direct: 관계 기본은 친구이고, 코드 만들기는 create_invite에 방 없이 관계만 보낸다', async () => {
   mockRpc.mockReturnValue(ok(CODE));
-  const { press, radioState, texts, codeNode } = await setup('direct');
+  const { press, radioState, texts, codeNode, find } = await setup('direct');
   expect(radioState('친구')).toBe(true);
   await press('코드 만들기');
   expect(mockRpc).toHaveBeenCalledTimes(1);
   expect(mockRpc).toHaveBeenCalledWith('create_invite', { relation: '친구' });
   expect(textOf(codeNode() as unknown as TestNode)).toBe(CODE);
-  expect(codeNode().props.accessibilityLabel).toContain('A B 3 X 9 K 7 Q'); // 스크린리더가 한 글자씩 읽게
+  // 스크린리더가 한 글자씩 읽게. 이름은 role이 있는 묶음에 둔다(역할 없는 글자에 단 이름은 읽지 않는 곳이 많다)
+  const group = find((n) => n.props.accessibilityLabel === '초대 코드 A B 3 X 9 K 7 Q')[0];
+  expect(group.props.accessible).toBe(true);
+  expect(codeNode().props.accessibilityLabel).toBeUndefined();
   expect(texts()).toContain('72시간 안에 한 번 쓸 수 있어요');
 });
 
@@ -162,7 +166,7 @@ test('direct: 만드는 중에 다시 눌러도 요청은 한 번이다', async 
   mockRpc.mockReturnValue(new Promise((r) => (release = r)));
   const { press, buttons, texts } = await setup('direct');
   await press('코드 만들기');
-  await press('코드 만들기');
+  await press('코드 만들기, 처리 중'); // 처리 중 버튼은 눌림만 무시한다
   expect(mockRpc).toHaveBeenCalledTimes(1);
   await act(async () => release({ data: CODE, error: null, status: 200 }));
   expect(texts()).toContain(CODE);
@@ -309,7 +313,7 @@ test('join: 확인하는 중에 다시 눌러도 요청은 한 번이다', async
   const { type, press } = await setup('join');
   await type('초대 코드', CODE);
   await press('참여하기');
-  await press('참여하기');
+  await press('참여하기, 처리 중');
   expect(mockRpc).toHaveBeenCalledTimes(1);
   await act(async () => release({ data: ROOM, error: null, status: 200 }));
   expect(mockRouter.replace).toHaveBeenCalledTimes(1);
@@ -395,4 +399,88 @@ test('tab switch: 그룹을 만든 뒤 1:1 탭에는 1:1 폼이 보이고 방으
   expect(buttons()).not.toContain('방으로 가기');
   expect(texts()).not.toContain(CODE);
   expect(buttons()).toContain('코드 만들기');
+});
+
+// ── 접근성: 포커스 이동 알림 · 복사 대체 · 경고 역할 ───────────
+
+test('a11y: 코드를 만들면 읽어 주는 쪽에 한 번 알린다(1:1은 한 번, 그룹은 72시간 안에)', async () => {
+  const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {});
+  announce.mockClear();
+  mockRpc.mockReturnValue(ok(CODE));
+  const { press } = await setup('direct');
+  expect(announce).not.toHaveBeenCalled();
+  await press('코드 만들기');
+  expect(announce).toHaveBeenCalledTimes(1);
+  expect(announce.mock.calls[0][0]).toContain('초대 코드를 만들었어요');
+  expect(announce.mock.calls[0][0]).not.toContain(CODE); // 코드 자체는 알림·로그로 내보내지 않는다
+});
+
+test('a11y: 코드 입력 오류와 만들기 오류는 alert 역할이다', async () => {
+  mockRpc.mockReturnValue(fail('invite_used'));
+  const join = await setup('join');
+  await join.type('초대 코드', CODE);
+  await join.press('참여하기');
+  expect(join.find((n) => n.props.accessibilityRole === 'alert').length).toBeGreaterThan(0);
+  mockRpc.mockReturnValue(fail('not_authenticated'));
+  const direct = await setup('direct');
+  await direct.press('코드 만들기');
+  expect(direct.find((n) => n.props.accessibilityRole === 'alert' && textOf(n as unknown as TestNode) !== '').length).toBeGreaterThan(0);
+});
+
+describe('보내기 (웹)', () => {
+  const nav = globalThis.navigator as unknown as Record<string, unknown>;
+  let osSpy: jest.ReplaceProperty<string>;
+  beforeEach(() => {
+    osSpy = jest.replaceProperty(Platform, 'OS', 'web');
+    jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {});
+  });
+  afterEach(() => {
+    osSpy.restore();
+    delete nav.share;
+    delete nav.clipboard;
+    jest.restoreAllMocks();
+  });
+  const defineNav = (k: string, v: unknown) => Object.defineProperty(nav, k, { value: v, configurable: true, writable: true });
+
+  test('공유 창이 없으면 클립보드로 복사하고 "복사했어요"를 경고 영역에 낸다', async () => {
+    const writeText = jest.fn().mockResolvedValue(undefined);
+    defineNav('clipboard', { writeText });
+    mockRpc.mockReturnValue(ok(CODE));
+    const { press, texts, find } = await setup('direct');
+    await press('코드 만들기');
+    await press('보내기');
+    expect(writeText).toHaveBeenCalledWith(CODE);
+    expect(texts()).toContain('복사했어요');
+    expect(find((n) => n.props.accessibilityRole === 'alert' && textOf(n as unknown as TestNode) === '복사했어요').length).toBeGreaterThan(0);
+    expect(shareSpy).not.toHaveBeenCalled();
+  });
+
+  test('navigator.share가 있으면 그것을 쓴다', async () => {
+    const share = jest.fn().mockResolvedValue(undefined);
+    defineNav('share', share);
+    mockRpc.mockReturnValue(ok(CODE));
+    const { press } = await setup('direct');
+    await press('코드 만들기');
+    await press('보내기');
+    expect(share).toHaveBeenCalledWith({ text: `초대 코드: ${CODE}` });
+  });
+
+  test('복사도 안 되면 삼키지 않고 확정하지 않는 문구로 직접 복사를 안내한다', async () => {
+    defineNav('clipboard', { writeText: jest.fn().mockRejectedValue(new Error('denied')) });
+    mockRpc.mockReturnValue(ok(CODE));
+    const { press, texts } = await setup('direct');
+    await press('코드 만들기');
+    await press('보내기');
+    expect(texts()).toContain('복사하지 못했을 수도 있어요');
+    expect(texts()).not.toContain('복사했어요');
+  });
+
+  test('공유 창을 닫은 것(AbortError)은 오류로 안내하지 않는다', async () => {
+    defineNav('share', jest.fn().mockRejectedValue(Object.assign(new Error('x'), { name: 'AbortError' })));
+    mockRpc.mockReturnValue(ok(CODE));
+    const { press, texts } = await setup('direct');
+    await press('코드 만들기');
+    await press('보내기');
+    expect(texts()).not.toContain('복사하지 못했');
+  });
 });
