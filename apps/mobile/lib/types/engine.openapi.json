@@ -281,19 +281,22 @@
       "MirrorAnswerIn": {
         "properties": {
           "card_id": {
+            "maxLength": 512,
+            "title": "Card Id",
             "type": "string"
           },
           "predicted": {
             "anyOf": [
               {
-                "maximum": 5,
-                "minimum": 1,
+                "maximum": 5.0,
+                "minimum": 1.0,
                 "type": "integer"
               },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Predicted"
           },
           "reply": {
             "anyOf": [
@@ -305,39 +308,44 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Reply"
           },
           "score": {
             "anyOf": [
               {
-                "maximum": 5,
-                "minimum": 1,
+                "maximum": 5.0,
+                "minimum": 1.0,
                 "type": "integer"
               },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Score"
           }
         },
         "required": [
           "card_id"
         ],
+        "title": "MirrorAnswerIn",
         "type": "object"
       },
       "MirrorAnswerOut": {
+        "description": "패널 칸·risk·확률은 넣지 않는다. 점수는 gap(차이)으로만.",
         "properties": {
           "gap": {
             "anyOf": [
               {
-                "maximum": 4,
-                "minimum": 0,
+                "maximum": 4.0,
+                "minimum": 0.0,
                 "type": "integer"
               },
               {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Gap"
           },
           "inner_voice": {
             "anyOf": [
@@ -347,7 +355,8 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Inner Voice"
           },
           "options": {
             "anyOf": [
@@ -360,7 +369,8 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Options"
           },
           "readings": {
             "$ref": "#/components/schemas/Readings"
@@ -373,17 +383,20 @@
               {
                 "type": "null"
               }
-            ]
+            ],
+            "title": "Reveal"
           }
         },
         "required": [
           "readings"
         ],
+        "title": "MirrorAnswerOut",
         "type": "object"
       },
       "MirrorCard": {
         "properties": {
           "card_id": {
+            "title": "Card Id",
             "type": "string"
           },
           "kind": {
@@ -392,18 +405,23 @@
               "receive",
               "predict"
             ],
+            "title": "Kind",
             "type": "string"
           },
           "message": {
+            "title": "Message",
             "type": "string"
           },
           "persona": {
+            "title": "Persona",
             "type": "string"
           },
           "relation": {
+            "title": "Relation",
             "type": "string"
           },
           "situation": {
+            "title": "Situation",
             "type": "string"
           }
         },
@@ -415,6 +433,7 @@
           "situation",
           "message"
         ],
+        "title": "MirrorCard",
         "type": "object"
       },
       "MirrorTodayOut": {
@@ -423,12 +442,14 @@
             "items": {
               "$ref": "#/components/schemas/MirrorCard"
             },
+            "title": "Cards",
             "type": "array"
           }
         },
         "required": [
           "cards"
         ],
+        "title": "MirrorTodayOut",
         "type": "object"
       },
       "OptionOut": {
@@ -824,6 +845,25 @@
     },
     "/v1/mirror/answer": {
       "post": {
+        "operationId": "mirror_answer_v1_mirror_answer_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -844,18 +884,42 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "summary": "Mirror Answer"
       }
     },
     "/v1/mirror/today": {
       "post": {
+        "operationId": "mirror_today_v1_mirror_today_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -866,13 +930,18 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
         "summary": "Mirror Today"
       }
     },

@@ -16,6 +16,7 @@ class Settings:
     expo_access_token: str = field(default="", repr=False)  # 선택: Expo Push 보안 사용 시
     vapid_private_key: str = field(default="", repr=False)  # `npx web-push generate-vapid-keys`의 Private Key. 공개키는 앱만 안다(엔진은 읽지 않음)
     vapid_subject: str = ""      # mailto:<연락 이메일>
+    mirror_secret: str = field(default="", repr=False)  # 거울 card_id 서명 키. 비면 프로세스마다 임의 키(mirror.get_mirror_key)
     force_mock: bool = False
     models_path: Path = DEFAULT_MODELS_PATH
     cors_origins: tuple[str, ...] = DEFAULT_CORS_ORIGINS
@@ -31,6 +32,7 @@ class Settings:
             expo_access_token=os.environ.get("EXPO_ACCESS_TOKEN", ""),
             vapid_private_key=os.environ.get("VAPID_PRIVATE_KEY", ""),
             vapid_subject=os.environ.get("VAPID_SUBJECT", ""),
+            mirror_secret=os.environ.get("MIRROR_SECRET", ""),
             force_mock=os.environ.get("FORCE_MOCK", "").lower() in {"1", "true"},
             models_path=Path(os.environ.get("MODELS_PATH") or DEFAULT_MODELS_PATH),
             cors_origins=tuple(o for o in (x.strip() for x in os.environ.get("CORS_ORIGINS", "").split(",")) if o)

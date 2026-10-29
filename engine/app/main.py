@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 from app.auth import get_verifier
 from app.db import PgRepo
-from app.routes import detail, hint, hooks, stats
+from app.routes import detail, hint, hooks, mirror, stats
 from app.settings import Settings
 from harness.providers import available
 from harness.router import chains
@@ -51,6 +51,7 @@ app.include_router(hooks.router)
 app.include_router(hint.router)
 app.include_router(detail.router)
 app.include_router(stats.router)
+app.include_router(mirror.router)
 
 
 class HealthResponse(BaseModel):

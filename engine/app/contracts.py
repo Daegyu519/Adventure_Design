@@ -84,3 +84,35 @@ class StatsOut(BaseModel):
     fix_rate: float = Field(ge=0, le=1)
     hints_by_week: list[WeekCount]
     predict_gap_trend: list[WeekGap]
+
+
+MirrorKind = Literal["roleplay", "receive", "predict"]
+
+
+class MirrorCard(BaseModel):
+    card_id: str   # 엔진 서명 출처 참조(문장 없음). 앱은 그대로 돌려준다
+    kind: MirrorKind
+    persona: str
+    relation: str
+    situation: str
+    message: str
+
+
+class MirrorTodayOut(BaseModel):
+    cards: list[MirrorCard]
+
+
+class MirrorAnswerIn(BaseModel):
+    card_id: str = Field(max_length=512)   # 엔진이 만든 값은 300자 안팎. 큰 값을 서명 검사 전에 막는다
+    reply: Draft | None = None                        # 역할극
+    score: int | None = Field(None, ge=1, le=5)       # 되돌려 받기
+    predicted: int | None = Field(None, ge=1, le=5)   # 예측 맞히기
+
+
+class MirrorAnswerOut(BaseModel):
+    """패널 칸·risk·확률은 넣지 않는다. 점수는 gap(차이)으로만."""
+    readings: Readings
+    inner_voice: str | None = None
+    reveal: str | None = None
+    options: list[OptionOut] | None = None
+    gap: int | None = Field(None, ge=0, le=4)
