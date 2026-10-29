@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SplashScreen from 'expo-splash-screen';
 import { act } from 'react';
 import { createRoot } from 'test-renderer';
@@ -8,7 +9,8 @@ import tokens from '../lib/tokens.json';
 // 글꼴·스플래시·라우터는 가짜로 바꾼다. 가짜 Stack.Protected는 진짜처럼 guard가 거짓이면 화면을 아예 그리지 않는다.
 jest.mock('expo-font', () => ({ useFonts: () => [true, null] }));
 jest.mock('expo-splash-screen', () => ({ preventAutoHideAsync: jest.fn(), hide: jest.fn() }));
-jest.mock('expo-status-bar', () => ({ StatusBar: () => null }));
+const mockStatusBar = jest.fn((_p: { style?: string }) => null);
+jest.mock('expo-status-bar', () => ({ StatusBar: (p: { style?: string }) => mockStatusBar(p) }));
 jest.mock('expo-router', () => {
   const { View } = jest.requireActual('react-native');
   const Stack = ({ children }: { children: unknown }) => <View>{children}</View>;
@@ -61,10 +63,11 @@ async function mount() {
   return { root, screens, blank };
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   mockConsented = null;
   mockSupabase = null;
   jest.clearAllMocks();
+  await AsyncStorage.clear();
 });
 
 test('layout: consent not read yet → only the background-colored blank view, and the splash stays', async () => {
@@ -119,4 +122,26 @@ test('layout: signed in with a profile → tabs', async () => {
   await fake.session(SESSION);
   await fake.profile(ROW);
   expect(screens()).toEqual(['(tabs)']);
+});
+
+// 상태 표시줄 글자색은 시스템이 아니라 고른 테마를 따라야 한다(밝은 바탕에 흰 시계가 나오면 안 보인다).
+const lastBarStyle = () => mockStatusBar.mock.calls.at(-1)?.[0].style;
+
+test('layout: saved theme dark → light status bar content; saved light → dark content', async () => {
+  mockConsented = false;
+  await AsyncStorage.setItem('theme.v1', 'dark');
+  await mount();
+  expect(lastBarStyle()).toBe('light');
+  jest.clearAllMocks();
+  await AsyncStorage.setItem('theme.v1', 'light');
+  await mount();
+  expect(lastBarStyle()).toBe('dark');
+});
+
+test('layout: the blank loading view and the stack take the chosen theme background', async () => {
+  mockConsented = null;
+  await AsyncStorage.setItem('theme.v1', 'dark');
+  const { root } = await mount();
+  const dark = root.container.queryAll((n) => n.props.style?.flex === 1 && n.props.style?.backgroundColor === tokens.dark.background);
+  expect(dark).toHaveLength(1);
 });

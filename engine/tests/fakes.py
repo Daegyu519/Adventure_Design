@@ -12,7 +12,7 @@ from itertools import count
 from typing import Any
 from uuid import UUID
 
-from app.db import FeedbackWrite, Msg, PushTarget, Room, SentMsg, TraceRow, week_start
+from app.db import GROUP_MIN_MEMBERS, FeedbackWrite, Msg, PushTarget, Room, SentMsg, TraceRow, check_patterns, week_start
 
 
 # DB CHECK 제약과 같은 값 범위(supabase/migrations). 어긋나면 운영처럼 실패한다.
@@ -46,7 +46,6 @@ class SenderPat:
     count: int
     strength: float
     feeling: str | None
-    active_from: datetime
 
 
 class FakeRepo:
@@ -60,9 +59,10 @@ class FakeRepo:
         self.mirror_attempts: list[dict] = []
         self.traces: list[dict] = []                           # tone.analysis_traces 행
         self.feedback_log: list[dict] = []
-        self.sender_pats: dict[tuple[UUID, str, str], SenderPat] = {}
+        self.sender_pats: dict[tuple[UUID, str, str, datetime], SenderPat] = {}   # PK (sender, relation, trigger, active_from)
         self.global_pats: dict[str, int] = {}
         self.pattern_reporters: set[tuple[str, UUID]] = set()
+        self.sender_pattern_reporters: set[tuple[UUID, str, str, UUID]] = set()   # (sender, relation, trigger, reporter)
         self.baselines: dict[UUID, dict] = {}
         self._ids = count(1)
 
@@ -105,7 +105,7 @@ class FakeRepo:
 
     def add_sender_pattern(self, sender_id: UUID, relation: str, trigger: str, *, count: int = 1,
                            strength: float = 1.0, feeling: str | None = "차갑게", active_from: datetime) -> None:
-        self.sender_pats[(sender_id, relation, trigger)] = SenderPat(count, strength, feeling, active_from)
+        self.sender_pats[(sender_id, relation, trigger, active_from)] = SenderPat(count, strength, feeling)
 
     def set_global(self, trigger: str, count: int) -> None:
         self.global_pats[trigger] = count
@@ -117,10 +117,12 @@ class FakeRepo:
             "public.push_tokens": lambda: [asdict(t) for t in self.push_tokens],
             "tone.analysis_traces": lambda: self.traces,
             "tone.feedback_log": lambda: self.feedback_log,
-            "tone.sender_patterns": lambda: [{"sender_id": s, "relation": r, "trigger": t, **asdict(p)}
-                                             for (s, r, t), p in self.sender_pats.items()],
+            "tone.sender_patterns": lambda: [{"sender_id": s, "relation": r, "trigger": t, "active_from": a, **asdict(p)}
+                                             for (s, r, t, a), p in self.sender_pats.items()],
             "tone.global_patterns": lambda: [{"trigger": t, "count": n} for t, n in self.global_pats.items()],
             "tone.pattern_reporters": lambda: [{"trigger": t, "reporter_id": u} for t, u in self.pattern_reporters],
+            "tone.sender_pattern_reporters": lambda: [{"sender_id": s, "relation": r, "trigger": t, "reporter_id": u}
+                                                      for s, r, t, u in self.sender_pattern_reporters],
             "tone.baselines": lambda: [{"user_id": u, **b} for u, b in self.baselines.items()],
         }
         return copy.deepcopy(tables[table]())
@@ -145,9 +147,16 @@ class FakeRepo:
         return {u: self.users[u] for u in self.members.get(room_id, {})}
 
     async def sender_patterns(self, sender_id: UUID, relation: str, now: datetime) -> dict[str, dict]:
-        return {t: {"count": p.count, "strength": p.strength, "feeling": p.feeling}
-                for (s, r, t), p in self.sender_pats.items()
-                if (s, r) == (sender_id, relation) and p.active_from <= now}
+        rows: dict[str, list[tuple[datetime, SenderPat]]] = {}
+        for (s, r, t, a), p in self.sender_pats.items():
+            if (s, r) == (sender_id, relation) and a <= now:
+                rows.setdefault(t, []).append((a, p))
+        out = {}
+        for t, ps in rows.items():
+            n = sum(p.count for _, p in ps)
+            out[t] = {"count": n, "strength": sum(p.strength * p.count for _, p in ps) / n,
+                      "feeling": max(ps, key=lambda ap: ap[0])[1].feeling}
+        return out
 
     async def global_patterns(self) -> dict[str, int]:
         return dict(self.global_pats)
@@ -184,6 +193,9 @@ class FakeRepo:
                             "risk": None, "top_reading": top_reading, "signals": _jsonb(signals), "choice": None,
                             "created_at": _now()})
 
+    async def has_feedback(self, reporter_id: UUID, message_id: int) -> bool:
+        return any((f["reporter_id"], f["message_id"]) == (reporter_id, message_id) for f in self.feedback_log)
+
     async def weekly_feedback_count(self, sender_id: UUID, relation: str, since: datetime) -> int:
         def counts(f: dict) -> bool:
             m = self.messages.get(f["message_id"])
@@ -192,14 +204,13 @@ class FakeRepo:
         return sum(1 for f in self.feedback_log if counts(f))
 
     async def apply_feedback(self, fb: FeedbackWrite) -> bool:
-        # PgRepo는 한 트랜잭션이라 CHECK에 걸리면 아무것도 안 남는다: 쓰기 전에 모두 검사한다.
-        # 칸이 실제로 쓰일 때만 검사한다(usable이 아니면 패턴 표에 안 쓰고, to_sender가 아니면 sender_patterns에 안 쓴다).
-        for p in fb.patterns if fb.usable else []:
-            _check(1 <= len(p.trigger) <= 30, "pattern trigger")
-            if fb.to_sender:
-                _check(fb.relation in RELATIONS, "sender_patterns.relation")
-                _check(p.feeling is None or p.feeling in READINGS, "sender_patterns.feeling")
-                _check(1 <= p.strength <= 3, "sender_patterns.strength")
+        # PgRepo와 같은 순서: 값 검사 → 메시지로 보낸 사람·관계를 찾음 → 쓰기. 실패하면 아무것도 안 남는다.
+        check_patterns(fb.patterns)
+        m = self.messages.get(fb.message_id)
+        if m is None or m.room_id != fb.room_id:
+            raise ValueError("unknown message")
+        room = self.rooms[fb.room_id]
+        to_sender = fb.to_sender and room["kind"] == "group" and len(self.members[fb.room_id]) >= GROUP_MIN_MEMBERS
         if any((f["reporter_id"], f["message_id"]) == (fb.reporter_id, fb.message_id) for f in self.feedback_log):
             return False
         self.feedback_log.append({"id": next(self._ids), "room_id": fb.room_id, "reporter_id": fb.reporter_id,
@@ -211,14 +222,16 @@ class FakeRepo:
             if (p.trigger, fb.reporter_id) not in self.pattern_reporters:
                 self.pattern_reporters.add((p.trigger, fb.reporter_id))
                 self.global_pats[p.trigger] = self.global_pats.get(p.trigger, 0) + 1
-            if fb.to_sender:
-                key = (fb.sender_id, fb.relation, p.trigger)
+            first = (m.sender_id, room["relation"], p.trigger, fb.reporter_id)
+            if to_sender and first not in self.sender_pattern_reporters:   # 서로 다른 신고자만 센다
+                self.sender_pattern_reporters.add(first)
+                key = (m.sender_id, room["relation"], p.trigger, fb.active_from)
                 old = self.sender_pats.get(key)
                 if old is None:
-                    self.sender_pats[key] = SenderPat(1, float(p.strength), p.feeling, fb.active_from)
+                    self.sender_pats[key] = SenderPat(1, float(p.strength), p.feeling)
                 else:
                     self.sender_pats[key] = SenderPat(old.count + 1, (old.strength * old.count + p.strength) / (old.count + 1),
-                                                      p.feeling, fb.active_from)
+                                                      p.feeling)
         return True
 
     async def push_targets(self, room_id: UUID, sender_id: UUID) -> list[PushTarget]:
@@ -234,14 +247,17 @@ class FakeRepo:
         mine.sort(key=lambda m: (m.created_at, m.id), reverse=True)
         return [SentMsg(m.id, m.room_id, m.text, self.rooms[m.room_id]["relation"], m.created_at) for m in mine[:limit]]
 
-    async def mirror_refs(self, user_id: UUID) -> set[str]:
-        return {f"{a['kind']}|{a['card_ref']}" for a in self.mirror_attempts if a["user_id"] == user_id}
+    async def mirror_refs(self, user_id: UUID, before: datetime) -> set[str]:
+        return {f"{a['kind']}|{a['card_ref']}" for a in self.mirror_attempts
+                if a["user_id"] == user_id and a["created_at"] < before}
 
     async def insert_mirror_attempt(self, user_id: UUID, kind: str, card_ref: str, answer_score: int | None,
                                     predicted: int | None, panel_bin: int | None, gap: int | None) -> None:
         _check(kind in MIRROR_KINDS, "mirror_attempts.kind")
         _check(1 <= len(card_ref) <= 200, "mirror_attempts.card_ref")
         _check(all(_in(v, 1, 5) for v in (answer_score, predicted, panel_bin)) and _in(gap, 0, 4), "mirror_attempts score")
+        if any((a["user_id"], a["kind"], a["card_ref"]) == (user_id, kind, card_ref) for a in self.mirror_attempts):
+            return   # unique (user_id, kind, card_ref) + on conflict do nothing
         self.mirror_attempts.append({"id": next(self._ids), "user_id": user_id, "kind": kind, "card_ref": card_ref,
                                      "answer_score": answer_score, "predicted": predicted, "panel_bin": panel_bin,
                                      "gap": gap, "created_at": _now()})
@@ -277,9 +293,11 @@ class FakeQueue:
         self.accepting = accepting  # False면 가득 찬 큐처럼 거절한다(호출하는 쪽의 503 경로 테스트용)
         self.jobs: list[tuple[str, Callable[..., Awaitable[None]], tuple]] = []
         self.keys: list[str] = []  # 받은 멱등 키(JobQueue처럼 같은 키는 한 번만 받는다)
+        self.max_attempts: list[int | None] = []  # 받은 작업마다 enqueue(max_attempts=)
         self._ran = 0
 
-    def enqueue(self, name: str, fn: Callable[..., Awaitable[None]], *args: Any, key: str | None = None) -> bool:
+    def enqueue(self, name: str, fn: Callable[..., Awaitable[None]], *args: Any, key: str | None = None,
+                max_attempts: int | None = None) -> bool:
         if not self.accepting:
             return False
         if key is not None:
@@ -287,6 +305,7 @@ class FakeQueue:
                 return True
             self.keys.append(key)
         self.jobs.append((name, fn, args))
+        self.max_attempts.append(max_attempts)
         return True
 
     def names(self) -> list[str]:

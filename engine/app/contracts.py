@@ -30,6 +30,16 @@ class HintOut(BaseModel):
     trace_id: UUID
 
 
+class FeedbackIn(BaseModel):
+    room_id: UUID
+    message_id: int = Field(gt=0, lt=2**63)   # messages.id는 양수 bigint
+    text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000)]
+
+
+class FeedbackOut(BaseModel):
+    ack: str
+
+
 Intent = Literal["단호하게", "미안하게", "가볍게"]   # 의도 칩. 고쳐 쓰기에만 들어간다(판정에는 넣지 않음)
 
 
@@ -84,3 +94,35 @@ class StatsOut(BaseModel):
     fix_rate: float = Field(ge=0, le=1)
     hints_by_week: list[WeekCount]
     predict_gap_trend: list[WeekGap]
+
+
+MirrorKind = Literal["roleplay", "receive", "predict"]
+
+
+class MirrorCard(BaseModel):
+    card_id: str   # 엔진 서명 출처 참조(문장 없음). 앱은 그대로 돌려준다
+    kind: MirrorKind
+    persona: str
+    relation: str
+    situation: str
+    message: str
+
+
+class MirrorTodayOut(BaseModel):
+    cards: list[MirrorCard]
+
+
+class MirrorAnswerIn(BaseModel):
+    card_id: str = Field(max_length=512)   # 엔진이 만든 값은 300자 안팎. 큰 값을 서명 검사 전에 막는다
+    reply: Draft | None = None                        # 역할극
+    score: int | None = Field(None, ge=1, le=5)       # 되돌려 받기
+    predicted: int | None = Field(None, ge=1, le=5)   # 예측 맞히기
+
+
+class MirrorAnswerOut(BaseModel):
+    """패널 칸·risk·확률은 넣지 않는다. 점수는 gap(차이)으로만."""
+    readings: Readings
+    inner_voice: str | None = None
+    reveal: str | None = None
+    options: list[OptionOut] | None = None
+    gap: int | None = Field(None, ge=0, le=4)
