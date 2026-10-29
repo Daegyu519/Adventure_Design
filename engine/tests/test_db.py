@@ -243,15 +243,40 @@ def test_mirror_and_stats(world):
         assert await repo.event_counts(a) == {"hint_shown": 2, "detail_opened": 1}
         assert await repo.hints_by_week(a, since) == {date(2026, 10, 26): 1}
 
-        for gap, at in [(1, datetime(2026, 10, 26, 1, tzinfo=UTC)), (3, datetime(2026, 10, 28, 1, tzinfo=UTC)),
-                        (None, datetime(2026, 10, 27, tzinfo=UTC)), (4, datetime(2026, 9, 1, tzinfo=UTC))]:
-            await w(seed.add_mirror_attempt(a, "predict", "msg:7", gap=gap, at=at))
+        later = NOW + timedelta(days=1)
+        for i, (gap, at) in enumerate([(1, datetime(2026, 10, 26, 1, tzinfo=UTC)), (3, datetime(2026, 10, 28, 1, tzinfo=UTC)),
+                                       (None, datetime(2026, 10, 27, tzinfo=UTC)), (4, datetime(2026, 9, 1, tzinfo=UTC))]):
+            await w(seed.add_mirror_attempt(a, "predict", f"msg:{7 + i}", gap=gap, at=at))
         await w(seed.add_mirror_attempt(b, "roleplay", "card:1", at=sunday_utc))
-        assert await repo.mirror_refs(a) == {"predict|msg:7"}
+        mine = {f"predict|msg:{7 + i}" for i in range(4)}
+        assert await repo.mirror_refs(a, later) == mine
         assert await repo.predict_gap_by_week(a, since) == {date(2026, 10, 26): 2.0}
 
         await repo.insert_mirror_attempt(a, "receive", "card:3", 4, None, None, None)
-        assert await repo.mirror_refs(a) == {"predict|msg:7", "receive|card:3"}
+        assert await repo.mirror_refs(a, later) == mine | {"receive|card:3"}
+    world(body)
+
+
+def test_mirror_attempt_once_and_refs_before(world):
+    """(user, kind, card_ref)는 한 줄만 남는다(동시에 두 번 와도, 먼저 남은 값 그대로).
+    mirror_refs(before)는 그 시각 전에 답한 것만 준다(오늘 0시 KST를 넘기면 그날 답한 카드는 오늘 카드에 남는다)."""
+    async def body(repo, seed):
+        a, b, c, room = await trio(seed)
+        cut = datetime(2026, 10, 27, 15, tzinfo=UTC)   # KST 10-28 00:00
+        await w(seed.add_mirror_attempt(a, "receive", "msg:1", at=cut - timedelta(seconds=1)))
+        await w(seed.add_mirror_attempt(a, "predict", "msg:1", at=cut))
+        assert await repo.mirror_refs(a, cut) == {"receive|msg:1"}
+
+        await repo.insert_mirror_attempt(a, "receive", "msg:1", 5, None, 5, 0)   # 이미 있다: 무시
+        await asyncio.gather(*(repo.insert_mirror_attempt(a, "predict", "card:due-01", None, p, 3, abs(p - 3))
+                               for p in (1, 2)))
+        rows = {(r["kind"], r["card_ref"]): r for r in await w(seed.rows("public.mirror_attempts")) if r["user_id"] == a}
+        assert sorted(rows) == [("predict", "card:due-01"), ("predict", "msg:1"), ("receive", "msg:1")]
+        assert len(await w(seed.rows("public.mirror_attempts"))) == 3
+        assert rows[("receive", "msg:1")]["answer_score"] is None   # 덮어쓰지 않는다
+
+        await repo.insert_mirror_attempt(b, "receive", "msg:1", 2, None, 2, 0)   # 다른 사용자는 따로 센다
+        assert await repo.mirror_refs(b, NOW + timedelta(days=1)) == {"receive|msg:1"}
     world(body)
 
 

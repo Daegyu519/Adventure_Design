@@ -1,9 +1,11 @@
 """거울 세션(T-35): /v1/mirror/today · /v1/mirror/answer, 엔진 서명 card_id, 상황 카드 20장.
 spy 모델 이름은 mock_rules 함수 이름이다(tone, tone_alt, …)."""
+import asyncio
 import json
+import logging
 import re
 from collections import Counter
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 
 import pytest
 
@@ -13,6 +15,8 @@ from harness.schemas import READINGS
 from layers.guard import guard
 
 NOW = datetime.now(timezone.utc)
+DAY_START = datetime.combine(NOW.astimezone(KST).date(), time.min, KST)   # 오늘 0시(KST)
+BEFORE_TODAY = DAY_START - timedelta(seconds=1)   # 어제 답한 것: 오늘 카드에서 뺀다
 TOPICS = {"일정 조율": "sched", "역할 요청": "role", "거절": "refuse", "마감 독촉": "due"}
 OTHER_APPS = re.compile(r"카카오|카톡|인스타|디스코드|kakao|instagram|discord", re.I)
 KINDS = ["roleplay", "receive", "predict"]
@@ -163,9 +167,9 @@ def test_today_skips_used_refs(client, login, fake):
     keep = "due-03"
     for c in CONTENT.cards:
         if c.id != keep:
-            fake.add_mirror_attempt(me, "roleplay", f"card:{c.id}")
-    fake.add_mirror_attempt(me, "receive", f"msg:{a}")
-    fake.add_mirror_attempt(me, "predict", f"msg:{a}")
+            fake.add_mirror_attempt(me, "roleplay", f"card:{c.id}", at=BEFORE_TODAY)
+    fake.add_mirror_attempt(me, "receive", f"msg:{a}", at=BEFORE_TODAY)
+    fake.add_mirror_attempt(me, "predict", f"msg:{a}", at=BEFORE_TODAY)
     login(me)
     k = _by_kind(_today(client))
     assert k["roleplay"]["message"] == next(c.message for c in CONTENT.cards if c.id == keep)
@@ -173,9 +177,39 @@ def test_today_skips_used_refs(client, login, fake):
     assert k["predict"]["message"] in {c.sample_reply for c in CONTENT.cards}   # a는 썼고 b는 receive가 가져갔다
 
 
+def test_today_same_after_answering_today(client, login, fake):
+    """오늘 답한 카드는 오늘 카드에서 빼지 않는다: 답한 뒤 다시 열어도 그날 세 장은 그대로다(하루 3장)."""
+    me, _, room = _room(fake)
+    fake.add_message(room, me, "첫 문장이에요")
+    fake.add_message(room, me, "두 번째 문장이에요")
+    login(me)
+    first = _today(client)
+    k = _by_kind(first)
+    assert _answer(client, k["receive"]["card_id"], score=2).status_code == 200
+    assert _answer(client, k["roleplay"]["card_id"], reply="네 알겠어요").status_code == 200
+    assert _today(client) == first
+    assert _answer(client, k["predict"]["card_id"], predicted=3).status_code == 200
+    assert _today(client) == first and len(fake.mirror_attempts) == 3
+
+
+def test_today_next_day_excludes_answered(client, login, fake):
+    """다음 날(KST)에는 전날 답한 출처를 그 종류에서 뺀다."""
+    me, _, room = _room(fake)
+    fake.add_message(room, me, "첫 문장이에요")
+    fake.add_message(room, me, "두 번째 문장이에요")
+    login(me)
+    k = _by_kind(_today(client))
+    assert _answer(client, k["receive"]["card_id"], score=2).status_code == 200
+    for a in fake.mirror_attempts:   # 하루가 지난 것처럼
+        a["created_at"] -= timedelta(days=1)
+    again = _by_kind(_today(client))
+    assert again["receive"]["message"] != k["receive"]["message"]
+    assert again["predict"]["message"] == k["receive"]["message"]   # 예측으로는 아직 쓰지 않은 문장
+
+
 # ── 답하기: 거부 ───────────────────────────────────────
 
-@pytest.mark.parametrize("tamper", ["payload", "sig", "drop_sig", "garbage", "wrong_key", "huge"])
+@pytest.mark.parametrize("tamper", ["payload", "sig", "drop_sig", "garbage", "wrong_key"])
 def test_tampered_card_422(client, login, fake, tamper):
     me, _, _ = _room(fake)
     login(me)
@@ -183,9 +217,22 @@ def test_tampered_card_422(client, login, fake, tamper):
     body, sig = cid.split(".")
     flip = lambda s, i: s[:i] + ("A" if s[i] != "A" else "B") + s[i + 1:]  # noqa: E731
     forged = {"payload": f"{flip(body, 5)}.{sig}", "sig": f"{body}.{flip(sig, 3)}", "drop_sig": body,
-              "garbage": "not-a-card", "wrong_key": mirror.sign(mirror.unsign(cid, mirror.get_mirror_key()), b"x"), "huge": f"{body * 3}.{sig}"}
+              "garbage": "not-a-card", "wrong_key": mirror.sign(mirror.unsign(cid, mirror.get_mirror_key()), b"x")}
     r = _answer(client, forged[tamper], predicted=3)
     assert r.status_code == 422 and fake.mirror_attempts == []
+
+
+def test_oversized_card_id_rejected_by_schema(client, login, fake):
+    """서명 검사 전에 길이 상한(512자)이 막는다."""
+    me, _, _ = _room(fake)
+    login(me)
+    r = _answer(client, "a" * 513, predicted=3)
+    assert r.status_code == 422 and r.json()["detail"][0]["type"] == "string_too_long"
+
+
+@pytest.mark.parametrize("path,body", [("/v1/mirror/today", None), ("/v1/mirror/answer", {"card_id": "x", "score": 3})])
+def test_mirror_routes_require_token_401(client, fake, path, body):
+    assert client.post(path, json=body).status_code == 401 and fake.mirror_attempts == []
 
 
 def test_other_users_card_403(client, login, fake):
@@ -257,7 +304,7 @@ def test_answer_roleplay(client, login, fake):
 def test_answer_predict_gap_and_record(client, login, fake, spy):
     me, _, room = _room(fake)
     mid = fake.add_message(room, me, "그건 어렵겠어요.")
-    fake.add_mirror_attempt(me, "receive", f"msg:{mid}")   # 되돌려 받기가 먼저 가져가지 않게
+    fake.add_mirror_attempt(me, "receive", f"msg:{mid}", at=BEFORE_TODAY)   # 되돌려 받기가 먼저 가져가지 않게
     login(me)
     spy.canned |= {"tone": lambda p: _tone(.7), "tone_alt": lambda p: _tone(.7)}   # 부정 0.7 → 4칸
     card = _by_kind(_today(client))["predict"]
@@ -299,6 +346,35 @@ def test_answer_twice_records_once(client, login, fake):
     assert len(fake.mirror_attempts) == 1 and fake.mirror_attempts[0]["predicted"] == 2
 
 
+def test_roleplay_option_restores_phone(client, login, fake, spy):
+    """역할극 답의 개인정보는 모델에 가린 채 가고, 고쳐 쓰기 후보에는 원래 값으로 돌아온다."""
+    me, _, _ = _room(fake)
+    login(me)
+    # 원문은 차갑게 읽혀 고쳐 쓰기가 돌고, 후보는 덜 차갑게 다시 읽혀 통과한다
+    soft = lambda p: _tone(.05 if "어려울 것 같아요" in p["draft"] else 1.0)  # noqa: E731
+    spy.canned |= {"tone": soft, "tone_alt": soft}
+    card = _by_kind(_today(client))["roleplay"]
+    b = _answer(client, card["card_id"], reply="안 돼요. 010-1234-5678로 전화해").json()
+    [opt] = b["options"]
+    assert "010-1234-5678" in opt["text"] and "[전화번호" not in json.dumps(b, ensure_ascii=False)
+    assert spy.calls and "010-1234" not in spy.seen()
+
+
+def test_answer_deadline_503(client, login, fake, registry, monkeypatch):
+    """paths.mirror.deadline_ms를 넘기면 503이고 기록하지 않는다."""
+    me, _, room = _room(fake)
+    fake.add_message(room, me, "확인했어요")
+    login(me)
+    cid = _by_kind(_today(client))["receive"]["card_id"]
+    registry.cfg["paths"]["mirror"]["deadline_ms"] = 50
+
+    async def slow(_mid):
+        await asyncio.sleep(1)
+    monkeypatch.setattr(fake, "message", slow)
+    r = _answer(client, cid, score=3)
+    assert r.status_code == 503 and r.json() == {"detail": "engine_unavailable"} and fake.mirror_attempts == []
+
+
 def test_no_panel_result_503(client, login, fake, spy):
     me, _, _ = _room(fake)
     login(me)
@@ -333,7 +409,7 @@ def test_relative_day(sent, today, expected):
 def test_mirror_never_gemini_and_masked(client, login, fake, spy, registry):
     me, _, room = _room(fake)   # 박민수가 같은 방 멤버
     mid = fake.add_message(room, me, "민수야 010-1234-5678로 연락줘")
-    fake.add_mirror_attempt(me, "receive", f"msg:{mid}")   # 그 문장이 예측 카드로 나오게
+    fake.add_mirror_attempt(me, "receive", f"msg:{mid}", at=BEFORE_TODAY)   # 그 문장이 예측 카드로 나오게
     login(me)
     card = _by_kind(_today(client))["predict"]
     assert card["message"] == "민수야 010-1234-5678로 연락줘"   # 본인에게는 원문 그대로 보인다
@@ -345,3 +421,40 @@ def test_mirror_never_gemini_and_masked(client, login, fake, spy, registry):
     mirror_experts = [e["id"] for e in registry.cfg["experts"] if "mirror" in e["paths"]]
     assert mirror_experts and not any(m.startswith("gemini:") for e in mirror_experts
                                       for m in registry.router.chains[e])
+
+
+# ── 서명 키 ───────────────────────────────────────────
+
+@pytest.fixture
+def fresh_key():
+    mirror.get_mirror_key.cache_clear()
+    yield
+    mirror.get_mirror_key.cache_clear()
+
+
+def test_mirror_key_rejects_short_secret(monkeypatch, fresh_key):
+    monkeypatch.setenv("MIRROR_SECRET", "too-short-secret")
+    with pytest.raises(ValueError) as e:
+        mirror.get_mirror_key()
+    assert "32" in str(e.value) and "too-short" not in str(e.value)   # 값은 메시지에 싣지 않는다
+    monkeypatch.setenv("MIRROR_SECRET", "k" * 32)
+    assert mirror.get_mirror_key() == b"k" * 32
+
+
+def test_short_secret_fails_startup(monkeypatch, fresh_key):
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+    monkeypatch.setenv("MIRROR_SECRET", "short")
+    with pytest.raises(ValueError):
+        with TestClient(app):
+            pass
+
+
+@pytest.mark.parametrize("force_mock,warned", [("", True), ("1", False)])
+def test_mirror_key_warns_once_when_unset(monkeypatch, caplog, fresh_key, force_mock, warned):
+    monkeypatch.delenv("MIRROR_SECRET", raising=False)
+    monkeypatch.setenv("FORCE_MOCK", force_mock)
+    with caplog.at_level(logging.WARNING, logger="mirror"):
+        assert len(mirror.get_mirror_key()) == 32 and mirror.get_mirror_key() == mirror.get_mirror_key()
+    assert len([r for r in caplog.records if "MIRROR_SECRET" in r.getMessage()]) == int(warned)

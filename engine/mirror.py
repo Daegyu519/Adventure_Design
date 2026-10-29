@@ -6,6 +6,7 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import random
 import secrets
 from dataclasses import dataclass
@@ -22,7 +23,9 @@ from app.settings import Settings
 from harness.schemas import READINGS
 from layers.guard import guard
 
+log = logging.getLogger(__name__)
 CONTENT_PATH = Path(__file__).resolve().parent / "content" / "mirror_cards.yaml"
+MIN_KEY_BYTES = 32
 WORD = {"친구": "친구", "팀원": "팀원", "선후배": "선후배", "기타": "상대"}   # 방 관계 → 문구에 쓰는 말
 DAYS = "월화수목금토일"
 MAX_LEN = 500   # 초안 상한(contracts.Draft)과 같다. 더 긴 보낸 문장은 카드로 쓰지 않는다
@@ -65,8 +68,18 @@ def get_content() -> Content:
 
 @lru_cache
 def get_mirror_key() -> bytes:
+    """MIRROR_SECRET(32바이트 이상)이 있으면 그 값. 짧으면 ValueError(값은 싣지 않는다, 엔진 시작이 실패한다).
+    없으면 프로세스마다 임의 키이고, mock이 아니면 경고를 한 번 남긴다."""
     # ponytail: 재시작하면 그날 카드 무효, 여러 프로세스면 MIRROR_SECRET 필수
-    return Settings.from_env().mirror_secret.encode() or secrets.token_bytes(32)
+    s = Settings.from_env()
+    key = s.mirror_secret.encode()
+    if key and len(key) < MIN_KEY_BYTES:
+        raise ValueError(f"MIRROR_SECRET는 {MIN_KEY_BYTES}바이트 이상이어야 한다")
+    if key:
+        return key
+    if not s.force_mock:
+        log.warning("MIRROR_SECRET 없음: 프로세스마다 임의 키라 재시작·여러 워커에서는 card_id가 맞지 않는다")
+    return secrets.token_bytes(MIN_KEY_BYTES)
 
 
 def _b64(b: bytes) -> str:

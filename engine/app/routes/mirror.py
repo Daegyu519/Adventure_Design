@@ -6,7 +6,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time as dtime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -32,9 +32,12 @@ NEEDS = {"roleplay": "reply", "receive": "score", "predict": "predicted"}   # �
 @router.post("/v1/mirror/today")
 async def mirror_today(user: UUID = Depends(current_user), repo: Repo = Depends(get_repo)) -> MirrorTodayOut:
     now = datetime.now(timezone.utc)
+    today = now.astimezone(KST).date()
     sent = await repo.sent_messages(user, now - timedelta(days=30))
-    return MirrorTodayOut(cards=mirror.today_cards(user, now.astimezone(KST).date(), sent, await repo.mirror_refs(user),
-                                                   mirror.get_content(), mirror.get_mirror_key()))
+    # 오늘(KST) 전에 답한 출처만 뺀다: 오늘 답해도 그날 세 장은 그대로다(다시 열어 새 카드를 받지 못한다)
+    used = await repo.mirror_refs(user, datetime.combine(today, dtime.min, KST))
+    return MirrorTodayOut(cards=mirror.today_cards(user, today, sent, used, mirror.get_content(),
+                                                   mirror.get_mirror_key()))
 
 
 @router.post("/v1/mirror/answer")
@@ -57,7 +60,8 @@ async def mirror_answer(body: MirrorAnswerIn, user: UUID = Depends(current_user)
     content = mirror.get_content()
 
     async def run() -> MirrorAnswerOut | None:
-        if ref.startswith("msg:") and kind != "roleplay":   # 본인이 보낸 메시지만. 이름은 그 방 멤버(가리기용)
+        # 본인이 보낸 메시지만. ensure_member는 하지 않는다: 문장은 본인 것이고 멤버 이름은 Masker에만 쓴다(경계는 sender == 호출자)
+        if ref.startswith("msg:") and kind != "roleplay":
             m = await repo.message(int(ref.removeprefix("msg:")))
             if m is None or m.sender_id != user:
                 raise HTTPException(status_code=403, detail="forbidden")
@@ -91,9 +95,8 @@ async def mirror_answer(body: MirrorAnswerIn, user: UUID = Depends(current_user)
                 reveal = guard(f"이건 {day}에 당신이 {mirror.WORD[relation]}에게 보낸 문장이에요")
             res = MirrorAnswerOut(readings=Readings(**{k: freq(v) for k, v in p.items()}), reveal=reveal, gap=gap)
 
-        # ponytail: 읽고-쓰기라 동시에 두 번 답하면 두 줄이 남을 수 있다. 막아야 하면 (user_id, kind, card_ref) unique 제약
-        if f"{kind}|{ref}" not in await repo.mirror_refs(user):
-            await repo.insert_mirror_attempt(user, kind, ref, score, predicted, panel, gap)
+        # 같은 카드는 한 줄만(unique + on conflict do nothing): 다시 답하면 결과는 주고 기록은 첫 답 그대로
+        await repo.insert_mirror_attempt(user, kind, ref, score, predicted, panel, gap)
         return res
 
     try:
