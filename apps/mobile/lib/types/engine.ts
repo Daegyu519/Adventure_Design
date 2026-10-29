@@ -48,30 +48,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Feedback */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["FeedbackIn"];
-                };
-            };
-            responses: {
-                /** @description Successful Response */
-                202: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["FeedbackOut"];
-                    };
-                };
-            };
-        };
+        post: operations["feedback_v1_feedback_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -230,14 +207,21 @@ export interface components {
             /** Why */
             why: string[];
         };
+        /** FeedbackIn */
         FeedbackIn: {
-            /** Format: int64 */
+            /** Message Id */
             message_id: number;
-            /** Format: uuid */
+            /**
+             * Room Id
+             * Format: uuid
+             */
             room_id: string;
+            /** Text */
             text: string;
         };
+        /** FeedbackOut */
         FeedbackOut: {
+            /** Ack */
             ack: string;
         };
         /** HTTPValidationError */
@@ -446,6 +430,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DetailOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    feedback_v1_feedback_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeedbackIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedbackOut"];
                 };
             };
             /** @description Validation Error */
