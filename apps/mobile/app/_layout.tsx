@@ -9,7 +9,7 @@ import { useConsented } from '../lib/consent';
 import { gate } from '../lib/gate';
 import { SessionProvider, useSession } from '../lib/session';
 import { supabase } from '../lib/supabase';
-import { useTheme } from '../lib/theme';
+import { ThemeProvider, useTheme } from '../lib/theme';
 import tokens from '../lib/tokens.json';
 
 // 글꼴이 준비될 때까지 스플래시를 붙잡아 둔다(모듈 최상단에서 한 번).
@@ -30,14 +30,16 @@ const fonts = [
 
 export default function RootLayout() {
   return (
-    <SessionProvider>
-      <Gated />
-    </SessionProvider>
+    <ThemeProvider>
+      <SessionProvider>
+        <Gated />
+      </SessionProvider>
+    </ThemeProvider>
   );
 }
 
 function Gated() {
-  const { colors } = useTheme();
+  const { colors, scheme } = useTheme();
   const [loaded, error] = useFonts(fonts);
   const { status, profileStatus } = useSession();
   const g = gate({ consented: useConsented(), backend: supabase !== null, session: status, profile: profileStatus });
@@ -56,7 +58,7 @@ function Gated() {
   if (!ready) return <View style={{ flex: 1, backgroundColor: colors.background }} />;
   return (
     <>
-      <StatusBar style="auto" />
+      <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}>
         <Stack.Protected guard={g === 'consent'}>
           <Stack.Screen name="consent" />
