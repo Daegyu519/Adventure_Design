@@ -66,7 +66,7 @@
 | 앱 실행 | `cd apps/mobile && npx expo start` (앱 환경 변수는 `apps/mobile/.env`, 예시는 `apps/mobile/.env.example`. 루트 `.env`는 앱이 읽지 않는다) |
 | 앱 테스트 | `cd apps/mobile && npm test` |
 | 타입 생성 | 엔진: cd apps/mobile && npm run gen:engine:pull · DB: (cd apps/mobile && set -a; . ../../.env; set +a; npm run gen:db) |
-| 평가 | (T-17) |
+| 평가 | `uv run --project engine python eval/run_eval.py --mock [--detail] [--json]` |
 | 마이그레이션 | `supabase/migrations/*.sql` (적용은 T-02 이후 `supabase db push`) |
 | DB 테스트 | `cd supabase && npm test` |
 | 엔진 DB 테스트 준비 | `brew install postgresql@16` (없으면 pg 계약 테스트만 건너뜀) |
