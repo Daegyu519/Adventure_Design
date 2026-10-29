@@ -368,3 +368,31 @@ test('로그인하지 않았거나 프로필이 없으면 대화 탭으로 돌�
   expect(b.find((n) => n.props.testID === 'redirect:/')).toHaveLength(1);
   expect(b.field('방 이름')).toBeUndefined();
 });
+
+// ── 갈래를 바꾸면 이전 갈래의 코드가 남지 않는다 ─────────────
+
+test('tab switch: 1:1 코드를 만든 뒤 그룹 탭에는 그룹 폼이 보이고 옛 코드는 없다, 돌아오면 다시 만들 수 있다', async () => {
+  mockRpc.mockReturnValue(ok(CODE));
+  const { press, field, texts, codeNode } = await setup('direct');
+  await press('코드 만들기');
+  expect(texts()).toContain(CODE);
+  await press('그룹 만들기', 'radio');
+  expect(field('방 이름')).toBeDefined();
+  expect(texts()).not.toContain(CODE);
+  expect(texts()).not.toContain('한 번 쓸 수 있어요');
+  await press('1:1 초대', 'radio');
+  expect(texts()).toContain('코드 만들기');
+  expect(codeNode()).toBeUndefined();
+});
+
+test('tab switch: 그룹을 만든 뒤 1:1 탭에는 1:1 폼이 보이고 방으로 가기가 없다', async () => {
+  mockRpc.mockReturnValueOnce(ok(ROOM)).mockReturnValueOnce(ok(CODE));
+  const { press, type, buttons, texts } = await setup('group');
+  await type('방 이름', '팀플 3조');
+  await press('방 만들기');
+  expect(buttons()).toContain('방으로 가기');
+  await press('1:1 초대', 'radio');
+  expect(buttons()).not.toContain('방으로 가기');
+  expect(texts()).not.toContain(CODE);
+  expect(buttons()).toContain('코드 만들기');
+});

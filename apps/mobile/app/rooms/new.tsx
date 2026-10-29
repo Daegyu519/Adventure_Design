@@ -59,6 +59,7 @@ export default function NewRoom() {
     if (!t) return;
     setTab(t);
     setError(null);
+    setMade(null); // 다른 갈래의 코드·방이 남아 이 갈래 화면을 가리지 않게
   };
 
   // 요청이 도는 동안(busy) 다시 눌러도 한 번만 보낸다. 키가 없으면 안내만 보여 주고 아무것도 하지 않는다.
@@ -66,8 +67,11 @@ export default function NewRoom() {
     if (busy || !supabase) return;
     setBusy(true);
     setError(null);
-    await job();
-    setBusy(false);
+    try {
+      await job();
+    } finally {
+      setBusy(false);
+    }
   };
 
   const makeDirect = () =>

@@ -1,62 +1,18 @@
 // 아이콘은 하나씩 불러온다(묶음 import는 웹 번들이 커진다).
-import Check from 'lucide-react-native/icons/check';
 import { useState, type ReactNode } from 'react';
 import { Pressable, ScrollView, Switch, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '../../components/AppText';
 import { Button } from '../../components/Button';
+import { ChipRow } from '../../components/ChipRow';
 import { signOutAndClear } from '../../lib/account';
 import { useSession } from '../../lib/session';
 import { supabase } from '../../lib/supabase';
-import { focusRing, useTheme, useThemePref, type ThemePref } from '../../lib/theme';
+import { useTheme, useThemePref, type ThemePref } from '../../lib/theme';
 
 const THEME_PREFS: readonly ThemePref[] = ['system', 'light', 'dark'];
 const THEME_LABELS: Record<ThemePref, string> = { system: '시스템', light: '밝게', dark: '어둡게' };
-
-// ponytail: Task 5의 ChipRow(components/ChipRow.tsx)가 main에 들어오면 이 칩 줄을 그것으로 바꾼다(T-08이 같은 파일을 만드는 중이라 겹치지 않게 여기에 둠).
-function ThemeChips({ value, onChange }: { value: ThemePref; onChange(p: ThemePref): void }) {
-  const { colors, radius, space } = useTheme();
-  return (
-    <View accessibilityRole="radiogroup" accessibilityLabel="화면 모드" style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space[1] }}>
-      {THEME_PREFS.map((p) => {
-        const checked = p === value;
-        const fg = checked ? colors.onPrimary : colors.text;
-        return (
-          <Pressable
-            key={p}
-            onPress={() => onChange(p)}
-            accessibilityRole="radio"
-            accessibilityLabel={THEME_LABELS[p]}
-            accessibilityState={{ checked }}
-            aria-checked={checked} // react-native-web은 accessibilityState를 aria-*로 옮기지 않는다
-            style={({ pressed }) => ({
-              minHeight: 44,
-              minWidth: 44,
-              flexDirection: 'row',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: space[0],
-              paddingHorizontal: space[3],
-              borderRadius: radius.chip,
-              borderWidth: 1,
-              backgroundColor: checked ? colors.primary : colors.background,
-              borderColor: checked ? colors.primary : colors.border,
-              opacity: pressed ? 0.8 : 1,
-              ...focusRing(colors.primary),
-            })}
-          >
-            {/* 선택은 색만으로 알리지 않는다: 글자 굵기와 체크 표시도 같이 바뀐다 */}
-            {checked && <Check color={fg} size={16} />}
-            <AppText color={checked ? 'onPrimary' : 'text'} weight={checked ? '600' : '400'}>
-              {THEME_LABELS[p]}
-            </AppText>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-}
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   const { colors, radius, space } = useTheme();
@@ -164,7 +120,7 @@ export default function Settings() {
         </Section>
 
         <Section title="화면">
-          <ThemeChips value={pref} onChange={setPref} />
+          <ChipRow options={THEME_PREFS} value={pref} onChange={(p) => p && setPref(p)} labels={THEME_LABELS} accessibilityLabel="화면 모드" />
         </Section>
 
         <Section title="계정">
