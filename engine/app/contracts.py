@@ -30,6 +30,16 @@ class HintOut(BaseModel):
     trace_id: UUID
 
 
+class FeedbackIn(BaseModel):
+    room_id: UUID
+    message_id: int = Field(gt=0, lt=2**63)   # messages.id는 양수 bigint
+    text: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=1000)]
+
+
+class FeedbackOut(BaseModel):
+    ack: str
+
+
 Intent = Literal["단호하게", "미안하게", "가볍게"]   # 의도 칩. 고쳐 쓰기에만 들어간다(판정에는 넣지 않음)
 
 
