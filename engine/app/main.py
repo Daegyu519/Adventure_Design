@@ -12,12 +12,13 @@ from pydantic import BaseModel
 
 from app.auth import get_verifier
 from app.db import PgRepo
-from app.routes import detail, feedback, hint, hooks, stats
+from app.routes import detail, feedback, hint, hooks, mirror, stats
 from app.settings import Settings
 from harness.providers import available
 from harness.router import chains
 from jobs.feedback import QUEUE_MAXSIZE
 from jobs.queue import JobQueue
+from mirror import get_mirror_key
 
 
 @lru_cache
@@ -28,6 +29,7 @@ def load_config() -> dict:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     load_config()  # 파일이 없거나 깨졌으면 요청이 아니라 시작할 때 실패한다
+    get_mirror_key()  # MIRROR_SECRET가 짧으면 시작할 때 실패한다(없으면 경고 한 번)
     dsn = Settings.from_env().supabase_db_url
     repo = await PgRepo.connect(dsn) if dsn else None  # 풀은 min_size=0: DB가 죽어 있어도 시작한다
     app.state.repo = repo
@@ -60,6 +62,7 @@ app.include_router(hint.router)
 app.include_router(detail.router)
 app.include_router(feedback.router)
 app.include_router(stats.router)
+app.include_router(mirror.router)
 
 
 class HealthResponse(BaseModel):

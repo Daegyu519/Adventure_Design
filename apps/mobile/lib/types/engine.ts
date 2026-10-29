@@ -82,30 +82,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Mirror Answer */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody: {
-                content: {
-                    "application/json": components["schemas"]["MirrorAnswerIn"];
-                };
-            };
-            responses: {
-                /** @description Successful Response */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["MirrorAnswerOut"];
-                    };
-                };
-            };
-        };
+        post: operations["mirror_answer_v1_mirror_answer_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -122,26 +99,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Mirror Today */
-        post: {
-            parameters: {
-                query?: never;
-                header?: never;
-                path?: never;
-                cookie?: never;
-            };
-            requestBody?: never;
-            responses: {
-                /** @description Successful Response */
-                200: {
-                    headers: {
-                        [name: string]: unknown;
-                    };
-                    content: {
-                        "application/json": components["schemas"]["MirrorTodayOut"];
-                    };
-                };
-            };
-        };
+        post: operations["mirror_today_v1_mirror_today_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -270,29 +228,53 @@ export interface components {
              */
             trace_id: string;
         };
+        /** MirrorAnswerIn */
         MirrorAnswerIn: {
+            /** Card Id */
             card_id: string;
+            /** Predicted */
             predicted?: number | null;
+            /** Reply */
             reply?: string | null;
+            /** Score */
             score?: number | null;
         };
+        /**
+         * MirrorAnswerOut
+         * @description 패널 칸·risk·확률은 넣지 않는다. 점수는 gap(차이)으로만.
+         */
         MirrorAnswerOut: {
+            /** Gap */
             gap?: number | null;
+            /** Inner Voice */
             inner_voice?: string | null;
+            /** Options */
             options?: components["schemas"]["OptionOut"][] | null;
             readings: components["schemas"]["Readings"];
+            /** Reveal */
             reveal?: string | null;
         };
+        /** MirrorCard */
         MirrorCard: {
+            /** Card Id */
             card_id: string;
-            /** @enum {string} */
+            /**
+             * Kind
+             * @enum {string}
+             */
             kind: "roleplay" | "receive" | "predict";
+            /** Message */
             message: string;
+            /** Persona */
             persona: string;
+            /** Relation */
             relation: string;
+            /** Situation */
             situation: string;
         };
+        /** MirrorTodayOut */
         MirrorTodayOut: {
+            /** Cards */
             cards: components["schemas"]["MirrorCard"][];
         };
         /** OptionOut */
@@ -500,6 +482,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HintOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mirror_answer_v1_mirror_answer_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MirrorAnswerIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MirrorAnswerOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mirror_today_v1_mirror_today_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MirrorTodayOut"];
                 };
             };
             /** @description Validation Error */

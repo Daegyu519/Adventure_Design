@@ -247,14 +247,17 @@ class FakeRepo:
         mine.sort(key=lambda m: (m.created_at, m.id), reverse=True)
         return [SentMsg(m.id, m.room_id, m.text, self.rooms[m.room_id]["relation"], m.created_at) for m in mine[:limit]]
 
-    async def mirror_refs(self, user_id: UUID) -> set[str]:
-        return {f"{a['kind']}|{a['card_ref']}" for a in self.mirror_attempts if a["user_id"] == user_id}
+    async def mirror_refs(self, user_id: UUID, before: datetime) -> set[str]:
+        return {f"{a['kind']}|{a['card_ref']}" for a in self.mirror_attempts
+                if a["user_id"] == user_id and a["created_at"] < before}
 
     async def insert_mirror_attempt(self, user_id: UUID, kind: str, card_ref: str, answer_score: int | None,
                                     predicted: int | None, panel_bin: int | None, gap: int | None) -> None:
         _check(kind in MIRROR_KINDS, "mirror_attempts.kind")
         _check(1 <= len(card_ref) <= 200, "mirror_attempts.card_ref")
         _check(all(_in(v, 1, 5) for v in (answer_score, predicted, panel_bin)) and _in(gap, 0, 4), "mirror_attempts score")
+        if any((a["user_id"], a["kind"], a["card_ref"]) == (user_id, kind, card_ref) for a in self.mirror_attempts):
+            return   # unique (user_id, kind, card_ref) + on conflict do nothing
         self.mirror_attempts.append({"id": next(self._ids), "user_id": user_id, "kind": kind, "card_ref": card_ref,
                                      "answer_score": answer_score, "predicted": predicted, "panel_bin": panel_bin,
                                      "gap": gap, "created_at": _now()})

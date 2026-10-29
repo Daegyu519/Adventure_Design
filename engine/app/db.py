@@ -117,7 +117,7 @@ class Repo(Protocol):
     async def push_targets(self, room_id: UUID, sender_id: UUID) -> list[PushTarget]: ...
     async def delete_push_token(self, user_id: UUID, token: str) -> None: ...
     async def sent_messages(self, user_id: UUID, since: datetime, limit: int = 50) -> list[SentMsg]: ...
-    async def mirror_refs(self, user_id: UUID) -> set[str]: ...
+    async def mirror_refs(self, user_id: UUID, before: datetime) -> set[str]: ...   # before 전에 답한 "kind|card_ref"
     async def insert_mirror_attempt(self, user_id: UUID, kind: str, card_ref: str, answer_score: int | None,
                                     predicted: int | None, panel_bin: int | None, gap: int | None) -> None: ...
     async def event_counts(self, user_id: UUID) -> dict[str, int]: ...
@@ -300,15 +300,18 @@ class PgRepo:
                order by m.created_at desc, m.id desc limit $3""", user_id, since, limit)
         return [SentMsg(**r) for r in rows]
 
-    async def mirror_refs(self, user_id: UUID) -> set[str]:
-        rows = await self._pool.fetch("select kind, card_ref from public.mirror_attempts where user_id = $1", user_id)
+    async def mirror_refs(self, user_id: UUID, before: datetime) -> set[str]:
+        rows = await self._pool.fetch(
+            "select kind, card_ref from public.mirror_attempts where user_id = $1 and created_at < $2", user_id, before)
         return {f"{r['kind']}|{r['card_ref']}" for r in rows}
 
     async def insert_mirror_attempt(self, user_id: UUID, kind: str, card_ref: str, answer_score: int | None,
                                     predicted: int | None, panel_bin: int | None, gap: int | None) -> None:
         await self._pool.execute(
             """insert into public.mirror_attempts (user_id, kind, card_ref, answer_score, predicted, panel_bin, gap)
-               values ($1, $2, $3, $4, $5, $6, $7)""", user_id, kind, card_ref, answer_score, predicted, panel_bin, gap)
+               values ($1, $2, $3, $4, $5, $6, $7)
+               on conflict (user_id, kind, card_ref) do nothing""",   # 카드 하나에 한 줄(첫 답만)
+            user_id, kind, card_ref, answer_score, predicted, panel_bin, gap)
 
     async def event_counts(self, user_id: UUID) -> dict[str, int]:
         rows = await self._pool.fetch(
