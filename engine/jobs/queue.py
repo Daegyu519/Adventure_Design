@@ -27,6 +27,7 @@ class _Job:
     fn: Callable[..., Awaitable[None]] = field(repr=False)
     args: tuple[Any, ...] = field(repr=False)
     attempt: int = 1
+    max_attempts: int | None = None  # None이면 큐 기본값
 
 
 class JobQueue:
@@ -50,15 +51,16 @@ class JobQueue:
         if not self._workers:
             self._workers = [asyncio.create_task(self._work()) for _ in range(self._n_workers)]
 
-    def enqueue(self, name: str, fn: Callable[..., Awaitable[None]], *args: Any, key: str | None = None) -> bool:
+    def enqueue(self, name: str, fn: Callable[..., Awaitable[None]], *args: Any, key: str | None = None,
+                max_attempts: int | None = None) -> bool:
         """큐가 가득 찼거나 종료 중이면 False(받지 않았다). 같은 `key`를 이미 받았으면 새로 넣지 않고 True(이미 받은 작업).
-        키에는 종류와 id만 넣는다(`f"push:{message_id}"`). 사용자 입력 금지."""
+        키에는 종류와 id만 넣는다(`f"push:{message_id}"`). 사용자 입력 금지. `max_attempts`는 이 작업만의 시도 횟수."""
         if self._closed:
             return False
         if key is not None and key in self._keys:
             return True
         try:
-            self._q.put_nowait(_Job(name, fn, args))
+            self._q.put_nowait(_Job(name, fn, args, max_attempts=max_attempts))
         except asyncio.QueueFull:
             return False  # 받지 않았으니 키도 남기지 않는다
         if key is not None:
@@ -101,7 +103,7 @@ class JobQueue:
         try:
             await job.fn(*job.args)
         except Exception as e:  # 예외 객체·메시지·traceback은 로그에 넣지 않는다
-            if job.attempt < self._max_attempts:
+            if job.attempt < (job.max_attempts or self._max_attempts):
                 self._retry_later(job, self._backoff_s * 2 ** (job.attempt - 1))
                 job.attempt += 1
                 return  # task_done은 다시 넣을 때 한다: 백오프 동안에도 join이 끝나지 않는다

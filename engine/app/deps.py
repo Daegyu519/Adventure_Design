@@ -28,3 +28,8 @@ def get_repo(request: Request) -> Repo:
 
 def get_queue(request: Request) -> JobQueue:
     return request.app.state.queue
+
+
+def get_feedback_queue(request: Request) -> JobQueue:
+    """털어놓기 전용 큐. 몰아쳐도 push·baseline의 공유 큐(`get_queue`)를 채우지 않는다."""
+    return request.app.state.feedback_queue

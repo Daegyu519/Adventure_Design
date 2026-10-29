@@ -35,6 +35,11 @@ def guard(text: str) -> str:
     return text
 
 
+# 털어놓기 안내(prototype layers/feedback.py 그대로). 불러올 때 금지어 검사를 통과해야 한다.
+ACK = guard("이야기해 줘서 고마워요. 누가 남겼는지는 드러나지 않게, "
+            "비슷한 표현이 나올 때 '이렇게 느껴질 수도 있어요' 정도로만 조심스럽게 전해질 수 있어요.")
+
+
 def render_hint(v: Verdict) -> Hint | None:
     if not v.alert:
         return None

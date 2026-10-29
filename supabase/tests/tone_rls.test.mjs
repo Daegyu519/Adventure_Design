@@ -19,7 +19,8 @@ const columns = async (db, schema, table) =>
     'select column_name from information_schema.columns where table_schema = $1 and table_name = $2 order by ordinal_position',
     [schema, table])).rows.map((r) => r.column_name)
 
-const TONE_TABLES = ['feedback_log', 'sender_patterns', 'global_patterns', 'baselines', 'analysis_traces', 'pattern_reporters']
+const TONE_TABLES = ['feedback_log', 'sender_patterns', 'global_patterns', 'baselines', 'analysis_traces', 'pattern_reporters',
+  'sender_pattern_reporters']
 
 test('authenticated and anon cannot touch the tone schema', async () => {
   const { db, a, room } = await abc()
@@ -50,9 +51,12 @@ test('service_role can write tone tables', async () => {
   await svc(
     `insert into tone.sender_patterns(sender_id, relation, trigger, count, strength, feeling, active_from)
      values ($1, '팀원', 'curt_reply', 2, 1.4, '차갑게', now() + interval '1 day')`, [a])
-  await assert.rejects(svc(
-    `insert into tone.sender_patterns(sender_id, relation, trigger, active_from) values ($1, '팀원', 'curt_reply', now())`, [a]),
-  /duplicate key/) // PK(sender_id, relation, trigger)
+  // PK(sender_id, relation, trigger, active_from): 활성 시각마다 한 행. now()는 문장마다 달라 같은 키 검사에는 고정 시각을 쓴다
+  const activation = (at) => svc(
+    `insert into tone.sender_patterns(sender_id, relation, trigger, active_from) values ($1, '팀원', 'curt_reply', $2)`, [a, at])
+  await activation('2026-10-01 00:00+09')
+  await assert.rejects(activation('2026-10-01 00:00+09'), /duplicate key/)
+  await activation('2026-10-02 00:00+09') // active_from만 다르면 별개 행
   await svc( // 같은 사람, 다른 관계는 별개 행
     `insert into tone.sender_patterns(sender_id, relation, trigger, active_from) values ($1, '친구', 'curt_reply', now())`, [a])
   await assert.rejects(svc(
@@ -74,6 +78,14 @@ test('service_role can write tone tables', async () => {
   await assert.rejects(svc('insert into tone.pattern_reporters(trigger, reporter_id) values ($1, $2)', ['가'.repeat(31), b]),
     /check constraint/)
   await svc(`insert into tone.pattern_reporters(trigger, reporter_id) values ('curt_reply', $1)`, [b])
+  // 보낸 사람 패턴의 신고자: (보낸 사람, 관계, 신호, 신고자)마다 한 번, 짧은 라벨·관계 값만
+  const spr = (relation, trigger) => svc(
+    `insert into tone.sender_pattern_reporters(sender_id, relation, trigger, reporter_id) values ($1, $2, $3, $4)`,
+    [a, relation, trigger, b])
+  await spr('팀원', 'curt_reply')
+  await assert.rejects(spr('팀원', 'curt_reply'), /duplicate key/)
+  await assert.rejects(spr('남', 'x'), /check constraint/)
+  await assert.rejects(spr('팀원', '가'.repeat(31)), /check constraint/)
   await svc(
     `insert into tone.feedback_log(room_id, reporter_id, message_id, usable, pattern_count) values ($1, $2, null, true, 1)`,
     [room, b])
@@ -269,6 +281,7 @@ test('no column stores raw complaint text', async () => {
     `select table_name || '.' || column_name as c from information_schema.columns
      where table_schema = 'tone' and data_type in ('text', 'character varying', 'character') order by 1`)
   assert.deepEqual(rows.map((r) => r.c), [
-    'analysis_traces.path', 'global_patterns.trigger', 'pattern_reporters.trigger', 'sender_patterns.feeling',
+    'analysis_traces.path', 'global_patterns.trigger', 'pattern_reporters.trigger',
+    'sender_pattern_reporters.relation', 'sender_pattern_reporters.trigger', 'sender_patterns.feeling',
     'sender_patterns.relation', 'sender_patterns.trigger'])
 })

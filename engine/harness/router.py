@@ -103,10 +103,11 @@ class Router:
         return self.buckets[key]
 
     async def call(self, expert_id: str, system: str, user: str, payload: dict,
-                   schema: type[T], deadline: float) -> tuple[T, str]:
-        """deadline은 time.monotonic() 기준 절대 시각. 남은 시간 안에서만 시도한다."""
+                   schema: type[T], deadline: float, cache: bool = True) -> tuple[T, str]:
+        """deadline은 time.monotonic() 기준 절대 시각. 남은 시간 안에서만 시도한다.
+        cache=False면 캐시를 읽지도 쓰지도 않는다(털어놓기: 하소연에서 나온 결과를 작업 뒤까지 메모리에 두지 않는다)."""
         key = hashlib.sha256(json.dumps([expert_id, user, payload], ensure_ascii=False, sort_keys=True).encode()).hexdigest()
-        if key in self.cache:
+        if cache and key in self.cache:
             cached, entry = self.cache[key]
             return cached.model_copy(deep=True), entry
 
@@ -136,9 +137,10 @@ class Router:
                 obj = _tag_model(obj, entry)
                 breaker.record(True)
                 self._trace(expert_id, entry, t0, True)
-                if len(self.cache) >= self.CACHE_MAX:
-                    self.cache.clear()
-                self.cache[key] = (obj.model_copy(deep=True), entry)
+                if cache:
+                    if len(self.cache) >= self.CACHE_MAX:
+                        self.cache.clear()
+                    self.cache[key] = (obj.model_copy(deep=True), entry)
                 return obj, entry
             except (ProviderError, asyncio.TimeoutError, ValueError, ValidationError) as e:
                 breaker.record(False)
