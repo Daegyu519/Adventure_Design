@@ -304,7 +304,7 @@ def test_detail_opened_recorded_once(client, login, fake, queue):
     me, _, room = _room(fake)
     login(me)
     b = _post(client, room).json()
-    assert queue.names() == ["event"]
+    assert queue.names() == ["event", "trace"]   # trace는 요청마다(T-19)
     _, fn, args = queue.jobs[0]
     assert fn is events.record and args[0] is fake   # 작업이 스스로 제한 시간을 둔다
     assert args[1:5] == (me, room, "detail_opened", b["top_reading"])
@@ -312,7 +312,7 @@ def test_detail_opened_recorded_once(client, login, fake, queue):
     assert isinstance(args[-1]["signals"], list) and args[-1]["trace_id"] == b["trace_id"]
     assert DRAFT not in json.dumps(args, ensure_ascii=False, default=str)   # 큐 인자에 문장 없음
     assert _post(client, room, intent="미안하게").status_code == 200
-    assert queue.names() == ["event"]   # 칩을 바꾼 재호출은 기록하지 않는다
+    assert queue.names() == ["event", "trace", "trace"]   # 칩을 바꾼 재호출은 detail_opened를 기록하지 않는다
     asyncio.run(queue.run_all())
     assert [(e["kind"], e["top_reading"], e["risk"]) for e in fake.events] == [("detail_opened", "차갑게", None)]
 
@@ -336,7 +336,7 @@ def test_no_tone_result_503(client, login, fake, spy, queue):
     spy.canned |= {"tone": lambda p: "not json", "tone_alt": lambda p: "not json"}
     r = _post(client, room)
     assert r.status_code == 503 and r.json() == {"detail": "engine_unavailable"}
-    assert queue.names() == []
+    assert queue.names() == ["trace"]   # detail_opened는 없고 trace만 남는다(T-19)
 
 
 def test_timeout_503_and_errors_log_type_only(client, login, fake, registry, monkeypatch, caplog):
