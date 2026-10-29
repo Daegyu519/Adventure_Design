@@ -71,6 +71,7 @@ function Gated() {
         </Stack.Protected>
         <Stack.Protected guard={g === 'app'}>
           <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="room/[id]/index" />
         </Stack.Protected>
       </Stack>
     </>
