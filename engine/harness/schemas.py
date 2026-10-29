@@ -130,9 +130,12 @@ class FeedbackResult(BaseModel):
     @field_validator("patterns")
     @classmethod
     def first_three_unique(cls, v: list[FeedbackPattern]) -> list[FeedbackPattern]:
+        """고정 어휘(TRIGGERS)·부정 읽힘만 남긴 뒤 trigger별 첫 것, 앞 3개. 거르기가 먼저라 L4가 앞에 흘린 문장 조각·
+        긍정 읽힘이 자리를 먹지 않는다."""
         first: dict[str, FeedbackPattern] = {}
         for p in v:
-            first.setdefault(p.trigger, p)    # trigger가 겹치면 첫 것만
+            if p.trigger in TRIGGERS and p.feeling in NEGATIVE:
+                first.setdefault(p.trigger, p)    # trigger가 겹치면 첫 것만
         return list(first.values())[:3]
 
 

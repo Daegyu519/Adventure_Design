@@ -168,6 +168,40 @@ def test_lifespan_starts_queue(monkeypatch):
     assert app.state.queue.enqueue("t", job) is False  # 종료하면서 큐도 멈췄다
 
 
+def test_lifespan_feedback_queue_is_separate(monkeypatch):
+    """털어놓기는 자기 큐(워커 1개, maxsize QUEUE_MAXSIZE)에서만 돈다: 몰아쳐 꽉 차도 push·baseline의 공유 큐는 그대로 받는다."""
+    from jobs import feedback as fjob
+    monkeypatch.delenv("SUPABASE_DB_URL", raising=False)
+    started, ran, release = [], [], asyncio.Event()
+
+    async def hold():
+        started.append(1)
+        await release.wait()
+
+    async def push():
+        ran.append(1)
+
+    with TestClient(app) as c:
+        fq, shared = app.state.feedback_queue, app.state.queue
+        assert isinstance(fq, JobQueue) and fq is not shared
+        assert c.portal.call(fq.enqueue, "feedback", hold)
+        for _ in range(200):                       # 첫 작업이 워커에 잡힐 때까지
+            if started:
+                break
+            c.portal.call(asyncio.sleep, 0.01)
+        assert all(c.portal.call(fq.enqueue, "feedback", hold) for _ in range(fjob.QUEUE_MAXSIZE))
+        assert c.portal.call(fq.enqueue, "feedback", hold) is False   # 털어놓기 큐만 찼다
+        c.portal.call(asyncio.sleep, 0.05)
+        assert started == [1]                                          # 워커 1개: 차례로 돈다
+        assert c.portal.call(shared.enqueue, "push", push) is True     # 공유 큐는 그대로 받고 돈다
+        c.portal.call(shared.join)
+        assert ran == [1]
+        c.portal.call(release.set)
+        c.portal.call(fq.join)
+        assert len(started) == fjob.QUEUE_MAXSIZE + 1
+    assert fq.enqueue("feedback", hold) is False   # 종료하면서 털어놓기 큐도 멈췄다
+
+
 def test_lifespan_closes_repo_even_if_queue_stop_raises(monkeypatch):
     closed = []
 

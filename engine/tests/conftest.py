@@ -9,7 +9,7 @@ from fastapi.testclient import TestClient
 
 from app.auth import current_user
 from app.db import PgRepo
-from app.deps import get_queue, get_registry, get_repo, get_settings
+from app.deps import get_feedback_queue, get_queue, get_registry, get_repo, get_settings
 from app.main import app
 from app.settings import Settings
 from tests.fakes import FakeQueue, FakeRepo
@@ -74,6 +74,7 @@ def client(fake, queue, registry):
                                    supabase_url="https://test.supabase.co")
     app.dependency_overrides[get_repo] = lambda: fake
     app.dependency_overrides[get_queue] = lambda: queue
+    app.dependency_overrides[get_feedback_queue] = lambda: queue   # 털어놓기 큐도 같은 대역(따로 보는 테스트는 직접 바꾼다)
     app.dependency_overrides[get_registry] = lambda: registry
     app.dependency_overrides[get_settings] = lambda: settings
     yield TestClient(app)

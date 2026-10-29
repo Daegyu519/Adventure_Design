@@ -315,10 +315,14 @@ def test_only_pipeline_and_router_import_pii():
 
 
 def test_schema_additions():
-    pats = [{"trigger": "짧은 답", "feeling": "차갑게"}, {"trigger": "짧은 답", "feeling": "성의없게"},
-            {"trigger": "a", "feeling": "x"}, {"trigger": "b", "feeling": "x"}, {"trigger": "c", "feeling": "x"}]
+    # 고정 어휘(TRIGGERS)·부정 읽힘으로 먼저 거르고 → trigger별 첫 것 → 3개: 앞의 쓸모없는 태그가 자리를 먹지 않는다
+    pats = [{"trigger": "a", "feeling": "차갑게"}, {"trigger": "짧은 답", "feeling": "따뜻하게"},
+            {"trigger": "짧은 답", "feeling": "차갑게"}, {"trigger": "짧은 답", "feeling": "성의없게"},
+            {"trigger": "b", "feeling": "x"}, {"trigger": "마침표로 끝남", "feeling": "화나게"},
+            {"trigger": "이유 없는 거절", "feeling": "차갑게"}, {"trigger": "반말 전환", "feeling": "차갑게"}]
     fr = FeedbackResult(usable=True, patterns=pats)
-    assert [p.trigger for p in fr.patterns] == ["짧은 답", "a", "b"] and fr.patterns[0].feeling == "차갑게"
+    assert [p.trigger for p in fr.patterns] == ["짧은 답", "마침표로 끝남", "이유 없는 거절"]
+    assert fr.patterns[0].feeling == "차갑게"
     c = Conversation(pair_id="p", turns=[Turn(speaker="them", text="최근")], reply_to=Turn(speaker="them", text="답장"))
     assert c.last_them() == "답장"
     assert c.model_copy(update={"reply_to": Turn(speaker="me", text="내 말")}).last_them() == "최근"

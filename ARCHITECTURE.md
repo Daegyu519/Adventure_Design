@@ -170,9 +170,9 @@ sequenceDiagram
 
 ### 3-4. 털어놓기 (비동기)
 1. 받은 메시지의 "⋯" → `POST /v1/feedback (room_id, message_id, text)`. 1:1 방과 그룹방 모두에 있다.
-2. 엔진은 그 메시지가 요청자가 **이 방에서 받은** 메시지인지 확인하고(아니면 403 `not_received`), 하소연을 가린 뒤(`Masker`, 방 멤버 이름 + 개인정보 패턴) 큐에 넣고 202와 안내 문구를 바로 돌려준다(큐가 가득 차면 503). 같은 (신고자, 메시지)는 작업 하나(멱등 키 `feedback:<신고자>:<메시지>`), 이미 남긴 신고나 이번 주 상한에 걸린 (보낸 사람, 관계)는 같은 202만 주고 큐에 넣지 않는다(어느 쪽인지 알리지 않음). 작업은 재시도하지 않는다(`max_attempts=1`).
-3. 큐: 메시지 내용(작업이 id로 다시 읽어 가림) + 가린 하소연 → L4 피드백 전문가(`paths.async.deadline_ms`, 작업 자체 제한 시간 있음, 라우터 캐시 안 씀) → 패턴 태그. 고정 어휘(`TRIGGERS`)의 태그와 부정 읽힘만 남긴다 → 아래 반영 규칙대로 `tone.sender_patterns`, `tone.global_patterns` 갱신, `tone.feedback_log` 기록.
-4. 하소연은 메모리에서만 쓰고 버린다. 큐 인자는 id와 가린 하소연뿐이고 메모리 큐에만 있다(작업 repr·실패 로그에 인자 없음). 큐를 Redis 같은 저장형으로 바꾸면 요청 안에서 분류하고 분류 결과만 넣는다. 무엇이 추출됐는지는 털어놓은 사람에게도 보여 주지 않는다.
+2. 엔진은 그 메시지가 요청자가 **이 방에서 받은** 메시지인지 확인하고(아니면 403 `not_received`), 하소연과 대상 메시지를 `Masker` 하나로 함께 가린 뒤(방 멤버 이름 + 개인정보 패턴, 두 문장에서 같은 사람은 같은 자리표시) 털어놓기 전용 큐(워커 1개, 대기 `jobs.feedback.QUEUE_MAXSIZE`=20개, push·기준선 큐와 따로)에 넣고 202와 안내 문구를 바로 돌려준다(큐가 가득 차거나 넣기가 실패해도 같은 202, 로그에는 예외 종류만). 같은 (신고자, 메시지)는 작업 하나(멱등 키 `feedback:<신고자>:<메시지>`), 이미 남긴 신고나 이번 주 상한에 걸린 (보낸 사람, 관계)는 같은 202만 주고 큐에 넣지 않는다(어느 쪽인지 알리지 않음). 작업은 재시도하지 않는다(`max_attempts=1`).
+3. 큐: 작업이 메시지·방을 id로 다시 읽고, 이번 주 상한이면 L4를 부르지 않는다(usable false로 기록). 아니면 가린 대상 메시지 + 가린 하소연 → L4 피드백 전문가(`paths.async.deadline_ms`, 작업 자체 제한 시간 있음, 라우터 캐시 안 씀) → 패턴 태그. `FeedbackResult` 검사가 고정 어휘(`TRIGGERS`)의 태그와 부정 읽힘만 먼저 거른 뒤 trigger별 첫 것 3개를 남긴다 → 아래 반영 규칙대로 `tone.sender_patterns`, `tone.global_patterns` 갱신, `tone.feedback_log` 기록.
+4. 하소연은 메모리에서만 쓰고 버린다. 큐 인자는 id와 가린 하소연·대상 메시지뿐이고 메모리 큐에만 있다(작업 repr·실패 로그에 인자 없음). 큐를 Redis 같은 저장형으로 바꾸면 요청 안에서 분류하고 분류 결과만 넣는다. 무엇이 추출됐는지는 털어놓은 사람에게도 보여 주지 않는다.
 
 **반영 규칙** (누가 털어놓았는지는 3명 이상 방에서만 감출 수 있다)
 - 패턴의 주인은 털어놓기 대상 메시지를 **보낸 사람**이다. 키는 (보낸 사람, 관계, 신호)다. 그 사람이 같은 관계의 어느 방에서 쓰든 적용하고, 털어놓은 사람의 문장에는 적용하지 않는다.
@@ -203,7 +203,7 @@ sequenceDiagram
 |---|---|---|---|
 | POST | `/v1/hint` | `{room_id, text(1~500자, 앞뒤 공백 제외), seq(0 이상), reply_to?(같은 방이 아니면 422)}` | `{seq, hint: {title, detail} \| null, trace_id}` |
 | POST | `/v1/detail` | `{room_id, text, intent?, reply_to?(같은 방이 아니면 422)}` | `{alert, top_reading, readings: {읽힘: "자주"\|"가끔"\|"드물어요"}, why: [str], options: [{label, text, keep, change}], mismatch: str \| null, footnote, trace_id}` |
-| POST | `/v1/feedback` | `{room_id, message_id(이 방에서 받은 메시지), text(1~1000자)}` | 202 `{ack}`(큐가 가득 차면 503 `queue_full`) |
+| POST | `/v1/feedback` | `{room_id, message_id(이 방에서 받은 메시지), text(1~1000자)}` | 202 `{ack}`(큐가 가득 차도 같은 202) |
 | POST | `/v1/mirror/today` | 없음 | `{cards: [{card_id, kind: "roleplay"\|"receive"\|"predict", persona, relation, situation, message}]}` |
 | POST | `/v1/mirror/answer` | `{card_id, reply?, score?, predicted?}` | `{readings, inner_voice?, reveal?, options?, gap?}` |
 | GET | `/v1/stats/me` | 없음 | `{hints, details, fixed, fix_rate, predict_gap_trend, hints_by_week}` |

@@ -16,6 +16,7 @@ from harness.schemas import TRIGGERS, FeedbackPattern
 from jobs import feedback as job
 from jobs.queue import JobQueue, _Job
 from layers import gate, guard
+from tests.fakes import FakeQueue
 from tests.pg import PgSeeder, w
 
 COMPLAINT = "너무 단답이라 성의 없어 보였어"
@@ -35,8 +36,8 @@ def group(fake, n=3, kind="group", relation="팀원"):
 
 
 def report(repo, reg, room, reporter, mid, text=COMPLAINT, now=D):
-    """큐 작업을 직접 돈다(라우트가 가린 하소연을 넘기는 자리)."""
-    asyncio.run(job.run(repo, reg, room, reporter, mid, text, now))
+    """큐 작업을 직접 돈다(라우트가 가린 하소연·대상 메시지를 넘기는 자리)."""
+    asyncio.run(job.run(repo, reg, room, reporter, mid, text, repo.messages[mid].text, now))
 
 
 def feedback_calls(spy):
@@ -132,12 +133,37 @@ def test_already_reported_or_capped_acks_without_enqueue(client, login, fake, qu
     assert post(client, room, other).status_code == 202 and queue.names() == ["feedback"]
 
 
-def test_queue_full_503(client, login, fake, queue):
+def test_feedback_uses_its_own_queue(client, login, fake, queue):
+    """털어놓기는 push·baseline이 쓰는 공유 큐가 아니라 자기 큐에 넣는다(몰아쳐도 공유 큐를 채우지 않게)."""
+    from app.deps import get_queue
+    from app.main import app
+    shared = FakeQueue()
+    app.dependency_overrides[get_queue] = lambda: shared
     (_, jieun, _), room, mid = group(fake)
-    queue.accepting = False
     login(jieun)
-    assert post(client, room, mid).status_code == 503
+    assert post(client, room, mid).status_code == 202
+    assert queue.names() == ["feedback"] and shared.jobs == []
+
+
+@pytest.mark.parametrize("failure", ["rejected", "failed"])
+def test_enqueue_failure_still_acks(client, login, fake, queue, caplog, monkeypatch, failure):
+    """큐가 받지 않아도(가득 참·종료 중) enqueue가 터져도 같은 202 {ack}다(어느 경로인지 응답으로 알 수 없다).
+    로그에는 고정 문구와 예외 종류만: 하소연·예외 메시지·id는 남기지 않는다."""
+    (_, jieun, _), room, mid = group(fake)
+    if failure == "rejected":
+        queue.accepting = False
+    else:
+        def boom(*_a, **_k):
+            raise RuntimeError(f"{SECRET} {jieun}")
+        monkeypatch.setattr(queue, "enqueue", boom)
+    login(jieun)
+    with caplog.at_level(logging.DEBUG):
+        r = post(client, room, mid, f"{SECRET} 단답")
+    assert (r.status_code, r.json()) == (202, {"ack": guard.ACK})
     assert fake.feedback_log == []
+    expected = "feedback enqueue rejected" if failure == "rejected" else "feedback enqueue failed: RuntimeError"
+    assert expected in caplog.text
+    assert SECRET not in caplog.text and str(jieun) not in caplog.text and str(room) not in caplog.text
 
 
 def test_job_failure_logs_type_only(fake, registry, monkeypatch, caplog):
@@ -146,12 +172,12 @@ def test_job_failure_logs_type_only(fake, registry, monkeypatch, caplog):
 
     async def boom(*_a, **_k):
         raise RuntimeError(f"민수 {SECRET}")
-    monkeypatch.setattr(fake, "member_names", boom)
+    monkeypatch.setattr(fake, "room", boom)
 
     async def go():
         q = JobQueue(workers=1, max_attempts=1)
         q.start()
-        assert q.enqueue("feedback", job.run, fake, registry, room, jieun, mid, f"{SECRET} 단답")
+        assert q.enqueue("feedback", job.run, fake, registry, room, jieun, mid, f"{SECRET} 단답", "ㅇㅇ")
         await q.join()
         await q.stop()
     with caplog.at_level(logging.DEBUG):
@@ -166,12 +192,12 @@ def test_job_has_own_timeout(fake, registry, monkeypatch):
 
     async def stuck(*_a, **_k):
         await asyncio.sleep(5)
-    monkeypatch.setattr(fake, "member_names", stuck)
+    monkeypatch.setattr(fake, "room", stuck)
     monkeypatch.setattr(job, "DB_SLACK_S", 0.0)
     registry.cfg["paths"]["async"]["deadline_ms"] = 100
     start = time.monotonic()
     with pytest.raises(TimeoutError):
-        asyncio.run(asyncio.wait_for(job.run(fake, registry, room, jieun, mid, COMPLAINT), 2))
+        asyncio.run(asyncio.wait_for(job.run(fake, registry, room, jieun, mid, COMPLAINT, "ㅇㅇ"), 2))
     assert time.monotonic() - start < 1.0          # 바깥 2초 보호막이 아니라 작업 자신의 제한에 걸렸다
 
 
@@ -219,17 +245,19 @@ def test_two_member_group_counts_as_direct(fake, registry):
     assert fake.sender_pats == {} and fake.global_pats == {"짧은 답": 1}
 
 
-def test_weekly_cap(fake, registry):
+def test_weekly_cap(fake, registry, spy):
     (minsu, jieun, haneul), room, _ = group(fake)
     mids = [fake.add_message(room, minsu, "ㅇㅇ") for _ in range(job.WEEKLY_CAP + 1)]
     for i, mid in enumerate(mids[:-1]):
         report(fake, registry, room, (jieun, haneul)[i % 2], mid)
     assert [f["usable"] for f in fake.feedback_log] == [True] * job.WEEKLY_CAP
     before = {t: fake.rows(t) for t in PATTERN_TABLES}
+    calls = len(feedback_calls(spy))
     report(fake, registry, room, jieun, mids[-1])                      # 같은 보낸 사람·관계로 6번째
     last = fake.feedback_log[-1]
     assert (last["message_id"], last["usable"], last["pattern_count"]) == (mids[-1], False, 0)
     assert {t: fake.rows(t) for t in PATTERN_TABLES} == before
+    assert len(feedback_calls(spy)) == calls                           # 상한이면 작업이 L4를 부르지 않는다
 
 
 def test_weekly_cap_counts_from_kst_week_start(fake, registry):
@@ -287,6 +315,18 @@ def test_unknown_trigger_or_feeling_not_stored(fake, registry, spy):
     assert fake.sender_pats == {} and fake.global_pats == {} and fake.pattern_reporters == set()
     assert [(f["usable"], f["pattern_count"]) for f in fake.feedback_log] == [(False, 0)]
     assert "민수가 안 된다고만 함" not in repr(fake.__dict__)
+
+
+def test_valid_pattern_after_three_junk_is_kept(fake, registry, spy):
+    """고정 어휘·부정 읽힘으로 먼저 거른 뒤 앞 3개를 고른다: 앞에 온 쓸모없는 태그 3개가 자리를 먹지 않는다."""
+    (minsu, jieun, _), room, mid = group(fake)
+    canned(spy, {"trigger": "민수가 안 된다고만 함", "feeling": "차갑게", "strength": 2},
+           {"trigger": "마침표로 끝남", "feeling": "따뜻하게", "strength": 2},
+           {"trigger": "그냥 싫음", "feeling": "화나게", "strength": 2},
+           {"trigger": "짧은 답", "feeling": "성의없게", "strength": 2})
+    report(fake, registry, room, jieun, mid)
+    assert fake.global_pats == {"짧은 답": 1}
+    assert [(f["usable"], f["pattern_count"]) for f in fake.feedback_log] == [(True, 1)]
 
 
 def test_not_usable_result_logs_only(fake, registry, spy):
@@ -371,8 +411,9 @@ def test_complaint_never_stored_or_logged(client, login, fake, queue, caplog, sp
     with caplog.at_level(logging.DEBUG):
         assert post(client, room, mid, complaint).status_code == 202
         [(name, fn, args)] = queue.jobs
-        masked = args[-1]
+        masked, about = args[-2:]
         assert SECRET in masked and "민수" not in masked and "010-1234" not in masked   # 큐에는 가린 문장만
+        assert about == "ㅇㅇ"                                                           # 대상 메시지(가린 것)
         assert SECRET not in repr(_Job(name, fn, args))   # 작업을 문자열로 찍어도 인자는 안 보인다
         asyncio.run(queue.run_all())
     assert fake.global_pats == {"짧은 답": 1}             # 실제로 반영됐다(빈 검사가 아니다)
@@ -381,6 +422,20 @@ def test_complaint_never_stored_or_logged(client, login, fake, queue, caplog, sp
     assert SECRET not in str(list(registry.router.traces)) and registry.router.cache == {}
     seen = spy.seen()
     assert SECRET in seen and "민수" not in seen and "010-1234" not in seen and "5678" not in seen   # 가린 하소연만
+
+
+def test_one_masker_for_complaint_and_message(client, login, fake, queue, spy):
+    """하소연과 대상 메시지를 Masker 하나로 가린다: 한 L4 프롬프트 안에서 같은 사람은 같은 자리표시, 다른 사람은 다른
+    자리표시다(규칙 16). Masker가 둘이면 하소연의 [이름1](민수)과 메시지의 [이름1](지은)이 다른 사람이 된다."""
+    minsu, jieun, haneul = (fake.add_user(n) for n in ("민수", "지은", "하늘"))
+    room = fake.add_room("group", "팀원", [minsu, jieun, haneul])
+    mid = fake.add_message(room, minsu, "지은 ㅇㅇ")
+    login(haneul)
+    assert post(client, room, mid, "민수가 지은한테 너무 단답이야").status_code == 202
+    asyncio.run(queue.run_all())
+    [call] = feedback_calls(spy)
+    assert call["payload"]["text"] == "[이름1]가 [이름2]한테 너무 단답이야"
+    assert call["payload"]["about"] == call["payload"]["draft"] == "[이름2] ㅇㅇ"
 
 
 def test_complaint_never_persisted_pg(pg_dsn, registry):
@@ -392,7 +447,7 @@ def test_complaint_never_persisted_pg(pg_dsn, registry):
             minsu, jieun, haneul = [await seed.add_user(n) for n in ("민수", "지은", "하늘")]
             room = await seed.add_room("group", "팀원", [minsu, jieun, haneul])
             mid = await seed.add_message(room, minsu, "ㅇㅇ")
-            await job.run(repo, registry, room, jieun, mid, f"민수가 {SECRET} 너무 단답이야", D)
+            await job.run(repo, registry, room, jieun, mid, f"민수가 {SECRET} 너무 단답이야", "ㅇㅇ", D)
             assert len(await seed.rows("tone.sender_patterns")) == 1
             tables = await conn.fetch(
                 """select table_schema, table_name from information_schema.tables
