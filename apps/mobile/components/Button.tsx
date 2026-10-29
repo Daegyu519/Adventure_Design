@@ -16,6 +16,9 @@ type Props = {
 export function Button({ label, onPress, kind = 'primary', disabled = false, loading = false, accessibilityLabel }: Props) {
   const { colors, radius, space } = useTheme();
   const inactive = disabled || loading;
+  // 처리 중에는 disabled를 걸지 않는다: 진짜 disabled 요소는 포커스를 잃어 키보드 사용자가 body로 튕긴다(WCAG 2.4.3).
+  // 대신 aria-disabled + onPress 무시. 화면 읽기 프로그램에는 이름에 "처리 중"을 붙여 알린다(aria-busy만으로는 거의 안 읽는다).
+  const name = accessibilityLabel ?? label;
   const looks: Record<NonNullable<Props['kind']>, { bg: string; fg: keyof Colors; border: string }> = {
     primary: { bg: colors.primary, fg: 'onPrimary', border: colors.primary },
     secondary: { bg: colors.surface, fg: 'text', border: colors.border },
@@ -25,11 +28,12 @@ export function Button({ label, onPress, kind = 'primary', disabled = false, loa
 
   return (
     <Pressable
-      onPress={onPress}
-      disabled={inactive}
+      onPress={loading ? undefined : onPress}
+      disabled={disabled}
       accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel ?? label}
+      accessibilityLabel={loading ? `${name}, 처리 중` : name}
       accessibilityState={{ disabled: inactive, busy: loading }}
+      aria-disabled={inactive}
       aria-busy={loading} // react-native-web은 accessibilityState를 aria-*로 옮기지 않는다
       style={({ pressed }) => ({
         minHeight: 44,
@@ -47,7 +51,7 @@ export function Button({ label, onPress, kind = 'primary', disabled = false, loa
       })}
     >
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[1] }}>
-        {loading && <ActivityIndicator color={colors[look.fg]} />}
+        {loading && <ActivityIndicator color={colors[look.fg]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" aria-hidden />}
         <AppText color={look.fg} weight="600">
           {label}
         </AppText>
