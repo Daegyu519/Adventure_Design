@@ -171,3 +171,21 @@ test('settings account: a failed logout keeps the data and tells the user, hedge
   expect(texts()).toContain('로그아웃하지 못했어요');
   expect(await AsyncStorage.getItem('draft:room-1')).not.toBeNull();
 });
+
+test('settings a11y: 실패 문구는 alert 역할, 저장 중에도 스위치는 disabled가 아니다(포커스 유지)', async () => {
+  let release!: (v: unknown) => void;
+  mockEq.mockReturnValue(new Promise((r) => (release = r)));
+  const { flip, hintSwitch, find } = await setup();
+  await flip(false);
+  expect(hintSwitch().props.disabled).toBeFalsy();
+  mockEq.mockResolvedValue({ error: { message: 'rls' } });
+  await act(async () => release({ error: { message: 'rls' } }));
+  expect(find((p) => p.accessibilityRole === 'alert').length).toBeGreaterThan(0);
+});
+
+test('settings a11y: 화면 제목은 aria-level 1, 구역 제목은 2', async () => {
+  const { find } = await setup();
+  const levels = find((p) => p.accessibilityRole === 'header').map((n) => n.props['aria-level']);
+  expect(levels).toContain(1);
+  expect(levels.filter((l) => l === 2).length).toBe(3);
+});
