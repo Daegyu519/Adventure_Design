@@ -1,15 +1,19 @@
 import asyncio
+import logging
 import os
 from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from typing import Literal
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from app.auth import get_verifier
 from app.db import PgRepo
+from app.limits import BodyLimit
 from app.routes import detail, feedback, hint, hooks, mirror, stats
 from app.ratelimit import get_limits
 from app.settings import Settings, load_config
@@ -18,6 +22,8 @@ from harness.router import chains
 from jobs.feedback import QUEUE_MAXSIZE
 from jobs.queue import JobQueue
 from mirror import get_mirror_key
+
+log = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -49,6 +55,25 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="tone-chat engine", lifespan=lifespan)
+app.add_middleware(BodyLimit)  # CORS보다 안쪽: 413에도 CORS 헤더가 붙는다
+
+
+@app.middleware("http")
+async def unexpected_to_503(request: Request, call_next):
+    """처리 못 한 예외: 로그엔 타입만(메시지에 문장이 섞일 수 있다), 응답은 고정 코드 503.
+    CORS 바깥(ServerErrorMiddleware)에서 나는 500은 헤더가 없어 앱 웹이 오류를 읽지 못하므로 안쪽에서 잡는다."""
+    try:
+        return await call_next(request)
+    except Exception as e:  # noqa: BLE001
+        log.error("unhandled error: %s", type(e).__name__)
+        return JSONResponse({"detail": "engine_unavailable"}, status_code=503)
+
+
+@app.exception_handler(RequestValidationError)
+async def invalid_request(_: Request, __: RequestValidationError) -> JSONResponse:
+    """기본 422는 `input`(초안·하소연 원문)을 되돌려 준다. 고정 코드만 낸다."""
+    return JSONResponse({"detail": "invalid_request"}, status_code=422)
+
 # 앱 웹 빌드가 Authorization 헤더를 달고 부를 때의 사전 요청(OPTIONS)을 통과시킨다. 쿠키를 쓰지 않아 credentials는 끈다.
 app.add_middleware(CORSMiddleware, allow_origins=list(Settings.from_env().cors_origins),
                    allow_methods=["GET", "POST", "OPTIONS"], allow_headers=["Authorization", "Content-Type"],
