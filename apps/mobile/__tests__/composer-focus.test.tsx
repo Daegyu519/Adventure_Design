@@ -27,3 +27,20 @@ test('답장 대상이 바뀔 때마다 입력창에 포커스(대상 id 기준)
     jest.useRealTimers();
   }
 });
+
+jest.mock('lucide-react-native/icons/image-plus', () => () => null);
+
+test('멘션 후보를 고르면 목록이 사라져도 포커스가 입력창으로 간다', async () => {
+  const focus = jest.fn();
+  const onSelectMention = jest.fn();
+  const ref = { current: null as null | { focus(): void } };
+  const root = createRoot();
+  await act(async () => {
+    root.render(<Composer value="@민" onChangeText={() => {}} onSend={() => {}} replyTo={null} onCancelReply={() => {}} inputRef={ref as never} mentionCandidates={[{ user_id: 'u2', name: '민수' }]} onSelectMention={onSelectMention} />);
+  });
+  ref.current!.focus = focus;
+  const row = root.container.queryAll((n) => n.props.accessibilityLabel === '민수 언급')[0];
+  await act(async () => row.props.onClick({ stopPropagation() {}, nativeEvent: {} }));
+  expect(onSelectMention).toHaveBeenCalledWith('민수');
+  expect(focus).toHaveBeenCalled();
+});

@@ -11,10 +11,13 @@ import { Composer, type InputHandle } from '../../../components/Composer';
 import { MessageActions } from '../../../components/MessageActions';
 import { Button } from '../../../components/Button';
 import { IconButton } from '../../../components/IconButton';
+import { pickAndSendImage } from '../../../lib/images';
+import { activeMentionQuery, extractMentions, insertMention } from '../../../lib/mentions';
 import { dbErrorMessage, isUnreachable, NETWORK_MESSAGE } from '../../../lib/dbErrors';
 import { REACTION_LABELS, shouldMarkRead, summarizeReactions, unreadCount, type Emoji, type Msg } from '../../../lib/messages';
 import { fetchRoom, markRead, roomTitle, type Member } from '../../../lib/rooms';
 import { useMembers } from '../../../lib/useMembers';
+import { useTyping } from '../../../lib/useTyping';
 import { useReactions } from '../../../lib/useReactions';
 import { useRoomMessages, type SendError } from '../../../lib/useRoomMessages';
 import { useSession } from '../../../lib/session';
@@ -118,6 +121,20 @@ function RoomBody({ id, me }: { id: string; me: string }) {
   const { rows: reactionRows, toggle } = useReactions(id, useMemo(() => messages.map((x) => x.id), [messages]), me);
   const byId = useMemo(() => new Map(messages.map((x) => [x.id, x])), [messages]);
   const group = info?.room.kind === 'group';
+  const nameRecord = useMemo(() => Object.fromEntries(names), [names]);
+  const typing = useTyping(id, me, nameRecord);
+  const [cursor, setCursor] = useState(0);
+  const [selection, setSelection] = useState<{ start: number; end: number } | undefined>(undefined); // 멘션을 넣은 직후 커서 위치
+  const query = group ? activeMentionQuery(draft, cursor) : null;
+  const candidates = useMemo(
+    () => (query === null ? null : (info?.members ?? []).filter((x) => x.user_id !== me && x.name.startsWith(query)).slice(0, 8)),
+    [query, info, me],
+  );
+  const changeDraft = useCallback((t: string) => {
+    setDraft(t);
+    setSelection(undefined);
+    typing.onDraftChange(t);
+  }, [typing]);
   const title = info ? roomTitle(info.room, info.members, me) : '대화방';
 
   // 읽음: 앞에 보이고 포커스가 있을 때만, 방에서 가장 새 메시지의 서버 시각으로(앞으로만).
@@ -200,8 +217,10 @@ function RoomBody({ id, me }: { id: string; me: string }) {
     sending.current = true;
     setSendError(null);
     setDraft(''); // 먼저 비운다. 실패하면 되돌린다.
+    typing.stop();
+    const mentions = group ? extractMentions(text, info?.members ?? [], me) : [];
     try {
-      await send(replyTarget ? { text, reply_to: replyTarget.id } : { text });
+      await send({ text, ...(replyTarget ? { reply_to: replyTarget.id } : {}), ...(mentions.length ? { mentions } : {}) });
       setReplyTarget(null);
     } catch (e) {
       const err = e as SendError;
@@ -210,7 +229,15 @@ function RoomBody({ id, me }: { id: string; me: string }) {
     } finally {
       sending.current = false;
     }
-  }, [draft, send, replyTarget]);
+  }, [draft, send, replyTarget, typing, group, info, me]);
+
+  const pickImage = useCallback(async () => {
+    setSendError(null);
+    const r = await pickAndSendImage(id, send);
+    if (unmounted.current) return;
+    if (r === 'unsupported') setSendError('이 형식의 사진은 보낼 수 없어요');
+    else if (r === 'failed') setSendError('사진을 보내지 못했어요');
+  }, [id, send]);
 
   const data = useMemo(() => [...messages].reverse(), [messages]); // inverted: 새 것부터
 
@@ -348,6 +375,8 @@ function RoomBody({ id, me }: { id: string; me: string }) {
                   message={item}
                   mine={mine}
                   speaker={mine ? '나' : (names.get(item.sender_id) ?? '상대')}
+                  mentionNames={group ? (info?.members ?? []).map((x) => x.name) : undefined}
+                  mentionsMe={item.mentions.includes(me)}
                   unreadText={unreadCount(item, members) > 0 ? (group ? `안 읽은 사람 ${unreadCount(item, members)}명` : '상대가 안 읽음') : ''}
                   active={item.id === (activeId ?? data[0]?.id)}
                   onNavigate={(dir) => navigate(item.id, dir)}
@@ -369,7 +398,22 @@ function RoomBody({ id, me }: { id: string; me: string }) {
         />
         <Composer
           value={draft}
-          onChangeText={setDraft}
+          onChangeText={changeDraft}
+          onPickImage={() => void pickImage()}
+          typingLabel={typing.label}
+          mentionCandidates={candidates}
+          onSelectionChange={(c) => {
+            setCursor(c);
+            setSelection(undefined);
+          }}
+          selection={selection}
+          onBlur={typing.stop}
+          onSelectMention={(name) => {
+            const r = insertMention(draft, cursor, name);
+            changeDraft(r.text);
+            setCursor(r.cursor);
+            setSelection({ start: r.cursor, end: r.cursor });
+          }}
           onSend={() => void onSend()}
           inputRef={inputRef}
           replyTo={replyTarget ? { id: replyTarget.id, name: replyTarget.sender_id === me ? '나' : (names.get(replyTarget.sender_id) ?? '상대'), text: firstLine(replyTarget) } : null}

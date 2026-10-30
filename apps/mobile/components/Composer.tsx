@@ -1,3 +1,4 @@
+import ImagePlus from 'lucide-react-native/icons/image-plus';
 import Send from 'lucide-react-native/icons/send';
 import X from 'lucide-react-native/icons/x';
 import { useEffect, useRef, type ComponentRef, type RefObject } from 'react';
@@ -7,6 +8,8 @@ import { shouldSubmitOnKey } from '../lib/composer';
 import { focusRing, useTheme } from '../lib/theme';
 import { AppText } from './AppText';
 import { IconButton } from './IconButton';
+import { MentionPicker } from './MentionPicker';
+import type { Member } from '../lib/rooms';
 
 // MASTER 4·5장: 입력창 모서리 22, 최소 높이 44. 웹은 Enter로 보내고 Shift+Enter는 줄바꿈, 한글 조합 중 Enter는 보내지 않는다.
 // 입력창은 보낸 뒤에도 그대로 있어서 포커스를 잃지 않는다. 글이 비면 보내기는 aria-disabled(진짜 disabled 아님).
@@ -19,8 +22,15 @@ type Props = {
   replyTo: { id: number; name: string; text: string } | null;
   onCancelReply(): void;
   inputRef?: RefObject<InputHandle | null>;
+  onPickImage?(): void;
+  typingLabel?: string | null; // "지은님이 입력 중". 입력창 위 polite 영역(바뀔 때만 읽힌다)
+  mentionCandidates?: Pick<Member, 'user_id' | 'name'>[] | null; // null = 목록 없음
+  onSelectMention?(name: string): void;
+  onSelectionChange?(cursor: number): void;
+  selection?: { start: number; end: number }; // 멘션을 넣은 뒤 커서를 옮길 때만
+  onBlur?(): void;
 };
-export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, inputRef }: Props) {
+export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, inputRef, onPickImage, typingLabel, mentionCandidates, onSelectMention, onSelectionChange, selection, onBlur }: Props) {
   const { colors, radius, space, font } = useTheme();
   const own = useRef<InputHandle>(null);
   const ref = inputRef ?? own;
@@ -32,8 +42,25 @@ export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, 
       return () => clearTimeout(id);
     }
   }, [replyId, ref]);
+  const picking = (mentionCandidates?.length ?? 0) > 0;
   return (
     <View style={{ borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.background }}>
+      <View accessibilityLiveRegion="polite" aria-live="polite">
+        {typingLabel ? (
+          <AppText variant="small" color="textMuted" style={{ paddingHorizontal: space[3], paddingTop: space[0] }}>
+            {typingLabel}
+          </AppText>
+        ) : null}
+      </View>
+      {picking && onSelectMention ? (
+        <MentionPicker
+          candidates={mentionCandidates!}
+          onSelect={(n) => {
+            onSelectMention(n);
+            ref.current?.focus(); // 목록이 사라져도 포커스가 body로 떨어지지 않게
+          }}
+        />
+      ) : null}
       {replyTo && (
         <View style={{ flexDirection: 'row', alignItems: 'center', paddingLeft: space[3], paddingRight: space[1] }}>
           <AppText variant="small" color="textMuted" numberOfLines={1} style={{ flex: 1 }}>
@@ -50,6 +77,7 @@ export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, 
         </View>
       )}
       <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: space[1], paddingHorizontal: space[3], paddingVertical: space[1] }}>
+        {onPickImage ? <IconButton icon={ImagePlus} label="사진 보내기" onPress={onPickImage} /> : null}
         <TextInput
           ref={ref}
           accessibilityLabel={replyTo ? `메시지 입력, ${replyTo.name}에게 답장 중` : '메시지 입력'}
@@ -57,6 +85,9 @@ export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, 
           maxLength={2000}
           value={value}
           onChangeText={onChangeText}
+          onSelectionChange={(e) => onSelectionChange?.(e.nativeEvent.selection.start)}
+          selection={selection}
+          onBlur={onBlur}
           placeholder="메시지"
           placeholderTextColor={colors.textMuted}
           selectionColor={colors.primary}
