@@ -840,7 +840,7 @@ test('털어놓기: 받은 메시지에서 열고 → 안내 문구 → 남기�
   await click(buttons(root, '메시지 메뉴')[1]);
   await click(buttons(root, VENT)[0]);
   expect(buttons(root, '답장')).toHaveLength(0); // 메뉴는 닫힘
-  expect(texts()).toContain('상대에게는 보이지 않아요. 누가 남겼는지도 드러나지 않아요.');
+  expect(texts()).toContain('상대에게 직접 보이지 않아요. 누가 남겼는지 드러나지 않도록 해요.');
   await act(async () => ventInput(root).props.onChangeText('  너무 차가웠어요  '));
   expect(texts()).toContain('12/1000');
   await click(buttons(root, '남기기')[0]);
@@ -869,4 +869,64 @@ test('털어놓기: 빈 글은 보내지 않고, 실패는 고정 문구(서버 
   await click(buttons(root, '메시지 메뉴')[1]);
   await click(buttons(root, VENT)[0]);
   expect(ventInput(root).props.value).toBe('');
+});
+
+// ── T-25 fix round 1 ──
+const nodeWith = (root: Q, f: (p: Record<string, any>) => boolean) => root.container.queryAll((n) => f((n as unknown as N).props)) as unknown as N[];
+
+test('털어놓기: 입력창이 안내 문구와 인용을 aria-describedby로 가리킨다', async () => {
+  const { root } = await setup();
+  await click(buttons(root, '메시지 메뉴')[1]);
+  await click(buttons(root, VENT)[0]);
+  const ids = String(ventInput(root).props['aria-describedby']).split(' ');
+  expect(ids).toEqual(['vent-help', 'vent-quote']);
+  for (const id of ids) expect(nodeWith(root, (p) => p.nativeID === id)).not.toHaveLength(0);
+  expect(ventInput(root).props.accessibilityHint).toContain('상대에게');
+});
+
+test('털어놓기: 닫으면 그 메시지가 로빙 탭 순서(tabIndex 0)가 된다 — 닫기·남기기 모두', async () => {
+  jest.replaceProperty(Platform, 'OS', 'web');
+  mockFeedback.mockResolvedValue({ ack: 'ok' });
+  const { root } = await setup();
+  const tab = () => nodeWith(root, (p) => p.nativeID === 'msg-body-1')[0].props.tabIndex;
+  expect(tab()).toBe(-1); // 기본 활성은 가장 새 메시지
+  await click(buttons(root, '메시지 메뉴')[1]);
+  await click(buttons(root, VENT)[0]);
+  await click(buttons(root, '닫기')[0]);
+  expect(tab()).toBe(0);
+  await click(nodeWith(root, (p) => p.nativeID === 'msg-body-2')[0]); // 활성 옮기기
+  await click(buttons(root, '메시지 메뉴')[1]);
+  await click(buttons(root, VENT)[0]);
+  await act(async () => ventInput(root).props.onChangeText('x'));
+  await click(buttons(root, '남기기')[0]);
+  expect(tab()).toBe(0);
+});
+
+test('토스트는 탭 정류장이 아니다(눌러 닫기만)', async () => {
+  mockFeedback.mockResolvedValue({ ack: '고마워요' });
+  const { root } = await setup();
+  await click(buttons(root, '메시지 메뉴')[1]);
+  await click(buttons(root, VENT)[0]);
+  await act(async () => ventInput(root).props.onChangeText('x'));
+  await click(buttons(root, '남기기')[0]);
+  const toast = buttons(root, '고마워요 닫기')[0];
+  expect(toast.props.tabIndex).toBe(-1);
+  expect(toast.props.focusable).toBe(false);
+});
+
+test('털어놓기: 같은 틱에 남기기를 두 번 눌러도 한 번만 보내고 "보내는 중"을 읽어 준다', async () => {
+  let done!: (v: { ack: string }) => void;
+  mockFeedback.mockReturnValue(new Promise((r) => (done = r)));
+  const { root, texts } = await setup();
+  await click(buttons(root, '메시지 메뉴')[1]);
+  await click(buttons(root, VENT)[0]);
+  await act(async () => ventInput(root).props.onChangeText('x'));
+  const send = buttons(root, '남기기')[0];
+  await act(async () => {
+    send.props.onClick({ stopPropagation() {}, nativeEvent: {} });
+    send.props.onClick({ stopPropagation() {}, nativeEvent: {} });
+  });
+  expect(mockFeedback).toHaveBeenCalledTimes(1);
+  expect(texts()).toContain('보내는 중');
+  await act(async () => done({ ack: 'ok' }));
 });

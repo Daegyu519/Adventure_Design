@@ -273,8 +273,16 @@ function RoomBody({ id, me }: { id: string; me: string }) {
 
   // 웹: 메시지 본문으로 포커스를 옮긴다(가상화된 목록이라 그려진 뒤에).
   const focusItem = useCallback((id: number) => {
+    setActiveId(id); // 로빙 tabindex: 포커스를 받은 메시지가 탭 순서에 있어야 Tab이 거기서 이어진다
     if (Platform.OS !== 'web' || typeof document === 'undefined') return;
-    setTimeout(() => document.getElementById(`msg-body-${id}`)?.focus(), 60);
+    // Modal이 닫히며 자기 포커스 복원을 끝낸 뒤에 옮긴다: 목표에 닿을 때까지 몇 번 다시 시도(고정 지연 한 번에 기대지 않는다).
+    let tries = 0;
+    const step = () => {
+      const el = document.getElementById(`msg-body-${id}`);
+      el?.focus();
+      if (document.activeElement !== el && ++tries < 10) setTimeout(step, 50);
+    };
+    setTimeout(step, 30);
   }, []);
   const scrollTo = useCallback((index: number) => {
     try {
@@ -484,6 +492,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
       />
       <VentSheet
         visible={ventFor !== null}
+        say={say}
         roomId={id}
         message={ventFor}
         onClose={() => {

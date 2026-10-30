@@ -20,6 +20,8 @@ export function Toast({ message, onHide }: { message: string | null; onHide(): v
       accessibilityRole="button"
       accessibilityLabel={`${message} 닫기`}
       onPress={onHide}
+      tabIndex={-1} // 6초 뒤 사라지므로 탭 정류장이 되면 포커스가 body로 떨어진다. 읽어 주기는 say, 닫기는 누르기만.
+      focusable={false}
       style={{
         position: 'absolute',
         left: space[3],

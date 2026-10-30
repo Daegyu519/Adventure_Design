@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Platform, TextInput, View } from 'react-native';
 
-import { useAnnounce } from '../lib/announce';
 import { EngineError, engine } from '../lib/engine';
 import type { Msg } from '../lib/messages';
 import { focusRing, useTheme } from '../lib/theme';
@@ -13,12 +12,15 @@ import { Sheet } from './Sheet';
 
 // 털어놓기: 받은 메시지에 대한 속마음을 엔진에만 남긴다. 글은 이 컴포넌트의 state에만 있고(저장·로그 없음) 보내거나 닫으면 사라진다.
 // 상대에게 알려 주거나 무언가 바뀐다고 약속하지 않는다. 엔진 응답(ack)은 여기서 보이지 않고 onDone에만 넘긴다.
-function VentForm(p: { roomId: string; message: Msg; onClose(): void; onDone(ack: string): void }) {
+const HELP = '상대에게 직접 보이지 않아요. 누가 남겼는지 드러나지 않도록 해요.';
+
+function VentForm(p: { say(t: string): void; roomId: string; message: Msg; onClose(): void; onDone(ack: string): void }) {
   const { colors, radius, space, font } = useTheme();
-  const { say } = useAnnounce(); // iOS만 쓴다
+  const { say } = p; // 대화방의 useAnnounce().say(자기 region이 없으면 웹·안드로이드에서 안 읽힌다)
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const sending = useRef(false); // 같은 틱의 두 번째 누름을 막는다(busy state는 다음 렌더에야 보인다)
   const alive = useRef(true);
   useEffect(() => () => void (alive.current = false), []);
   // 오류 글자는 role=alert(웹·안드로이드). iOS만 한 번 읽어 준다(두 번 읽힘 방지, TextField와 같다).
@@ -27,17 +29,20 @@ function VentForm(p: { roomId: string; message: Msg; onClose(): void; onDone(ack
   }, [error, say]);
 
   async function submit() {
-    if (busy) return;
+    if (sending.current) return;
     const v = validateVent(text);
     if (!v.ok) return setError(v.message);
     setError(null);
+    sending.current = true;
     setBusy(true);
+    say('보내는 중');
     try {
       const r = await engine.feedback({ room_id: p.roomId, message_id: p.message.id, text: v.value });
       if (!alive.current) return;
       p.onClose();
       p.onDone(r.ack);
     } catch (e) {
+      sending.current = false;
       if (!alive.current) return;
       setBusy(false);
       setError(ventErrorMessage(e instanceof EngineError ? e.status : 0));
@@ -47,10 +52,10 @@ function VentForm(p: { roomId: string; message: Msg; onClose(): void; onDone(ack
   const n = [...text].length;
   return (
     <>
-      <AppText variant="small" color="textMuted">
-        상대에게는 보이지 않아요. 누가 남겼는지도 드러나지 않아요.
+      <AppText nativeID="vent-help" variant="small" color="textMuted">
+        {HELP}
       </AppText>
-      <View style={{ backgroundColor: colors.surface, borderRadius: radius.input, padding: space[2] }}>
+      <View nativeID="vent-quote" style={{ backgroundColor: colors.surface, borderRadius: radius.input, padding: space[2] }}>
         <AppText variant="small" numberOfLines={2}>
           {firstLine(p.message)}
         </AppText>
@@ -59,6 +64,8 @@ function VentForm(p: { roomId: string; message: Msg; onClose(): void; onDone(ack
         nativeID="vent-input"
         accessibilityLabel="털어놓을 내용"
         aria-invalid={!!error}
+        aria-describedby={error ? 'vent-help vent-quote vent-error' : 'vent-help vent-quote'}
+        accessibilityHint={HELP}
         value={text}
         onChangeText={(t) => {
           setText(t);
@@ -77,7 +84,7 @@ function VentForm(p: { roomId: string; message: Msg; onClose(): void; onDone(ack
         {n}/{VENT_MAX}
       </AppText>
       {error ? (
-        <AppText accessibilityRole="alert" accessibilityLiveRegion="polite" variant="small" color="danger">
+        <AppText nativeID="vent-error" accessibilityRole="alert" accessibilityLiveRegion="polite" variant="small" color="danger">
           {error}
         </AppText>
       ) : null}
@@ -87,10 +94,10 @@ function VentForm(p: { roomId: string; message: Msg; onClose(): void; onDone(ack
 }
 
 // Sheet(Modal)의 자식은 닫히면 사라지므로 글·오류가 저절로 비워진다(초안을 남기지 않는다).
-export function VentSheet(p: { visible: boolean; roomId: string; message: Msg | null; onClose(): void; onDone(ack: string): void }) {
+export function VentSheet(p: { visible: boolean; say(t: string): void; roomId: string; message: Msg | null; onClose(): void; onDone(ack: string): void }) {
   return (
     <Sheet initialFocus="vent-input" visible={p.visible && p.message !== null} onClose={p.onClose} title="AI에게만 털어놓기">
-      {p.message ? <VentForm roomId={p.roomId} message={p.message} onClose={p.onClose} onDone={p.onDone} /> : null}
+      {p.message ? <VentForm say={p.say} roomId={p.roomId} message={p.message} onClose={p.onClose} onDone={p.onDone} /> : null}
     </Sheet>
   );
 }
