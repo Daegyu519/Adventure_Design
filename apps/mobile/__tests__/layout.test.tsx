@@ -88,7 +88,7 @@ test('layout: not consented → only the consent screen, even with keys', async 
 test('layout: no supabase keys → straight to the tabs, no login', async () => {
   mockConsented = true;
   const { screens } = await mount();
-  expect(screens()).toEqual(['(tabs)', 'room/[id]/index']);
+  expect(screens()).toEqual(['(tabs)', 'room/[id]/index', 'room/[id]/info', 'room/[id]/search']);
 });
 
 test('layout: keys + session still loading → blank (no login flash), then login once known to be signed out', async () => {
@@ -121,7 +121,7 @@ test('layout: signed in with a profile → tabs', async () => {
   const { screens } = await mount();
   await fake.session(SESSION);
   await fake.profile(ROW);
-  expect(screens()).toEqual(['(tabs)', 'room/[id]/index']);
+  expect(screens()).toEqual(['(tabs)', 'room/[id]/index', 'room/[id]/info', 'room/[id]/search']);
 });
 
 // 상태 표시줄 글자색은 시스템이 아니라 고른 테마를 따라야 한다(밝은 바탕에 흰 시계가 나오면 안 보인다).

@@ -91,3 +91,8 @@ export async function markRead(roomId: string, me: string, at: string): Promise<
   const { error } = await db().from('room_members').update({ last_read_at: at }).eq('room_id', roomId).eq('user_id', me);
   if (error) throw error;
 }
+
+export async function setMuted(roomId: string, me: string, muted: boolean): Promise<void> {
+  const { error } = await db().from('room_members').update({ muted }).eq('room_id', roomId).eq('user_id', me);
+  if (error) throw error;
+}
