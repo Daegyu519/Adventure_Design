@@ -57,7 +57,7 @@ export default function Mirror() {
             <ActivityIndicator accessibilityLabel="불러오는 중" color={colors.primary} />
           ) : (
             <>
-              <AppText variant="small" color="textMuted">{`오늘의 카드 ${Math.min(done.size + (finished ? 0 : 1), cards.length)} / ${cards.length}`}</AppText>
+              <AppText variant="small" color="textMuted">{`오늘 푼 카드 ${done.size} / ${cards.length}`}</AppText>
               {cards.map((c) => {
                 const Body = CARD[c.kind];
                 return <Body key={c.card_id} card={c} onDone={() => setDone((d) => new Set(d).add(c.card_id))} />;
