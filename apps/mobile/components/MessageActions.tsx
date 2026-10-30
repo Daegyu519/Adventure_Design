@@ -7,8 +7,8 @@ import { AppText } from './AppText';
 import { Button } from './Button';
 import { Sheet } from './Sheet';
 
-// 메시지 메뉴: 공감 6개 + 답장. 길게 누르기나 "메시지 메뉴" 버튼으로 연다(키보드·화면 읽기 프로그램용). Task 14가 털어놓기 항목을 더한다.
-export function MessageActions(p: { senderName?: string; visible: boolean; message: Msg | null; mine: boolean; myReaction: Emoji | null; onClose(): void; onReply(): void; onReact(e: Emoji): void }) {
+// 메시지 메뉴: 공감 6개 + 답장. 길게 누르기나 "메시지 메뉴" 버튼으로 연다(키보드·화면 읽기 프로그램용). onVent가 있을 때(받은 메시지)만 털어놓기 항목이 있다.
+export function MessageActions(p: { senderName?: string; visible: boolean; message: Msg | null; mine: boolean; myReaction: Emoji | null; onClose(): void; onReply(): void; onVent?(): void; onReact(e: Emoji): void }) {
   const { colors, radius, space, font } = useTheme();
   return (
     <Sheet initialFocus="sheet-first-reaction" visible={p.visible && p.message !== null} onClose={p.onClose} title={p.message ? `${p.senderName ?? '상대'}의 메시지: ${firstLine(p.message)}` : '메시지'}>
@@ -34,6 +34,7 @@ export function MessageActions(p: { senderName?: string; visible: boolean; messa
         })}
       </View>
       <Button label="답장" kind="secondary" onPress={p.onReply} />
+      {p.onVent ? <Button label="AI에게만 털어놓기" kind="secondary" onPress={p.onVent} /> : null}
     </Sheet>
   );
 }
