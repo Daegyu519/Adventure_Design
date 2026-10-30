@@ -11,6 +11,8 @@ jest.mock('../lib/supabase', () => ({ supabase: null }));
 // 시트 안 안내는 시트 자기 영역(Sheet의 useAnnounce)으로 간다: 화면의 say를 받지 않는다(AI-2).
 const mockSay = jest.fn();
 jest.mock('../lib/announce', () => ({ useAnnounce: () => ({ say: mockSay, region: null }) }));
+const mockFocusNode = jest.fn();
+jest.mock('../lib/focus', () => ({ ...jest.requireActual('../lib/focus'), focusNode: (...a: unknown[]) => mockFocusNode(...a) }));
 const mockDetail = jest.fn();
 jest.mock('../lib/engine', () => ({ ...jest.requireActual('../lib/engine'), engine: { isMock: true, detail: (...a: unknown[]) => mockDetail(...a) } }));
 
@@ -48,6 +50,7 @@ const flush = () => act(async () => void (await Promise.resolve()));
 beforeEach(() => {
   mockDetail.mockReset();
   mockSay.mockReset();
+  mockFocusNode.mockReset();
   jest.replaceProperty(Platform, 'OS', 'android');
 });
 
@@ -234,4 +237,31 @@ test('보낼 글이 공백뿐이면 요청하지 않는다', async () => {
 test('닫혀 있으면 요청하지 않는다', async () => {
   await setup({ visible: false });
   expect(mockDetail).not.toHaveBeenCalled();
+});
+
+// 같은 오류로 또 실패하면 alert를 다시 붙여(key) 웹·안드로이드에서도 다시 읽힌다. 다시 해 보기가 성공하면 사라지는 버튼 대신 보낼 문장으로 포커스(T-22).
+test('같은 오류로 다시 실패하면 alert 글자를 새로 붙인다', async () => {
+  mockDetail.mockRejectedValue(new Error('x'));
+  const { root, byLabel, click } = await setup();
+  await flush();
+  const alert = () => root.container.queryAll((n) => n.props.accessibilityRole === 'alert')[0];
+  const first = alert();
+  await click(byLabel('다시 해 보기')[0] as never);
+  await flush();
+  expect(alert()).toBeDefined();
+  expect(alert()).not.toBe(first);
+});
+
+test('다시 해 보기가 성공하면 보낼 문장(detail-text)으로 포커스, 처음 성공에는 옮기지 않는다', async () => {
+  mockDetail.mockResolvedValueOnce(res());
+  await setup();
+  await flush();
+  expect(mockFocusNode).not.toHaveBeenCalled();
+  mockDetail.mockRejectedValueOnce(new Error('x')).mockResolvedValueOnce(res());
+  const second = await setup();
+  await flush();
+  await second.click(second.byLabel('다시 해 보기')[0] as never);
+  await flush();
+  expect(mockFocusNode).toHaveBeenCalledTimes(1);
+  expect((mockFocusNode.mock.calls[0][0] as { current: { props?: unknown } | null }).current).not.toBeNull();
 });

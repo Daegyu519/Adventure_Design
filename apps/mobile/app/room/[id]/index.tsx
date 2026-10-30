@@ -64,6 +64,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
   const [infoError, setInfoError] = useState<string | null>(null);
   const [infoTick, setInfoTick] = useState(0);
   const [markTick, setMarkTick] = useState(0);
+  const [markFailed, setMarkFailed] = useState(false); // 읽음 표시를 다시 해도 끝내 못 함(다시 불러오기 줄)
   const markAttempts = useRef(0);
   const markTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sending = useRef(false);
@@ -108,10 +109,13 @@ function RoomBody({ id, me }: { id: string; me: string }) {
 
   const { members, error: membersDown, reload: reloadMembers } = useMembers(id, info?.members);
   const { rows: reactionRows, toggle, error: reactionsDown, reload: reloadReactions } = useReactions(id, useMemo(() => messages.map((x) => x.id), [messages]), me);
-  const failed = error || infoError !== null || membersDown || reactionsDown; // 다시 불러오기 줄(Realtime 끊김 포함)
+  const failed = error || infoError !== null || membersDown || reactionsDown || markFailed; // 다시 불러오기 줄(Realtime 끊김·읽음 실패 포함)
   // 불러오기 실패 줄의 다시 불러오기(끊긴 채널도 새로 연다), 그리고 앞으로 돌아오거나 포커스를 얻을 때 자동 다시 시도.
   const retry = useCallback(() => {
     setInfoTick((t) => t + 1);
+    setMarkFailed(false);
+    markAttempts.current = 0;
+    setMarkTick((t) => t + 1);
     reload();
     reloadMembers();
     reloadReactions();
@@ -130,6 +134,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
   }, []);
 
   const names = useMemo(() => new Map(info?.members.map((m) => [m.user_id, m.name])), [info]);
+  const others = useMemo(() => members.filter((m) => m.user_id !== me), [members, me]);
   const byId = useMemo(() => new Map(messages.map((x) => [x.id, x])), [messages]);
   const group = info?.room.kind === 'group';
   const nameRecord = useMemo(() => Object.fromEntries(names), [names]);
@@ -171,6 +176,9 @@ function RoomBody({ id, me }: { id: string; me: string }) {
           markAttempts.current += 1;
           if (markTimer.current) clearTimeout(markTimer.current);
           markTimer.current = setTimeout(() => setMarkTick((t) => t + 1), 3000);
+        } else {
+          if (__DEV__) console.warn('[room] markRead failed after retries');
+          setMarkFailed(true);
         }
       });
   }, [appActive, focused, newest, id, me, markTick]);
@@ -420,6 +428,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
           renderItem={({ item, index }) => {
             const older = data[index + 1]; // 화면에서 바로 위(더 오래된) 메시지
             const mine = item.sender_id === me;
+            const unread = unreadCount(item, others); // 나는 세지 않는다(받은 메시지에 "상대가 안 읽음"이 뜨지 않게)
             const first = older?.sender_id !== item.sender_id;
             return (
               <View style={{ marginTop: older && !first ? space[0] : older ? space[2] : 0 }}>
@@ -429,7 +438,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
                   speaker={mine ? '나' : (names.get(item.sender_id) ?? '상대')}
                   mentionNames={group ? (info?.members ?? []).map((x) => x.name) : undefined}
                   mentionsMe={item.mentions.includes(me)}
-                  unreadText={unreadCount(item, members) > 0 ? (group ? `안 읽은 사람 ${unreadCount(item, members)}명` : '상대가 안 읽음') : ''}
+                  unreadText={unread > 0 ? (group ? `안 읽은 사람 ${unread}명` : '상대가 안 읽음') : ''}
                   active={item.id === (activeId ?? data[0]?.id)}
                   onNavigate={(dir) => navigate(item.id, dir)}
                   quoteFailed={item.reply_to !== null && failedQuotes.has(item.reply_to)}
@@ -438,7 +447,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
                   quoted={item.reply_to === null ? null : (byId.get(item.reply_to) ?? extra.get(item.reply_to) ?? null)}
                   quotedName={quotedName(item)}
                   reactions={summarizeReactions(reactionRows, item.id, me)}
-                  unread={unreadCount(item, members)}
+                  unread={unread}
                   onLongPress={() => setMenuFor(item)}
                   onMore={() => setMenuFor(item)}
                   onQuotePress={() => item.reply_to !== null && goTo(item.reply_to)}

@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ComponentRef } from 'react';
 import { ActivityIndicator, Platform, ScrollView, useWindowDimensions, View } from 'react-native';
 
 import { DETAIL_TIMEOUT_MS, engine, type DetailRes } from '../lib/engine';
+import { focusNode } from '../lib/focus';
 import { choiceOf, detailErrorCopy, INTENTS, type Intent } from '../lib/intent';
 import { useTheme } from '../lib/theme';
 import { AppText } from './AppText';
@@ -38,7 +39,9 @@ function DetailBody({ roomId, text, replyTo, hintTitle, say, onApply, onSendAsIs
   const blank = text.trim() === ''; // 공백뿐이면 엔진이 거절한다: 요청하지 않는다
   const [busy, setBusy] = useState(!blank);
   const [err, setErr] = useState<string | null>(null);
-  const [errN, setErrN] = useState(0); // 같은 오류가 다시 나도 iOS가 다시 읽게
+  const [errN, setErrN] = useState(0); // 같은 오류가 다시 나도 다시 읽게(iOS say, 웹·안드로이드는 alert를 새로 붙인다)
+  const textRef = useRef<ComponentRef<typeof View>>(null);
+  const hadErr = useRef(false); // 다시 해 보기가 성공하면 사라지는 버튼 대신 보낼 문장으로 포커스
   const ctrl = useRef<AbortController | null>(null);
   const cache = useRef(new Map<string, DetailRes>()); // 의도별 응답(칩을 다시 눌러 해제하면 다시 부르지 않는다)
   const first = useRef(true);
@@ -67,6 +70,8 @@ function DetailBody({ roomId, text, replyTo, hintTitle, say, onApply, onSendAsIs
           setCur(r);
           setErr(null);
           setBusy(false);
+          if (hadErr.current) focusNode(textRef);
+          hadErr.current = false;
           say(first.current ? `살펴보기 결과가 나왔어요, ${r.options.length ? `후보 ${r.options.length}개` : '후보가 없어요'}` : changed(r));
           first.current = false;
         })
@@ -74,6 +79,7 @@ function DetailBody({ roomId, text, replyTo, hintTitle, say, onApply, onSendAsIs
           if (c.signal.aborted) return;
           setErr(detailErrorCopy(e));
           setErrN((n) => n + 1);
+          hadErr.current = true;
           setBusy(false);
         });
     },
@@ -109,7 +115,7 @@ function DetailBody({ roomId, text, replyTo, hintTitle, say, onApply, onSendAsIs
   ) : null;
   const failed = err ? (
     <View style={{ gap: space[1] }}>
-      <AppText accessibilityRole="alert" accessibilityLiveRegion="polite" color="danger">
+      <AppText key={errN} accessibilityRole="alert" accessibilityLiveRegion="polite" color="danger">
         {err}
       </AppText>
       <Button label="다시 해 보기" kind="secondary" loading={busy} onPress={() => load(intent)} />
@@ -122,7 +128,7 @@ function DetailBody({ roomId, text, replyTo, hintTitle, say, onApply, onSendAsIs
   return (
     <>
       <ScrollView style={{ maxHeight: height * 0.6 }} contentContainerStyle={{ gap: space[2] }}>
-        <View nativeID="detail-text" tabIndex={-1} style={{ gap: space[0] }}>
+        <View ref={textRef} nativeID="detail-text" tabIndex={-1} style={{ gap: space[0] }}>
           <AppText accessibilityRole="header" aria-level={3} weight="600">
             {title}
           </AppText>

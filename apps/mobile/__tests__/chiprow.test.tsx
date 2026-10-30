@@ -74,3 +74,10 @@ test('ChipRow: Space 키로 고른다(웹 radio는 기본으로 안 됨), 다른
   await act(async () => chips()[0].props.onKeyDown({ key: 'a', preventDefault }));
   expect(onChange).not.toHaveBeenCalled();
 });
+
+// Space를 누르고 있으면 keydown이 반복된다: 살펴보기 의도 칩에서 모델 요청이 줄줄이 나가지 않게 반복은 무시(T-08).
+test('ChipRow: 눌러 둔 Space의 반복 keydown은 무시한다', async () => {
+  const { chips, onChange } = await setup({ value: null });
+  await act(async () => chips()[0].props.onKeyDown({ key: ' ', repeat: true, preventDefault() {} }));
+  expect(onChange).not.toHaveBeenCalled();
+});

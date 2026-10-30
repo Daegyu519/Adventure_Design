@@ -16,6 +16,7 @@ const CODE_LABEL = `메일로 받은 ${OTP_LENGTH}자리 코드를 적어 주세
 export default function Login() {
   const { colors, space } = useTheme();
   const [step, setStep] = useState<'email' | 'code'>('email');
+  const [rewrote, setRewrote] = useState(false); // "이메일 다시 적기"로 돌아왔으면 이메일 칸에 포커스(누른 버튼이 사라져 body로 떨어지지 않게)
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
@@ -62,6 +63,7 @@ export default function Login() {
   };
 
   const rewrite = () => {
+    setRewrote(true);
     setStep('email');
     setCode('');
     setError(null);
@@ -89,6 +91,7 @@ export default function Login() {
                   autoCapitalize="none"
                   autoCorrect={false}
                   autoComplete="email"
+                  autoFocus={rewrote}
                   textContentType="emailAddress"
                   returnKeyType="send"
                   onSubmitEditing={send}

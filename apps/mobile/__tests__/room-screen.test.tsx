@@ -1044,3 +1044,34 @@ test('살펴보기: 힌트 제목을 시트에 넘긴다', async () => {
   const { texts } = await openDetail();
   expect(texts()).toContain('차갑게 느껴질 수도 있어요');
   });
+
+// ── P-05 ──
+// 받은 메시지의 "안 읽음"에 나는 넣지 않는다(1:1에서 받은 말에 "상대가 안 읽음"이 잠깐 들리던 것, T-09b).
+test('받은 메시지에는 내가 안 읽은 것을 세지 않는다(1:1)', async () => {
+  mockFetchRoom.mockImplementation(() => okRoom().then((r) => ({ ...r, room: { ...r.room, kind: 'direct' } })));
+  mockMessages = [m(1, 'u2', '안녕')];
+  mockMembersLastRead = { me: null, u2: null };
+  const { root } = await setup();
+  expect(root.container.queryAll((n) => String(n.props.accessibilityLabel).includes('상대가 안 읽음'))).toHaveLength(0);
+});
+
+// 읽음 표시를 끝내 못 하면 조용히 멈추지 않는다: 개발 중 경고 + 다시 불러오기 줄(누르면 다시 시도, S-I7).
+test('읽음 표시를 3번 다시 해도 실패하면 개발 중 경고와 다시 불러오기 줄, 누르면 다시 보낸다', async () => {
+  jest.useFakeTimers();
+  const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+  try {
+    mockMarkRead.mockRejectedValue(new Error('x'));
+    const { texts, press } = await setup();
+    for (let i = 0; i < 6; i++) await act(async () => void jest.advanceTimersByTime(10000));
+    expect(mockMarkRead).toHaveBeenCalledTimes(4);
+    expect(warn).toHaveBeenCalledWith('[room] markRead failed after retries');
+    expect(texts()).toContain('연결이 불안정할 수도 있어요');
+    mockMarkRead.mockResolvedValue(undefined);
+    await press('다시 불러오기');
+    expect(mockMarkRead).toHaveBeenCalledTimes(5);
+    expect(texts()).not.toContain('연결이 불안정할 수도 있어요');
+  } finally {
+    warn.mockRestore();
+    jest.useRealTimers();
+  }
+});
