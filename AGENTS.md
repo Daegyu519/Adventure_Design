@@ -1,6 +1,6 @@
 # AGENTS.md
 
-이 저장소를 이어받는 AI 에이전트(Claude Code, Codex, Cursor, Gemini CLI 등)와 사람이 처음 읽는 문서다. 도구와 상관없이 같은 규칙으로 일한다. 기준: 2026-10-30, `main` = `land T-38` 이후. land할 때마다 "2. 지금 상태"·"3. 진행 중"·"4. 다음 순서"를 같은 변경에서 고친다.
+이 저장소를 이어받는 AI 에이전트(Claude Code, Codex, Cursor, Gemini CLI 등)와 사람이 처음 읽는 문서다. 도구와 상관없이 같은 규칙으로 일한다. 기준: 2026-10-30, `main` = `land T-09a` 이후. land할 때마다 "2. 지금 상태"·"3. 진행 중"·"4. 다음 순서"를 같은 변경에서 고친다.
 
 ## 1. 무엇을 만드는가, 읽는 순서
 
@@ -21,27 +21,27 @@
 
 `docs/tasks.md` 기준으로 직접 센 값이다(`-live` 행과 선택은 따로).
 
-**필수 작업 48개 중 32개 완료.** `-live` 4개(전부 T-02 필요, 0개 완료). 선택 3개 중 1개 완료(T-38).
+**필수 작업 48개 중 33개 완료.** `-live` 5개(전부 T-02 필요, 0개 완료). 선택 3개 중 1개 완료(T-38).
 
 | 단계 | 필수 완료 | 남은 것 |
 |---|---|---|
 | 0. 기반 | 13 / 14 | T-02 (사람이 할 일) |
-| 1. 채팅 | 5 / 9 | T-09a~d |
+| 1. 채팅 | 6 / 9 | T-09b, T-09c, T-09d |
 | 2. AI 엔진 핵심 | 5 / 7 | T-15, T-16 (사람: 라벨) |
 | 3. 앙상블과 살펴보기 | 2 / 5 | T-18, T-20, T-22 |
 | 4. 털어놓기·거울·측정 | 7 / 10 | T-25, T-28a, T-36 |
 | 5. 파일럿과 발표 | 0 / 3 | T-29, T-30, T-31 |
-| `-live` (단계 1·2) | 0 / 4 | T-07-live, T-08-live, T-10-live, T-17-live |
+| `-live` (단계 1·2) | 0 / 5 | T-07-live, T-08-live, T-09a-live, T-10-live, T-17-live |
 | 선택 | 1 / 3 | T-32, T-33 |
 
 (단계 0의 14개에는 이 문서를 만든 P-03이 들어 있다.)
 
-검사 기준치(`scripts/check`, 병합된 main, 2026-10-30): 엔진 pytest 515 passed, 1 skipped · 앱 jest 232 passed(24 suites) · supabase(PGlite) 24 pass · tsc·lint 0 · 대비 OK.
+검사 기준치(`scripts/check`, 병합된 main, 2026-10-30): 엔진 pytest 515 passed, 1 skipped · 앱 jest 290 passed(30 suites) · supabase(PGlite) 24 pass · tsc·lint 0 · 대비 OK.
 
 영역별:
 
 - **엔진**: 거의 끝. 실시간 힌트(`/v1/hint`), 살펴보기(`/v1/detail`), 털어놓기(`/v1/feedback`), 거울(`/v1/mirror/*`), 통계(`/v1/stats/me`), 웹훅(`/hooks/message`), 푸시·기준선·이벤트·trace 작업, JWKS 인증, 사용자별 429(T-38)가 main에 있다. 남은 것: T-18(두 번째 말투 전문가), T-20(가중치 학습).
-- **앱**: 바탕과 일부 화면만 있다 — 동의, 로그인, 프로필, 리포트, 설정, 초대·그룹 만들기(`rooms/new`). **대화 목록·대화방(T-09a)이 없는 것이 가장 큰 구멍**이고, 입력 중 힌트(T-15)가 그 뒤에 걸려 있다.
+- **앱**: 동의, 로그인, 프로필, 리포트, 설정, 초대·그룹 만들기(`rooms/new`), 대화 목록(안 읽은 수)과 대화방 기본(`room/[id]`: 보내기, Realtime 수신, 과거 불러오기, 읽음 처리)이 있다. Realtime은 jest로만 확인했다(T-09a-live). 남은 큰 덩어리는 답장·공감·읽음 수(T-09b), 입력 중·사진·멘션(T-09c), 방 정보(T-09d), 그리고 입력 중 힌트(T-15).
 - **DB**: 마이그레이션 6개가 `supabase/migrations/`에 있고 로컬 PGlite 테스트로만 확인했다. **실제 Supabase 프로젝트는 아직 없다(T-02).**
 - **평가**: 대조 세트와 `--mock` 평가 스크립트, `eval/baseline.json`(정밀도 게이트)이 있다. 이 mock 수치는 배관 확인용이다. 라벨된 30쌍(T-16)이 있어야 `-live` 평가가 된다.
 - **배포**: 아직 없음. T-29(엔진), T-30(웹 + Android EAS), T-31(파일럿 1주).
@@ -50,9 +50,9 @@
 
 | 작업 | 브랜치 | 상태 |
 |---|---|---|
-| T-09a 대화 목록 + 대화방 (앱) | `t09a-chat` | 리뷰를 마쳤고 수정 라운드 1로 들어간다 |
+| (없음) | | |
 
-이 브랜치는 Claude가 잡은 것이고 **원격에는 아직 없다**(작업한 맥의 로컬). T-09a를 받아서 같은 일을 하지 않는다. T-09a에 걸린 T-09b·T-09d·T-28a는 land 뒤에 시작한다. 보류(paused): 없음.
+Claude가 새로 잡는 작업은 7장 순서대로 원격 브랜치를 먼저 올린다. 보류(paused): 없음.
 
 ## 4. 다음 순서
 
@@ -62,6 +62,9 @@
 
 | 작업 | 영역 | 메모 |
 |---|---|---|
+| T-09b 답장 · 공감 · 메시지별 읽음 수 | 앱 | T-09a 완료 |
+| T-09d 방 정보 · 방 안 검색 · 알림 끄기 | 앱 | T-09a 완료. 지금 `/room/<id>/info`는 404 |
+| T-28a 푸시 등록 (Android, 웹) | 앱 | T-37, T-09a 완료 |
 | T-36 거울 화면 3종 | 앱 | T-07, T-35 완료. 엔진 거울 API는 `/v1/mirror/today`·`answer` |
 | T-18 두 번째 말투 전문가(로컬 SEED) | 엔진 | T-12 완료. 로컬 모델은 Ollama |
 | T-29 엔진 배포 | 배포 | T-24 완료. Cloudflare Tunnel 등, 계정이 필요할 수 있음 **[사람]** |
@@ -70,19 +73,17 @@
 | T-02 Supabase dev 연결 | DB | **[사람]** 계정·키 |
 | T-16 대조 세트 30쌍 라벨 | 평가 | **[사람]** 두 사람이 블라인드로 |
 
-T-09a가 land된 뒤에:
+그 뒤 순서:
 
 ```
-T-09a ─┬─ T-09b ─┬─ T-09c ── T-15 ── T-22
-       │         └─ T-25   (T-24 완료)
-       ├─ T-09d
-       └─ T-28a            (T-37 완료)
+T-09b ─┬─ T-09c ── T-15 ── T-22
+       └─ T-25   (T-24 완료)
 ```
 
 - T-15는 T-14·T-03b도 선행(완료). 힌트 설정(`tone_hint_on`)이 꺼져 있으면 `/v1/hint`를 보내지 않는 테스트를 T-15에서 쓴다(T-37이 저장만 한다).
 - T-22는 T-15와 T-21(완료) 뒤. T-25는 T-09b와 T-24(완료) 뒤.
 
-T-02 뒤에: T-07-live, T-08-live, T-10-live (실제 Supabase로 로그인·초대·웹훅 확인) **[사람이 먼저 T-02]**.
+T-02 뒤에: T-07-live, T-08-live, T-09a-live, T-10-live (실제 Supabase로 로그인·초대·웹훅 확인) **[사람이 먼저 T-02]**.
 
 평가: T-17-live는 T-16 라벨 뒤 **[사람]**. T-20은 T-17-live·T-18 뒤(T-17·T-19 완료).
 
@@ -151,7 +152,7 @@ flowchart LR
 | `engine/jobs/` | `queue.py` `push.py` `baseline.py` `events.py` `feedback.py` |
 | `engine/config/models.yaml` | 공급자·전문가·경로 시간 제한·집계 가중치·사용자별 한도(`limits`). 모델 이름은 여기에만 |
 | `engine/prompts/`, `engine/content/` | 프롬프트(바꾸면 평가), 거울 카드 `mirror_cards.yaml` |
-| `apps/mobile/app/` | expo-router 화면: `consent` `login` `profile` `rooms/new` `(tabs)/{index,mirror,report,settings}` |
+| `apps/mobile/app/` | expo-router 화면: `consent` `login` `profile` `rooms/new` `room/[id]` `(tabs)/{index,mirror,report,settings}` |
 | `apps/mobile/lib/`, `components/` | `engine.ts`(+`engineMock.ts`) `session.tsx` `auth.ts` `gate.ts` `consent.ts` `report.ts` `invite.ts` `theme.ts` `types/`(생성 타입), 공용 `Button` `TextField` `ChipRow` `AppText` |
 | `supabase/migrations/` | `…01_chat` `…02_tone` `…03_platform`(Storage·Realtime) `20261028000001_engine` `…02_sender_pattern_activations` `20261030000001_mirror_attempt_once` |
 | `eval/` | `run_eval.py` `contrast_set.jsonl` `baseline.json` |
@@ -249,6 +250,7 @@ flowchart LR
 - (T-28a) Expo가 묶음 전체를 400으로 거절하면 그 방 묶음이 빠진다 — 토큰 검사. 사용자별 push_tokens 개수 제한. 로그아웃 때 토큰 해제. EAS projectId, Android 알림 아이콘.
 - (T-29/T-30) `/health`가 모델 목록을 인증 없이 보여 준다 — 배포 때 다시 본다. 요청 크기 제한은 Cloudflare에서. 템플릿 아이콘·스플래시 교체. 인증 설정이 비면 401이 아니라 503 `auth_unavailable`.
 - (털어놓기) 사용자별 "처리 중인 털어놓기 작업 수" 한도도 고려(작업 하나가 최대 60초). 주간 한도 확인과 증가가 원자적이지 않아 작업자 2개면 최대 6까지. 중복 방지 키가 메모리뿐이라 재시작하면 잊는다 — 파일럿 규모에서 받아들임.
+- (T-09a) 대화방: "다시 불러오기" 줄이 사라질 때 포커스가 body로 떨어짐(웹 키보드), 언마운트 뒤 읽음 재시도 타이머가 남을 수 있음, 목록 Realtime INSERT마다 전체 다시 읽기(디바운스 없음), 다른 기기의 읽음 갱신(room_members UPDATE) 미반영.
 - (T-09 이후) 앱 접근성·글자 크기 한 번에: 리포트 막대 고정 높이, TextField 오류가 두세 번 읽힘, 누름 피드백 150~250ms(공용 Pressable), Button 높이 50 vs MASTER 48.
 - (엔진) 라틴 이름은 단어 경계 없이 가려짐(Al → also). 기준선은 평생 평균(느리게 적응하면 EWMA로). `repo.message`는 id로만 읽음.
 - (하네스) 평가 게이트에 빈틈(jq 없음, precision 없는 baseline 통과), `check`가 lockfile을 다시 쓸 수 있음.
