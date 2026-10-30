@@ -12,7 +12,7 @@ import { MessageActions } from '../../../components/MessageActions';
 import { Button } from '../../../components/Button';
 import { IconButton } from '../../../components/IconButton';
 import { pickAndSendImage } from '../../../lib/images';
-import { activeMentionQuery, extractMentions, insertMention } from '../../../lib/mentions';
+import { activeMentionQuery, extractMentions, insertMention, mentionCandidates } from '../../../lib/mentions';
 import { dbErrorMessage, isUnreachable, NETWORK_MESSAGE } from '../../../lib/dbErrors';
 import { REACTION_LABELS, shouldMarkRead, summarizeReactions, unreadCount, type Emoji, type Msg } from '../../../lib/messages';
 import { fetchRoom, markRead, roomTitle, type Member } from '../../../lib/rooms';
@@ -126,10 +126,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
   const [cursor, setCursor] = useState(0);
   const [selection, setSelection] = useState<{ start: number; end: number } | undefined>(undefined); // 멘션을 넣은 직후 커서 위치
   const query = group ? activeMentionQuery(draft, cursor) : null;
-  const candidates = useMemo(
-    () => (query === null ? null : (info?.members ?? []).filter((x) => x.user_id !== me && x.name.startsWith(query)).slice(0, 8)),
-    [query, info, me],
-  );
+  const candidates = useMemo(() => (query === null ? null : mentionCandidates(info?.members ?? [], me, query)), [query, info, me]);
   const changeDraft = useCallback((t: string) => {
     setDraft(t);
     setSelection(undefined);
@@ -231,13 +228,31 @@ function RoomBody({ id, me }: { id: string; me: string }) {
     }
   }, [draft, send, replyTarget, typing, group, info, me]);
 
+  const photoBusy = useRef(false);
+  const [photoSending, setPhotoSending] = useState(false);
+  const errCount = useRef(0);
+  const fail = useCallback((t: string) => setSendError(t + (errCount.current++ % 2 ? '\u200b' : '')), []); // 같은 문구가 연달아도 다시 읽히도록
   const pickImage = useCallback(async () => {
+    if (photoBusy.current) return; // 보내는 중 두 번 눌러도 한 번만
+    photoBusy.current = true;
+    setPhotoSending(true);
     setSendError(null);
-    const r = await pickAndSendImage(id, send);
-    if (unmounted.current) return;
-    if (r === 'unsupported') setSendError('이 형식의 사진은 보낼 수 없어요');
-    else if (r === 'failed') setSendError('사진을 보내지 못했어요');
-  }, [id, send]);
+    try {
+      const r = await pickAndSendImage(id, send, () => say('사진 보내는 중'));
+      if (unmounted.current) return;
+      if (r === 'sent') say('사진 보냄');
+      else if (r === 'unsupported') fail('이 형식의 사진은 보낼 수 없어요');
+      else if (r === 'toolarge') fail('사진이 너무 커요 (5MB 이하)');
+      else if (r === 'failed') fail('사진을 보내지 못했어요');
+    } finally {
+      photoBusy.current = false;
+      if (!unmounted.current) {
+        setPhotoSending(false);
+        // 웹: 파일 선택창이 닫히면(취소 포함) 포커스가 body로 떨어지지 않게 입력창으로
+        if (Platform.OS === 'web') inputRef.current?.focus();
+      }
+    }
+  }, [id, send, say, fail]);
 
   const data = useMemo(() => [...messages].reverse(), [messages]); // inverted: 새 것부터
 
@@ -400,6 +415,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
           value={draft}
           onChangeText={changeDraft}
           onPickImage={() => void pickImage()}
+          photoBusy={photoSending}
           typingLabel={typing.label}
           mentionCandidates={candidates}
           onSelectionChange={(c) => {

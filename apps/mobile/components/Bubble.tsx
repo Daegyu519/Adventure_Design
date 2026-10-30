@@ -44,7 +44,7 @@ export function Bubble({ message, mine, senderName, speaker, mentionNames = [], 
   const { colors, radius, space } = useTheme();
   const web = Platform.OS === 'web';
   const tabIndex = web ? (active ? 0 : -1) : undefined;
-  const url = useSignedUrl(message.image_path);
+  const { url, failed: photoFailed, retry: retryPhoto } = useSignedUrl(message.image_path);
   const body = message.image_path ? (message.text ? `사진, ${message.text}` : '사진') : message.text;
   const alt = mine ? '내가 보낸 사진' : `${speaker}님이 보낸 사진`;
   const parts = message.text && mentionNames.length ? splitMentions(message.text, mentionNames) : null;
@@ -123,7 +123,16 @@ export function Bubble({ message, mine, senderName, speaker, mentionNames = [], 
             url ? (
               <Image source={{ uri: url }} accessibilityLabel={alt} alt={alt} resizeMode="cover" style={{ width: PHOTO.w, height: PHOTO.h, maxWidth: '100%', borderRadius: radius.bubble - 4, marginBottom: message.text ? space[1] : 0 }} />
             ) : (
-              <View accessibilityLabel="사진 불러오는 중" style={{ width: PHOTO.w, height: PHOTO.h, maxWidth: '100%', borderRadius: radius.bubble - 4, backgroundColor: colors.surface, marginBottom: message.text ? space[1] : 0 }} />
+              <View
+                accessibilityLabel={photoFailed ? '사진을 불러오지 못했어요' : '사진 불러오는 중'}
+                style={{ width: PHOTO.w, height: PHOTO.h, maxWidth: '100%', borderRadius: radius.bubble - 4, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', marginBottom: message.text ? space[1] : 0 }}
+              >
+                {photoFailed ? (
+                  <AppText variant="small" color="textMuted">
+                    사진을 불러오지 못했어요
+                  </AppText>
+                ) : null}
+              </View>
             )
           ) : null}
           {message.text ? (
@@ -152,6 +161,19 @@ export function Bubble({ message, mine, senderName, speaker, mentionNames = [], 
         </View>
         <IconButton icon={Ellipsis} label="메시지 메뉴" onPress={onMore} color="textMuted" tabIndex={tabIndex} />
       </View>
+      {photoFailed && (
+        <Pressable
+          onPress={retryPhoto}
+          tabIndex={tabIndex}
+          accessibilityRole="button"
+          accessibilityLabel="사진 다시 불러오기"
+          style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: space[1], ...focusRing(colors.primary) }}
+        >
+          <AppText variant="small" color="primary" weight="600" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+            다시 불러오기
+          </AppText>
+        </Pressable>
+      )}
       {reactions.length > 0 && (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space[0], marginTop: space[0] }}>
           {reactions.map((r) => (

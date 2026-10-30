@@ -29,7 +29,15 @@ export function insertMention(text: string, cursor: number, name: string): { tex
   return { text: head + text.slice(cursor), cursor: head.length };
 }
 
-export function extractMentions(text: string, members: M[], me: string): string[] {
+// 이름이 겹치는 멤버는 누구를 뜻하는지 알 수 없으므로 언급하지 않는다(후보에도 안 넣는다).
+const unique = (members: M[]) => members.filter((m) => members.filter((x) => x.name === m.name).length === 1);
+
+export function mentionCandidates(members: M[], me: string, query: string): M[] {
+  return unique(members).filter((m) => m.user_id !== me && m.name.startsWith(query)).slice(0, 8);
+}
+
+export function extractMentions(text: string, all: M[], me: string): string[] {
+  const members = unique(all);
   const ids = new Set<string>();
   for (let i = 0; i < text.length; i++) {
     const n = matchAt(text, i, members.map((m) => m.name));

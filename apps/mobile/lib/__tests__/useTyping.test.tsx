@@ -28,8 +28,12 @@ jest.mock('../supabase', () => ({
 }));
 
 let api: ReturnType<typeof useTyping>;
+let apis: unknown[] = [];
+let room = 'room1';
+const NAMES = { u2: '지은' };
 function Probe() {
-  api = useTyping('room1', 'me', { u2: '지은' });
+  api = useTyping(room, 'me', NAMES);
+  apis.push(api);
   return null;
 }
 const mount = async () => {
@@ -39,6 +43,8 @@ const mount = async () => {
   return root;
 };
 beforeEach(() => {
+  room = 'room1';
+  apis = [];
   jest.useFakeTimers();
   jest.setSystemTime(1_000_000);
   mockTracked = [];
@@ -111,4 +117,20 @@ test('unmount removes the channel', async () => {
   const root = await mount();
   await act(async () => root.render(<></>));
   expect(mockRemove).toHaveBeenCalledTimes(1);
+});
+
+test('returned object is stable across re-renders with the same inputs', async () => {
+  const root = await mount();
+  await act(async () => root.render(<Probe />));
+  expect(apis.at(-1)).toBe(apis.at(-2));
+});
+
+test('presence state is cleared when the room changes', async () => {
+  const root = await mount();
+  mockState = { u2: [{ user_id: 'u2', typing: true }] };
+  await act(async () => mockOnSync());
+  expect(api.label).toBe('지은님이 입력 중');
+  room = 'room2';
+  await act(async () => root.render(<Probe />));
+  expect(api.label).toBeNull();
 });

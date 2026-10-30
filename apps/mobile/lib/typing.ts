@@ -9,5 +9,5 @@ export function typingLabel(state: PresenceState, me: string, names: Record<stri
     .filter(([key, list]) => key !== me && Object.prototype.hasOwnProperty.call(names, key) && list.some((p) => p.typing && p.user_id === key))
     .map(([key]) => key);
   if (ids.length === 0) return null;
-  return ids.length === 1 ? `${names[ids[0]]}님이 입력 중` : `${ids.length}명이 입력 중`;
+  return ids.length <= 3 ? `${ids.map((i) => names[i]).join(', ')}님이 입력 중` : `${ids.length}명이 입력 중`;
 }

@@ -1,4 +1,4 @@
-import { activeMentionQuery, extractMentions, insertMention, splitMentions } from '../mentions';
+import { activeMentionQuery, extractMentions, mentionCandidates, insertMention, splitMentions } from '../mentions';
 
 const ME = 'me', J = 'j', J2 = 'j2';
 test('activeMentionQuery: after @ at word start', () => expect(activeMentionQuery('회의 @지', 5)).toBe('지'));
@@ -27,4 +27,13 @@ test('longest name wins when one name is a prefix of another at a word boundary'
   const m = [{ user_id: J, name: '김' }, { user_id: J2, name: '김 지은' }];
   expect(extractMentions('@김 지은 안녕', m, ME)).toEqual([J2]);
   expect(splitMentions('@김 지은 안녕', ['김', '김 지은'])[0]).toEqual({ text: '@김 지은', mention: true });
+});
+test('duplicate member names are ambiguous: not mentioned, not offered', () => {
+  const m = [{ user_id: J, name: '지은' }, { user_id: J2, name: '지은' }];
+  expect(extractMentions('@지은 안녕', m, ME)).toEqual([]);
+  expect(mentionCandidates(m, ME, '지')).toEqual([]);
+});
+test('mentionCandidates: prefix, not me, unique names, max 8', () => {
+  const m = [{ user_id: ME, name: '지나' }, { user_id: J, name: '지은' }, { user_id: J2, name: '민수' }];
+  expect(mentionCandidates(m, ME, '지')).toEqual([{ user_id: J, name: '지은' }]);
 });

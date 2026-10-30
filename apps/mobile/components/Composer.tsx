@@ -1,14 +1,14 @@
 import ImagePlus from 'lucide-react-native/icons/image-plus';
 import Send from 'lucide-react-native/icons/send';
 import X from 'lucide-react-native/icons/x';
-import { useEffect, useRef, type ComponentRef, type RefObject } from 'react';
-import { Platform, TextInput, View } from 'react-native';
+import { useEffect, useRef, useState, type ComponentRef, type RefObject } from 'react';
+import { AccessibilityInfo, Platform, TextInput, View } from 'react-native';
 
 import { shouldSubmitOnKey } from '../lib/composer';
 import { focusRing, useTheme } from '../lib/theme';
 import { AppText } from './AppText';
 import { IconButton } from './IconButton';
-import { MentionPicker } from './MentionPicker';
+import { MAX_SHOWN, MENTION_LIST_ID, MentionPicker, mentionOptionId } from './MentionPicker';
 import type { Member } from '../lib/rooms';
 
 // MASTER 4·5장: 입력창 모서리 22, 최소 높이 44. 웹은 Enter로 보내고 Shift+Enter는 줄바꿈, 한글 조합 중 Enter는 보내지 않는다.
@@ -29,8 +29,9 @@ type Props = {
   onSelectionChange?(cursor: number): void;
   selection?: { start: number; end: number }; // 멘션을 넣은 뒤 커서를 옮길 때만
   onBlur?(): void;
+  photoBusy?: boolean; // 사진을 올리는 중: 사진 버튼이 aria-busy(진짜 disabled 아님)
 };
-export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, inputRef, onPickImage, typingLabel, mentionCandidates, onSelectMention, onSelectionChange, selection, onBlur }: Props) {
+export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, inputRef, onPickImage, typingLabel, mentionCandidates, onSelectMention, onSelectionChange, selection, onBlur, photoBusy }: Props) {
   const { colors, radius, space, font } = useTheme();
   const own = useRef<InputHandle>(null);
   const ref = inputRef ?? own;
@@ -42,7 +43,24 @@ export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, 
       return () => clearTimeout(id);
     }
   }, [replyId, ref]);
-  const picking = (mentionCandidates?.length ?? 0) > 0;
+  const [active, setActive] = useState(0);
+  const [dismissed, setDismissed] = useState<string | null>(null); // Esc로 닫은 시점의 글. 글이 바뀌면 다시 열린다
+  const shown = (mentionCandidates ?? []).slice(0, MAX_SHOWN);
+  const picking = shown.length > 0 && dismissed !== value && !!onSelectMention;
+  const safeActive = Math.min(active, Math.max(shown.length - 1, 0));
+  const count = picking ? shown.length : 0;
+  // 열릴 때와 후보 수가 바뀔 때만 한 번 알린다(글자마다 읽지 않는다).
+  const mentionSay = count ? `멘션 후보 ${count}명, 위아래 화살표로 고르세요` : '';
+  useEffect(() => setActive(0), [count]);
+  useEffect(() => setDismissed((d) => (d !== null && d !== value ? null : d)), [value]); // 글이 바뀌면 Esc로 닫은 것을 푼다
+  useEffect(() => {
+    // iOS VoiceOver는 accessibilityLiveRegion을 읽지 않는다. 새 문구가 생길 때만 직접 읽힌다.
+    if (Platform.OS === 'ios' && typingLabel) AccessibilityInfo.announceForAccessibility(typingLabel);
+  }, [typingLabel]);
+  const choose = (name: string) => {
+    onSelectMention?.(name);
+    ref.current?.focus(); // 목록이 사라져도 포커스가 body로 떨어지지 않게
+  };
   return (
     <View style={{ borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.background }}>
       <View accessibilityLiveRegion="polite" aria-live="polite">
@@ -52,15 +70,10 @@ export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, 
           </AppText>
         ) : null}
       </View>
-      {picking && onSelectMention ? (
-        <MentionPicker
-          candidates={mentionCandidates!}
-          onSelect={(n) => {
-            onSelectMention(n);
-            ref.current?.focus(); // 목록이 사라져도 포커스가 body로 떨어지지 않게
-          }}
-        />
-      ) : null}
+      <View accessibilityLiveRegion="polite" aria-live="polite" data-testid="mention-say" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', opacity: 0 }}>
+        <AppText>{mentionSay}</AppText>
+      </View>
+      {picking ? <MentionPicker candidates={shown} active={safeActive} onSelect={choose} /> : null}
       {replyTo && (
         <View style={{ flexDirection: 'row', alignItems: 'center', paddingLeft: space[3], paddingRight: space[1] }}>
           <AppText variant="small" color="textMuted" numberOfLines={1} style={{ flex: 1 }}>
@@ -77,7 +90,7 @@ export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, 
         </View>
       )}
       <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: space[1], paddingHorizontal: space[3], paddingVertical: space[1] }}>
-        {onPickImage ? <IconButton icon={ImagePlus} label="사진 보내기" onPress={onPickImage} /> : null}
+        {onPickImage ? <IconButton icon={ImagePlus} label="사진 보내기" onPress={onPickImage} busy={photoBusy} disabled={photoBusy} /> : null}
         <TextInput
           ref={ref}
           accessibilityLabel={replyTo ? `메시지 입력, ${replyTo.name}에게 답장 중` : '메시지 입력'}
@@ -91,9 +104,37 @@ export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, 
           placeholder="메시지"
           placeholderTextColor={colors.textMuted}
           selectionColor={colors.primary}
+          {...(Platform.OS === 'web'
+            ? {
+                role: 'combobox',
+                'aria-expanded': picking,
+                'aria-controls': MENTION_LIST_ID,
+                'aria-autocomplete': 'list',
+                'aria-activedescendant': picking ? mentionOptionId(safeActive) : undefined,
+              }
+            : {})}
           onKeyPress={
             Platform.OS === 'web'
               ? (e) => {
+                  const k = e.nativeEvent as Parameters<typeof shouldSubmitOnKey>[0];
+                  // 목록이 열려 있으면 보내기보다 먼저 목록 키로 쓴다(Enter가 "@민"을 보내면 안 된다). 한글 조합 중 키는 건드리지 않는다.
+                  if (picking && !k.isComposing && k.keyCode !== 229) {
+                    const move = (d: number) => {
+                      e.preventDefault();
+                      setActive((safeActive + d + shown.length) % shown.length);
+                    };
+                    if (k.key === 'ArrowDown') return move(1);
+                    if (k.key === 'ArrowUp') return move(-1);
+                    if (k.key === 'Enter' || (k.key === 'Tab' && !k.shiftKey)) {
+                      e.preventDefault();
+                      return choose(shown[safeActive].name);
+                    }
+                    if (k.key === 'Escape') {
+                      e.preventDefault();
+                      return setDismissed(value);
+                    }
+                  }
+                  if (picking && k.isComposing && k.key === 'Enter') return;
                   if (shouldSubmitOnKey(e.nativeEvent as Parameters<typeof shouldSubmitOnKey>[0])) {
                     e.preventDefault();
                     onSend();

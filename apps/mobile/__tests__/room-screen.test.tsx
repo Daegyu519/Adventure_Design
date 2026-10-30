@@ -47,7 +47,8 @@ jest.mock('../lib/useRoomMessages', () => ({
 const mockTyping = { label: null as string | null, onDraftChange: jest.fn(), stop: jest.fn() };
 jest.mock('../lib/useTyping', () => ({ useTyping: () => mockTyping }));
 const mockPickImage = jest.fn();
-jest.mock('../lib/images', () => ({ pickAndSendImage: (...a: unknown[]) => mockPickImage(...a), useSignedUrl: (p: string | null) => (p && !p.includes('pending') ? `https://img/${p}` : null) }));
+jest.mock('../lib/images', () => ({ pickAndSendImage: (...a: unknown[]) => mockPickImage(...a), useSignedUrl: (p: string | null) => ({ url: p && !p.includes('pending') && !p.includes('broken') ? `https://img/${p}` : null, failed: !!p && p.includes('broken'), retry: mockRetryPhoto }) }));
+const mockRetryPhoto = jest.fn();
 
 let mockReactionRows: { message_id: number; user_id: string; emoji: string; created_at: string }[] = [];
 const mockToggle = jest.fn();
@@ -75,6 +76,7 @@ beforeEach(() => {
   mockFocused = true;
   mockSend.mockReset();
   mockPickImage.mockReset();
+  mockRetryPhoto.mockReset();
   mockTyping.label = null;
   mockTyping.onDraftChange.mockReset();
   mockTyping.stop.mockReset();
@@ -584,6 +586,7 @@ test('답장 중이면 입력창 이름에 대상이 들어가고, 취소하면 
   expect(live).toContain('답장 취소됨');
 });
 
+const press2 = (root: Q, label: string) => act(async () => (root.container.queryAll((n) => (n as unknown as N).props.accessibilityLabel === label)[0] as unknown as N).props.onClick({ stopPropagation() {}, nativeEvent: {} }));
 describe('T-09c 입력 중 · 사진 · 멘션', () => {
   const sel = (n: number) => ({ nativeEvent: { selection: { start: n, end: n } } });
   const alerts = (root: Q) => root.container.queryAll((n) => (n as unknown as N).props.accessibilityRole === 'alert');
@@ -614,7 +617,7 @@ describe('T-09c 입력 중 · 사진 · 멘션', () => {
     const { press, root, texts } = await setup();
     mockPickImage.mockResolvedValue('cancelled');
     await press('사진 보내기');
-    expect(mockPickImage).toHaveBeenCalledWith('r1', expect.any(Function));
+    expect(mockPickImage).toHaveBeenCalledWith('r1', expect.any(Function), expect.any(Function));
     expect(alerts(root)).toHaveLength(0);
     mockPickImage.mockResolvedValue('unsupported');
     await press('사진 보내기');
@@ -651,6 +654,55 @@ describe('T-09c 입력 중 · 사진 · 멘션', () => {
     const { root } = await setup();
     expect(root.container.queryAll((n) => n.props.source?.uri)).toHaveLength(0);
     expect(root.container.queryAll((n) => n.props.accessibilityLabel === '사진 불러오는 중')).toHaveLength(1);
+  });
+
+  test('사진 말풍선: 불러오기 실패는 문구와 다시 불러오기 버튼(탭 순서 안), 누르면 retry', async () => {
+    mockMessages = [{ ...m(1, 'u2', ''), image_path: 'r1/broken.jpg' }];
+    const { root, texts } = await setup();
+    expect(texts()).toContain('사진을 불러오지 못했어요');
+    await press2(root, '사진 다시 불러오기');
+    expect(mockRetryPhoto).toHaveBeenCalledTimes(1);
+  });
+
+  test('사진 보내기: 보내는 중에는 두 번째 누름을 무시하고 aria-busy, 알림은 "보내는 중" → "보냄"', async () => {
+    let done: (v: string) => void = () => {};
+    mockPickImage.mockImplementation((_r: string, _s: unknown, onStart: () => void) => new Promise((r) => ((done = r), onStart())));
+    const { press, root, texts } = await setup();
+    await press('사진 보내기');
+    await press('사진 보내기');
+    expect(mockPickImage).toHaveBeenCalledTimes(1);
+    const btn = root.container.queryAll((n) => n.props.accessibilityRole === 'button' && n.props.accessibilityLabel === '사진 보내기')[0];
+    expect(btn.props.accessibilityState?.busy).toBe(true);
+    expect(texts()).toContain('사진 보내는 중');
+    await act(async () => done('sent'));
+    expect(texts()).toContain('사진 보냄');
+    expect(root.container.queryAll((n) => n.props.accessibilityLabel === '사진 보내기')[0].props.accessibilityState?.busy).toBeFalsy();
+  });
+
+  test('사진이 너무 크면 크기 문구', async () => {
+    mockPickImage.mockResolvedValue('toolarge');
+    const { press, texts } = await setup();
+    await press('사진 보내기');
+    expect(texts()).toContain('사진이 너무 커요 (5MB 이하)');
+  });
+
+  test('같은 실패가 연달아도 다시 읽히도록 문구가 달라진다', async () => {
+    mockPickImage.mockResolvedValue('failed');
+    const { press, root } = await setup();
+    const alertText = () => textOf(root.container.queryAll((n) => n.props.accessibilityRole === 'alert')[0] as unknown as TestNode);
+    await press('사진 보내기');
+    const a = alertText();
+    await press('사진 보내기');
+    expect(alertText()).not.toBe(a);
+    expect(alertText().replace('\u200b', '')).toBe(a.replace('\u200b', ''));
+  });
+
+  test('이름이 같은 멤버는 후보에 없다', async () => {
+    mockFetchRoom.mockImplementation(() => okRoom().then((r) => ({ ...r, members: [...r.members, { user_id: 'u3', name: '민수', last_read_at: null, muted: false }] })));
+    const { type, input, root } = await setup();
+    await type('@민');
+    await act(async () => input().props.onSelectionChange(sel(2)));
+    expect(buttons(root, '민수 언급')).toHaveLength(0);
   });
 
   test('멘션(그룹): @와 이름 앞글자를 치면 후보가 뜨고, 고르면 이름이 들어가며 입력창으로 포커스', async () => {

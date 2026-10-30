@@ -26,6 +26,7 @@ export function useTyping(roomId: string, me: string, names: Record<string, stri
       ready.current = false;
       chRef.current = null;
       lastSent.current = null;
+      setState({}); // 방이 바뀌면 이전 방의 입력 중을 남기지 않는다
       if (idle.current) clearTimeout(idle.current);
       void c.removeChannel(ch);
     };
@@ -59,5 +60,5 @@ export function useTyping(roomId: string, me: string, names: Record<string, stri
   );
 
   const label = useMemo(() => typingLabel(state, me, names), [state, me, names]);
-  return { label, onDraftChange, stop };
+  return useMemo(() => ({ label, onDraftChange, stop }), [label, onDraftChange, stop]);
 }
