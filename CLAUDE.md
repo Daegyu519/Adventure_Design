@@ -11,6 +11,7 @@
 - 아키텍처와 다르게 해야 할 이유가 생기면 코드를 바꾸기 전에 먼저 말한다. 합의되면 `ARCHITECTURE.md`를 같은 변경에서 고친다.
 - 끝나면 `docs/tasks.md`의 상태를 `완료`로 바꾸고, 완료 기준을 어떻게 확인했는지 완료 기준 칸 끝에 `확인:`으로 한 줄 남긴다.
 - 한 작업 = 한 브랜치(worktree) = 한 번의 `scripts/land`. 사용법은 `docs/COLLAB.md`. 브랜치 이름은 `t07-login`처럼(`scripts/claim`이 붙인다).
+- 여러 에이전트와 같이 작업할 때의 흐름과 현재 상태는 `AGENTS.md`.
 - `prototype/tone-harness`는 참고용이다. 고치지 말고, 필요한 코드는 `engine/`으로 옮겨서 쓴다(옮길 곳은 ARCHITECTURE 9장).
 
 ## 어디에 무엇을

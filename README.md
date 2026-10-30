@@ -2,7 +2,7 @@
 
 CNU 어드벤처디자인 수업 저장소다. 이 저장소의 프로젝트는 아래 tone-chat이다.
 
-처음 보는 사람이나 AI 에이전트는 [`AGENTS.md`](AGENTS.md) → [`docs/HANDOFF.md`](docs/HANDOFF.md) 순서로 읽는다.
+처음 보는 사람이나 AI 에이전트는 [`AGENTS.md`](AGENTS.md)부터 읽는다(흐름·현재 상태·결정·구조도).
 
 ## tone-chat
 
