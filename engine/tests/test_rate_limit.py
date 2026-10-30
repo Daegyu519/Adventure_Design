@@ -118,3 +118,16 @@ def test_limits_come_from_models_yaml(client, login, clock, tmp_path, monkeypatc
         assert [hit(client, HINT).status_code != 429 for _ in range(3)] == [True, True, False]
     finally:
         load_config.cache_clear()
+
+
+def test_cors_429_exposes_retry_after(client, login, clock):
+    """웹 앱은 다른 출처라 expose_headers가 없으면 Retry-After를 읽지 못한다(T-15)."""
+    from app.settings import Settings
+
+    origin = Settings.from_env().cors_origins[0]
+    login(uuid.uuid4())
+    for _ in range(LIMITS["hint"]):
+        client.post(HINT[0], json=HINT[1], headers={"Origin": origin})
+    r = client.post(HINT[0], json=HINT[1], headers={"Origin": origin})
+    assert r.status_code == 429
+    assert "retry-after" in r.headers["access-control-expose-headers"].lower()

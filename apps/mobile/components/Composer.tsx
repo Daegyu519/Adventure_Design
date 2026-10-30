@@ -6,7 +6,9 @@ import { Platform, TextInput, View } from 'react-native';
 
 import { shouldSubmitOnKey } from '../lib/composer';
 import { focusRing, useTheme } from '../lib/theme';
+import type { Hint } from '../lib/hintScheduler';
 import { AppText } from './AppText';
+import { HINT_TEXT_ID, HintBar } from './HintBar';
 import { IconButton } from './IconButton';
 import { MAX_SHOWN, MENTION_LIST_ID, MentionPicker, mentionOptionId } from './MentionPicker';
 import type { Member } from '../lib/rooms';
@@ -30,9 +32,12 @@ type Props = {
   selection?: { start: number; end: number }; // 멘션을 넣은 뒤 커서를 옮길 때만
   onBlur?(): void;
   say?(t: string): void; // 화면의 useAnnounce().say: 입력 중·멘션 후보 수 안내
+  hint?: Hint | null; // 입력 중 힌트(보낸 사람에게만). 입력창 바로 위, 보내기를 막지 않는다
+  onDismissHint?(): void;
+  onOpenHintDetail?(): void; // T-22가 넘긴다
   photoBusy?: boolean; // 사진을 올리는 중: 사진 버튼이 aria-busy(진짜 disabled 아님)
 };
-export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, inputRef, onPickImage, typingLabel, mentionCandidates, onSelectMention, onSelectionChange, selection, onBlur, photoBusy, say }: Props) {
+export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, inputRef, onPickImage, typingLabel, mentionCandidates, onSelectMention, onSelectionChange, selection, onBlur, photoBusy, say, hint, onDismissHint, onOpenHintDetail }: Props) {
   const { colors, radius, space, font } = useTheme();
   const own = useRef<InputHandle>(null);
   const ref = inputRef ?? own;
@@ -66,6 +71,24 @@ export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, 
   useEffect(() => {
     if (mentionSay) say?.(mentionSay);
   }, [mentionSay, say]);
+  // 힌트는 나타나거나 제목이 바뀔 때 한 번만 읽는다(디바운스마다 읽지 않는다). 멘션 목록이 열려 있으면 "멘션 후보 N명"을 덮지 않도록 닫힌 뒤에 읽는다.
+  const hintTitle = hint?.title ?? null;
+  const said = useRef<string | null>(null);
+  useEffect(() => {
+    if (hintTitle === null) said.current = null;
+    else if (!picking && said.current !== hintTitle) {
+      said.current = hintTitle;
+      say?.(`힌트: ${hintTitle}`);
+    }
+  }, [hintTitle, picking, say]);
+  // 포커스가 힌트 막대(닫기·살펴보기) 안에 있다가 막대가 사라지면 입력창으로(body로 떨어지지 않게).
+  const barFocus = useRef(false);
+  useEffect(() => {
+    if (hintTitle === null && barFocus.current) {
+      barFocus.current = false;
+      ref.current?.focus();
+    }
+  }, [hintTitle, ref]);
   const choose = (name: string) => {
     onSelectMention?.(name);
     ref.current?.focus(); // 목록이 사라져도 포커스가 body로 떨어지지 않게
@@ -76,6 +99,17 @@ export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, 
         <AppText variant="small" color="textMuted" style={{ paddingHorizontal: space[3], paddingTop: space[0] }}>
           {typingLabel}
         </AppText>
+      ) : null}
+      {hint ? (
+        <HintBar
+          hint={hint}
+          onDismiss={() => {
+            onDismissHint?.();
+            ref.current?.focus();
+          }}
+          onOpenDetail={onOpenHintDetail}
+          onFocusInside={(v) => (barFocus.current = v)}
+        />
       ) : null}
       {picking ? <MentionPicker candidates={shown} active={safeActive} onSelect={choose} /> : null}
       {replyTo && (
@@ -105,6 +139,7 @@ export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, 
           onSelectionChange={(e) => onSelectionChange?.(e.nativeEvent.selection.start)}
           selection={selection}
           onBlur={onBlur}
+          accessibilityHint={hint?.title}
           placeholder="메시지"
           placeholderTextColor={colors.textMuted}
           selectionColor={colors.primary}
@@ -114,6 +149,7 @@ export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, 
                 'aria-expanded': picking,
                 'aria-controls': picking ? MENTION_LIST_ID : undefined,
                 'aria-autocomplete': 'list',
+                'aria-describedby': hint ? HINT_TEXT_ID : undefined,
                 'aria-activedescendant': picking ? mentionOptionId(safeActive) : undefined,
               }
             : {})}

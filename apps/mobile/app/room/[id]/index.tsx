@@ -25,6 +25,7 @@ import { useTyping } from '../../../lib/useTyping';
 import { useReactions } from '../../../lib/useReactions';
 import { useRoomMessages, type SendError } from '../../../lib/useRoomMessages';
 import { useSession } from '../../../lib/session';
+import { useToneHint } from '../../../lib/useToneHint';
 import { supabase } from '../../../lib/supabase';
 import { useTheme } from '../../../lib/theme';
 import type { Tables } from '../../../lib/types/db';
@@ -50,6 +51,7 @@ export default function Room() {
 }
 
 function RoomBody({ id, me }: { id: string; me: string }) {
+  const { profile } = useSession();
   const { colors, space } = useTheme();
   const router = useRouter();
   const focused = useIsFocused();
@@ -128,11 +130,13 @@ function RoomBody({ id, me }: { id: string; me: string }) {
   const [selection, setSelection] = useState<{ start: number; end: number } | undefined>(undefined); // 멘션을 넣은 직후 커서 위치
   const query = group ? activeMentionQuery(draft, cursor) : null;
   const candidates = useMemo(() => (query === null ? null : mentionCandidates(info?.members ?? [], me, query)), [query, info, me]);
+  const { hint: toneHint, input: toneInput, dismiss: toneDismiss, sent: toneSent } = useToneHint(id, replyTarget?.id ?? null, profile?.tone_hint_on !== false);
   const changeDraft = useCallback((t: string) => {
     setDraft(t);
     setSelection(undefined);
     typing.onDraftChange(t);
-  }, [typing]);
+    toneInput(t); // 멘션 고르기도 같은 길로 들어온다
+  }, [typing, toneInput]);
   const title = info ? roomTitle(info.room, info.members, me) : '대화방';
 
   // 읽음: 앞에 보이고 포커스가 있을 때만, 방에서 가장 새 메시지의 서버 시각으로(앞으로만).
@@ -216,6 +220,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
     setSendError(null);
     setDraft(''); // 먼저 비운다. 실패하면 되돌린다.
     typing.stop();
+    toneSent(); // 힌트가 떠 있어도 보내기는 즉시. await 없음
     const mentions = group ? extractMentions(text, info?.members ?? [], me) : [];
     try {
       await send({ text, ...(replyTarget ? { reply_to: replyTarget.id } : {}), ...(mentions.length ? { mentions } : {}) });
@@ -227,7 +232,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
     } finally {
       sending.current = false;
     }
-  }, [draft, send, replyTarget, typing, group, info, me]);
+  }, [draft, send, replyTarget, typing, toneSent, group, info, me]);
 
   const photoBusy = useRef(false);
   const [photoSending, setPhotoSending] = useState(false);
@@ -443,6 +448,8 @@ function RoomBody({ id, me }: { id: string; me: string }) {
           selection={selection}
           onBlur={typing.stop}
           say={say}
+          hint={toneHint}
+          onDismissHint={toneDismiss}
           onSelectMention={(name) => {
             const r = insertMention(draft, cursor, name);
             changeDraft(r.text);

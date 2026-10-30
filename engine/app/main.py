@@ -51,7 +51,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title="tone-chat engine", lifespan=lifespan)
 # 앱 웹 빌드가 Authorization 헤더를 달고 부를 때의 사전 요청(OPTIONS)을 통과시킨다. 쿠키를 쓰지 않아 credentials는 끈다.
 app.add_middleware(CORSMiddleware, allow_origins=list(Settings.from_env().cors_origins),
-                   allow_methods=["GET", "POST", "OPTIONS"], allow_headers=["Authorization", "Content-Type"])
+                   allow_methods=["GET", "POST", "OPTIONS"], allow_headers=["Authorization", "Content-Type"],
+                   expose_headers=["Retry-After"])  # 429의 대기 시간을 웹 앱이 읽게 한다(T-15)
 app.include_router(hooks.router)
 app.include_router(hint.router)
 app.include_router(detail.router)
