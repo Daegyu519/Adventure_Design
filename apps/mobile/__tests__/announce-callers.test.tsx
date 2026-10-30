@@ -15,20 +15,17 @@ afterEach(() => {
   jest.clearAllMocks();
 });
 
-describe('TextField 오류 안내는 useAnnounce(say)로', () => {
+describe('TextField 오류 안내: 보이는 alert 글자가 웹·안드로이드의 안내, say는 iOS만(두 번 읽히지 않게)', () => {
   const render = (error: string | null) => <TextField label="코드" error={error} />;
-  test('android: 오류가 생기면 polite 영역 글이 바뀐다', async () => {
-    jest.replaceProperty(Platform, 'OS', 'android');
+  test.each(['android', 'web'] as const)('%s: 오류 글자는 alert이고 별도 region 글은 없다', async (os) => {
+    jest.replaceProperty(Platform, 'OS', os);
+    const spy = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {});
     const root = createRoot();
     await act(async () => root.render(render(null)));
     await act(async () => root.render(render('없는 코드예요')));
-    expect(region(root)).toContain('없는 코드예요');
-  });
-  test('web: 같은 영역에 들어간다(전에는 웹에서 조용했다)', async () => {
-    jest.replaceProperty(Platform, 'OS', 'web');
-    const root = createRoot();
-    await act(async () => root.render(render('없는 코드예요')));
-    expect(region(root)).toContain('없는 코드예요');
+    expect(region(root)).toBe('');
+    expect(spy).not.toHaveBeenCalled();
+    expect(root.container.queryAll((n) => n.props.accessibilityRole === 'alert' && textOf(n as unknown as TestNode) === '없는 코드예요')).toHaveLength(1);
   });
   test('ios: announceForAccessibility 한 번, 영역 없음', async () => {
     jest.replaceProperty(Platform, 'OS', 'ios');
