@@ -10,4 +10,10 @@ test('one other → name', () => expect(typingLabel(st({ b: true }), A, names)).
 test('two others → count', () => expect(typingLabel(st({ b: true, c: true }), A, names)).toBe('2명이 입력 중'));
 test('same user on two devices counts once', () =>
   expect(typingLabel({ b: [{ user_id: 'b', typing: true }, { user_id: 'b', typing: true }] }, A, names)).toBe('지은님이 입력 중'));
-test('unknown name → 상대', () => expect(typingLabel(st({ z: true }), A, names)).toBe('상대님이 입력 중'));
+test('non-member key is ignored', () => expect(typingLabel(st({ z: true }), A, names)).toBeNull());
+test('payload claiming another user under a different key is ignored', () => {
+  expect(typingLabel({ c: [{ user_id: 'b', typing: true }] }, A, names)).toBeNull();
+  expect(typingLabel({ c: [{ user_id: 'b', typing: true }], b: [{ user_id: 'b', typing: true }] }, A, names)).toBe('지은님이 입력 중');
+});
+test('claiming to be me under my own key slot of someone else does not hide real typers', () =>
+  expect(typingLabel({ b: [{ user_id: 'a', typing: true }] }, A, names)).toBeNull());
