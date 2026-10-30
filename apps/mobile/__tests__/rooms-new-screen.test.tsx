@@ -415,6 +415,18 @@ test('a11y: 코드를 만들면 읽어 주는 쪽에 한 번 알린다(1:1은 �
   expect(announce.mock.calls[0][0]).not.toContain(CODE); // 코드 자체는 알림·로그로 내보내지 않는다
 });
 
+test('a11y: android에서는 같은 안내가 polite 영역 글로 들어간다', async () => {
+  jest.replaceProperty(Platform, 'OS', 'android');
+  mockRpc.mockReturnValue(ok(CODE));
+  const { press, root } = await setup('direct');
+  const live = () => root.container.queryAll((n) => n.props.accessibilityLiveRegion === 'polite');
+  await press('코드 만들기');
+  expect(live()).toHaveLength(1);
+  expect(JSON.stringify(live()[0].children)).toContain('초대 코드를 만들었어요');
+  expect(JSON.stringify(live()[0].children)).not.toContain(CODE);
+  jest.restoreAllMocks();
+});
+
 test('a11y: 코드 입력 오류와 만들기 오류는 alert 역할이다', async () => {
   mockRpc.mockReturnValue(fail('invite_used'));
   const join = await setup('join');

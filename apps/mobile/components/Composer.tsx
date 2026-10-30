@@ -2,7 +2,7 @@ import ImagePlus from 'lucide-react-native/icons/image-plus';
 import Send from 'lucide-react-native/icons/send';
 import X from 'lucide-react-native/icons/x';
 import { useEffect, useRef, useState, type ComponentRef, type RefObject } from 'react';
-import { AccessibilityInfo, Platform, TextInput, View } from 'react-native';
+import { Platform, TextInput, View } from 'react-native';
 
 import { shouldSubmitOnKey } from '../lib/composer';
 import { focusRing, useTheme } from '../lib/theme';
@@ -29,9 +29,10 @@ type Props = {
   onSelectionChange?(cursor: number): void;
   selection?: { start: number; end: number }; // 멘션을 넣은 뒤 커서를 옮길 때만
   onBlur?(): void;
+  say?(t: string): void; // 화면의 useAnnounce().say: 입력 중·멘션 후보 수 안내
   photoBusy?: boolean; // 사진을 올리는 중: 사진 버튼이 aria-busy(진짜 disabled 아님)
 };
-export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, inputRef, onPickImage, typingLabel, mentionCandidates, onSelectMention, onSelectionChange, selection, onBlur, photoBusy }: Props) {
+export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, inputRef, onPickImage, typingLabel, mentionCandidates, onSelectMention, onSelectionChange, selection, onBlur, photoBusy, say }: Props) {
   const { colors, radius, space, font } = useTheme();
   const own = useRef<InputHandle>(null);
   const ref = inputRef ?? own;
@@ -58,26 +59,24 @@ export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, 
   }
   // 열릴 때와 후보 수가 바뀔 때만 한 번 알린다(글자마다 읽지 않는다).
   const mentionSay = count ? `멘션 후보 ${count}명, 위아래 화살표로 고르세요` : '';
+  // 안내는 한 줄로만(say): 새 입력 중 문구가 생길 때, 후보 목록이 열릴 때·후보 수가 바뀔 때. 글자마다 읽지 않는다.
   useEffect(() => {
-    // iOS VoiceOver는 accessibilityLiveRegion을 읽지 않는다. 새 문구가 생길 때만 직접 읽힌다.
-    if (Platform.OS === 'ios' && typingLabel) AccessibilityInfo.announceForAccessibility(typingLabel);
-  }, [typingLabel]);
+    if (typingLabel) say?.(typingLabel);
+  }, [typingLabel, say]);
+  useEffect(() => {
+    if (mentionSay) say?.(mentionSay);
+  }, [mentionSay, say]);
   const choose = (name: string) => {
     onSelectMention?.(name);
     ref.current?.focus(); // 목록이 사라져도 포커스가 body로 떨어지지 않게
   };
   return (
     <View style={{ borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.background }}>
-      <View accessibilityLiveRegion="polite" aria-live="polite">
-        {typingLabel ? (
-          <AppText variant="small" color="textMuted" style={{ paddingHorizontal: space[3], paddingTop: space[0] }}>
-            {typingLabel}
-          </AppText>
-        ) : null}
-      </View>
-      <View accessibilityLiveRegion="polite" aria-live="polite" data-testid="mention-say" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', opacity: 0 }}>
-        <AppText>{mentionSay}</AppText>
-      </View>
+      {typingLabel ? (
+        <AppText variant="small" color="textMuted" style={{ paddingHorizontal: space[3], paddingTop: space[0] }}>
+          {typingLabel}
+        </AppText>
+      ) : null}
       {picking ? <MentionPicker candidates={shown} active={safeActive} onSelect={choose} /> : null}
       {replyTo && (
         <View style={{ flexDirection: 'row', alignItems: 'center', paddingLeft: space[3], paddingRight: space[1] }}>
@@ -113,7 +112,7 @@ export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, 
             ? {
                 role: 'combobox',
                 'aria-expanded': picking,
-                'aria-controls': MENTION_LIST_ID,
+                'aria-controls': picking ? MENTION_LIST_ID : undefined,
                 'aria-autocomplete': 'list',
                 'aria-activedescendant': picking ? mentionOptionId(safeActive) : undefined,
               }

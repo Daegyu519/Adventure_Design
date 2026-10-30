@@ -13,6 +13,7 @@ import { Button } from '../../../components/Button';
 import { IconButton } from '../../../components/IconButton';
 import { pickAndSendImage } from '../../../lib/images';
 import { activeMentionQuery, extractMentions, insertMention, mentionCandidates } from '../../../lib/mentions';
+import { useAnnounce } from '../../../lib/announce';
 import { dbErrorMessage, isUnreachable, NETWORK_MESSAGE } from '../../../lib/dbErrors';
 import { REACTION_LABELS, shouldMarkRead, summarizeReactions, unreadCount, type Emoji, type Msg } from '../../../lib/messages';
 import { fetchRoom, markRead, roomTitle, type Member } from '../../../lib/rooms';
@@ -27,9 +28,6 @@ import type { Tables } from '../../../lib/types/db';
 
 // 방 정보를 못 받았을 때 줄 문구: 코드가 있는 DB 오류는 고정 문구, 그 밖(연결 끊김 등)은 연결 문구. 서버 글은 내지 않는다.
 const loadMessage = (e: unknown) => ((e as { code?: string })?.code ? dbErrorMessage(e as { message: string }, '대화방을 불러오지 못했어요. 다시 시도해 주세요.') : NETWORK_MESSAGE);
-
-// 화면 읽기 프로그램에만 보이는 한 줄(웹·네이티브 공통으로 화면 밖).
-const SR_ONLY = { position: 'absolute', width: 1, height: 1, overflow: 'hidden', opacity: 0 } as const;
 
 // 시작 직후 currentState가 비어(null/unknown) 올 수 있다. 배경·비활성일 때만 "앞이 아님"으로 본다.
 const isActive = (s: string | null | undefined) => s !== 'background' && s !== 'inactive';
@@ -65,10 +63,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
   const [sendError, setSendError] = useState<string | null>(null);
   const [appActive, setAppActive] = useState(isActive(AppState.currentState));
   const lastRead = useRef<string | null>(null);
-  const [announce, setAnnounce] = useState('');
-  const sayCount = useRef(0);
-  // 같은 문구가 연달아 와도 다시 읽히도록 번갈아 보이지 않는 글자를 붙인다.
-  const say = useCallback((t: string) => setAnnounce(t + (sayCount.current++ % 2 ? '\u200b' : '')), []);
+  const { say, region } = useAnnounce(); // 웹·안드로이드는 region, iOS는 announceForAccessibility
   const [activeId, setActiveId] = useState<number | null>(null); // 웹 roving tabindex: 탭 순서에 있는 메시지(기본은 가장 새 것)
   const [failedQuotes, setFailedQuotes] = useState<Set<number>>(new Set());
   const [quoteTick, setQuoteTick] = useState(0);
@@ -234,11 +229,13 @@ function RoomBody({ id, me }: { id: string; me: string }) {
   const fail = useCallback((t: string) => setSendError(t + (errCount.current++ % 2 ? '\u200b' : '')), []); // 같은 문구가 연달아도 다시 읽히도록
   const pickImage = useCallback(async () => {
     if (photoBusy.current) return; // 보내는 중 두 번 눌러도 한 번만
-    photoBusy.current = true;
-    setPhotoSending(true);
+    photoBusy.current = true; // 고르는 동안의 중복 누름만 막는다. 버튼이 busy가 되는 것은 사진을 고른 뒤(onStart)
     setSendError(null);
     try {
-      const r = await pickAndSendImage(id, send, () => say('사진 보내는 중'));
+      const r = await pickAndSendImage(id, send, () => {
+        setPhotoSending(true);
+        say('사진 보내는 중');
+      });
       if (unmounted.current) return;
       if (r === 'sent') say('사진 보냄');
       else if (r === 'unsupported') fail('이 형식의 사진은 보낼 수 없어요');
@@ -356,9 +353,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
             />
           </View>
         )}
-        <View accessibilityLiveRegion="polite" aria-live="polite" style={SR_ONLY}>
-          <AppText>{announce}</AppText>
-        </View>
+        {region}
         <FlatList
           ref={listRef}
           inverted
@@ -433,6 +428,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
           }}
           selection={selection}
           onBlur={typing.stop}
+          say={say}
           onSelectMention={(name) => {
             const r = insertMention(draft, cursor, name);
             changeDraft(r.text);

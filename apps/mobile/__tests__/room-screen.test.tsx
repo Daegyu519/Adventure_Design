@@ -73,6 +73,7 @@ async function setup() {
 }
 
 beforeEach(() => {
+  jest.replaceProperty(Platform, 'OS', 'android'); // 알림 영역이 그려지는 플랫폼(iOS는 announceForAccessibility)
   mockMessages = [m(1, 'u2', '안녕'), m(2, 'me', '반가워')];
   mockFocused = true;
   mockParams = { id: 'r1' };
@@ -421,7 +422,7 @@ test('읽음 재시도 타이머: 새 타이머 전에 이전 것을 지운다',
 });
 
 // ── T-09b fix round 1 ──
-import { Platform } from 'react-native';
+import { AccessibilityInfo, Platform } from 'react-native';
 
 const keyEv = (key: string, extra: object = {}) => ({ key, preventDefault() {}, stopPropagation() {}, ...extra });
 const bodies = (root: Q) => root.container.queryAll((n) => (n as unknown as N).props.accessibilityHint === '메시지 메뉴 열기') as unknown as N[]; // 화면 위쪽(오래된)부터가 아니라 data 순서: 새 것부터
@@ -666,19 +667,51 @@ describe('T-09c 입력 중 · 사진 · 멘션', () => {
     expect(mockRetryPhoto).toHaveBeenCalledTimes(1);
   });
 
-  test('사진 보내기: 보내는 중에는 두 번째 누름을 무시하고 aria-busy, 알림은 "보내는 중" → "보냄"', async () => {
+  test('사진 보내기: 고르는 동안엔 busy가 아니고 두 번째 누름은 무시, 고른 뒤(onStart)부터 aria-busy, 알림은 "보내는 중" → "보냄"', async () => {
     let done: (v: string) => void = () => {};
-    mockPickImage.mockImplementation((_r: string, _s: unknown, onStart: () => void) => new Promise((r) => ((done = r), onStart())));
+    let start: () => void = () => {};
+    mockPickImage.mockImplementation((_r: string, _s: unknown, onStart: () => void) => new Promise((r) => ((done = r), (start = onStart))));
     const { press, root, texts } = await setup();
+    const btn = () => root.container.queryAll((n) => n.props.accessibilityRole === 'button' && n.props.accessibilityLabel === '사진 보내기')[0];
     await press('사진 보내기');
     await press('사진 보내기');
     expect(mockPickImage).toHaveBeenCalledTimes(1);
-    const btn = root.container.queryAll((n) => n.props.accessibilityRole === 'button' && n.props.accessibilityLabel === '사진 보내기')[0];
-    expect(btn.props.accessibilityState?.busy).toBe(true);
+    expect(btn().props.accessibilityState?.busy).toBeFalsy();
+    await act(async () => start());
+    expect(btn().props.accessibilityState?.busy).toBe(true);
     expect(texts()).toContain('사진 보내는 중');
     await act(async () => done('sent'));
     expect(texts()).toContain('사진 보냄');
-    expect(root.container.queryAll((n) => n.props.accessibilityLabel === '사진 보내기')[0].props.accessibilityState?.busy).toBeFalsy();
+    expect(btn().props.accessibilityState?.busy).toBeFalsy();
+  });
+
+  test('사진 고르기를 취소해도(onStart 없이 끝나도) 다시 누를 수 있다', async () => {
+    mockPickImage.mockResolvedValue('cancelled');
+    const { press } = await setup();
+    await press('사진 보내기');
+    await press('사진 보내기');
+    expect(mockPickImage).toHaveBeenCalledTimes(2);
+  });
+
+  test('안내 영역(polite)은 화면에 한 번만 그려지고, 입력 중 문구는 say로 그 영역에 들어간다', async () => {
+    const { root, texts } = await setup();
+    const live = () => root.container.queryAll((n) => n.props.accessibilityLiveRegion === 'polite');
+    expect(live()).toHaveLength(1);
+    mockTyping.label = '민수님이 입력 중';
+    await act(async () => root.render(<Room />));
+    expect(live()).toHaveLength(1);
+    expect(texts()).toContain('민수님이 입력 중');
+  });
+
+  test('iOS: 안내는 영역 없이 announceForAccessibility로', async () => {
+    jest.replaceProperty(Platform, 'OS', 'ios');
+    const spy = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {});
+    mockMessages = [m(1, 'u2', '안녕')];
+    const { root } = await setup();
+    mockMessages = [m(1, 'u2', '안녕'), m(2, 'u2', '또')];
+    await act(async () => root.render(<Room />));
+    expect(spy).toHaveBeenCalledWith('민수: 또');
+    expect(root.container.queryAll((n) => n.props.accessibilityLiveRegion === 'polite')).toHaveLength(0);
   });
 
   test('사진이 너무 크면 크기 문구', async () => {
@@ -764,6 +797,8 @@ describe('T-09c 입력 중 · 사진 · 멘션', () => {
     expect(strong.length).toBeGreaterThan(0);
     expect(bodies(root)[0].props.accessibilityLabel).toMatch(/^민수, @나 확인, .+, 나를 언급$/);
   });
+});
+
 test('검색에서 온 ?at=: 그 메시지로 이동하고 알린다', async () => {
   mockParams = { id: 'r1', at: '1', k: '1' };
   const { texts } = await setup();

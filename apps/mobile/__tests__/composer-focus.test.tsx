@@ -149,35 +149,61 @@ describe('멘션 콤보박스(웹)', () => {
     expect(onSend).toHaveBeenCalledTimes(1);
   });
 
-  test('후보 수는 열릴 때와 수가 바뀔 때만 polite로 알리고, 후보는 4명까지만 보인다', async () => {
+  test('후보 수는 열릴 때와 수가 바뀔 때만 say로 알리고(글자마다 아님), 후보는 4명까지만 보인다', async () => {
     const many = ['a', 'b', 'c', 'd', 'e', 'f'].map((n) => ({ user_id: n, name: `민${n}` }));
-    const { root, render } = await setup({ mentionCandidates: many });
-    const say = () => root.container.queryAll((n) => n.props['data-testid'] === 'mention-say')[0];
+    const say = jest.fn();
+    const { root, render } = await setup({ mentionCandidates: many, say });
     expect(root.container.queryAll((n) => n.props.role === 'option')).toHaveLength(4);
-    const text = (n: unknown): string => JSON.stringify(n);
-    expect(text(say())).toContain('멘션 후보 4명, 위아래 화살표로 고르세요');
-    await render({ value: '@민a', mentionCandidates: many });
-    expect(text(say())).toContain('멘션 후보 4명');
-    await render({ value: '@민a', mentionCandidates: many.slice(0, 2) });
-    expect(text(say())).toContain('멘션 후보 2명');
+    expect(say).toHaveBeenCalledTimes(1);
+    expect(say).toHaveBeenLastCalledWith('멘션 후보 4명, 위아래 화살표로 고르세요');
+    await render({ value: '@민a', mentionCandidates: many, say });
+    expect(say).toHaveBeenCalledTimes(1);
+    await render({ value: '@민a', mentionCandidates: many.slice(0, 2), say });
+    expect(say).toHaveBeenLastCalledWith('멘션 후보 2명, 위아래 화살표로 고르세요');
+    await render({ value: '@민a', mentionCandidates: null, say });
+    expect(say).toHaveBeenCalledTimes(2);
+  });
+
+  test('aria-controls는 목록이 그려져 있을 때만', async () => {
+    const { input, render } = await setup();
+    expect(input().props['aria-controls']).toBeTruthy();
+    await render({ mentionCandidates: null });
+    expect(input().props['aria-controls']).toBeUndefined();
   });
 });
 
-describe('입력 중 안내(iOS)', () => {
-  test('iOS에서는 새 입력 중 문구가 생길 때 announceForAccessibility로 한 번 읽는다', async () => {
-    const { AccessibilityInfo } = require('react-native');
-    const spy = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {});
-    jest.replaceProperty(Platform, 'OS', 'ios');
-    try {
-      const root = createRoot();
-      const render = (l: string | null) => act(async () => void root.render(<Composer value="" onChangeText={() => {}} onSend={() => {}} replyTo={null} onCancelReply={() => {}} typingLabel={l} />));
-      await render(null);
-      await render('민수님이 입력 중');
-      await render('민수님이 입력 중');
-      expect(spy).toHaveBeenCalledTimes(1);
-      expect(spy).toHaveBeenCalledWith('민수님이 입력 중');
-    } finally {
-      jest.restoreAllMocks();
-    }
+describe('멘션 목록(네이티브)', () => {
+  test('role·aria·nativeID는 웹에서만, 네이티브 행은 accessibilityRole=button 그대로', async () => {
+    const root = createRoot();
+    await act(async () => {
+      root.render(<Composer value="@민" onChangeText={() => {}} onSend={() => {}} replyTo={null} onCancelReply={() => {}} mentionCandidates={[{ user_id: 'u2', name: '민수' }]} onSelectMention={() => {}} />);
+    });
+    const row = root.container.queryAll((n) => n.props.accessibilityLabel === '민수 언급')[0];
+    expect(row.props.accessibilityRole).toBe('button');
+    expect(row.props.role).toBeUndefined();
+    expect(root.container.queryAll((n) => n.props.role === 'listbox')).toHaveLength(0);
+    const input = root.container.queryAll((n) => String(n.props.accessibilityLabel).startsWith('메시지 입력'))[0];
+    expect(input.props.role).toBeUndefined();
+  });
+});
+
+describe('입력 중 안내', () => {
+  test.each(['ios', 'android', 'web'] as const)('%s: 새 입력 중 문구가 생길 때 say로 한 번(같은 문구로 다시 그려도 반복 없음)', async (os) => {
+    jest.replaceProperty(Platform, 'OS', os);
+    const say = jest.fn();
+    const root = createRoot();
+    const render = (l: string | null) => act(async () => void root.render(<Composer value="" onChangeText={() => {}} onSend={() => {}} replyTo={null} onCancelReply={() => {}} typingLabel={l} say={say} />));
+    await render(null);
+    await render('민수님이 입력 중');
+    await render('민수님이 입력 중');
+    expect(say).toHaveBeenCalledTimes(1);
+    expect(say).toHaveBeenCalledWith('민수님이 입력 중');
+    jest.restoreAllMocks();
+  });
+
+  test('입력 중 문구는 눈에 보이게 그려지고 따로 live 영역은 없다(안내는 say 하나)', async () => {
+    const root = createRoot();
+    await act(async () => void root.render(<Composer value="" onChangeText={() => {}} onSend={() => {}} replyTo={null} onCancelReply={() => {}} typingLabel="민수님이 입력 중" say={() => {}} />));
+    expect(root.container.queryAll((n) => n.props.accessibilityLiveRegion === 'polite')).toHaveLength(0);
   });
 });

@@ -124,6 +124,34 @@ test('useSignedUrl re-signs when the URL expires while mounted', async () => {
   }
 });
 
+test('useSignedUrl re-signs 60 s before the URL stops being served (no placeholder flash)', async () => {
+  jest.useFakeTimers();
+  try {
+    const seen: (string | null)[] = [];
+    mockSign.mockResolvedValueOnce({ data: { signedUrl: 'https://s/1' }, error: null }).mockResolvedValueOnce({ data: { signedUrl: 'https://s/2' }, error: null });
+    const root = createRoot();
+    await act(async () => root.render(<Probe path="r1/g.jpg" />));
+    await act(async () => void jest.advanceTimersByTime((3300 - 60) * 1000 + 500));
+    seen.push(url);
+    expect(mockSign).toHaveBeenCalledTimes(2);
+    expect(seen[0]).toBe('https://s/2');
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
+test('useSignedUrl: a failure on one path is not shown for another path', async () => {
+  mockSign.mockResolvedValueOnce({ data: null, error: { message: 'x' } }).mockResolvedValue({ data: { signedUrl: 'https://s/9' }, error: null });
+  const root = createRoot();
+  await act(async () => root.render(<Probe path="r1/h.jpg" />));
+  expect(failed).toBe(true);
+  await act(async () => root.render(<Probe path="r1/i.jpg" />));
+  expect(failed).toBe(false);
+  await act(async () => root.render(<Probe path="r1/h.jpg" />));
+  expect(url).toBe('https://s/9');
+  expect(failed).toBe(false);
+});
+
 test('useSignedUrl: failure sets failed (no url); retry signs again', async () => {
   mockSign.mockResolvedValueOnce({ data: null, error: { message: 'x' } }).mockResolvedValueOnce({ data: { signedUrl: 'https://s/3' }, error: null });
   const root = createRoot();

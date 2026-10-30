@@ -14,6 +14,7 @@ export function imagePath(roomId: string, mime: string, rand: string): string | 
 
 const SIGN_SECONDS = 3600;
 const REFRESH_MS = (SIGN_SECONDS - 300) * 1000; // 만료 5분 전에 다시 받는다
+const EARLY_MS = 60_000; // 주소가 안 쓰이게 되기 60초 전에 다시 받아, 그림이 자리 상자로 깜빡이지 않게 한다
 const MAX_CACHE = 100;
 const cache = new Map<string, { url: string; until: number }>();
 
@@ -51,7 +52,7 @@ export function useSignedUrl(path: string | null): { url: string | null; failed:
     let alive = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const arm = (until: number) => {
-      timer = setTimeout(sign, Math.max(0, until - Date.now()));
+      timer = setTimeout(sign, Math.max(0, until - EARLY_MS - Date.now()));
     };
     const sign = () => {
       void Promise.resolve(supabase!.storage.from('chat-images').createSignedUrl(path, SIGN_SECONDS)).then(
@@ -59,7 +60,7 @@ export function useSignedUrl(path: string | null): { url: string | null; failed:
           if (!alive) return;
           if (!data) return setFailedPath(path);
           const until = Date.now() + REFRESH_MS;
-          if (cache.size >= MAX_CACHE) cache.delete(cache.keys().next().value as string);
+          if (!cache.has(path) && cache.size >= MAX_CACHE) cache.delete(cache.keys().next().value as string);
           cache.set(path, { url: data.signedUrl, until });
           setFailedPath(null);
           tick((n) => n + 1);
@@ -74,6 +75,7 @@ export function useSignedUrl(path: string | null): { url: string | null; failed:
     return () => {
       alive = false;
       clearTimeout(timer);
+      setFailedPath(null); // 다른 사진으로 바뀌면 이전 실패를 끌고 가지 않는다
     };
   }, [path, tries]);
   const hit = path ? cache.get(path) : undefined;

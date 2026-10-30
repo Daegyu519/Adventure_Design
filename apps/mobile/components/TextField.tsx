@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
-import { AccessibilityInfo, TextInput, View, type TextInputProps } from 'react-native';
+import { TextInput, View, type TextInputProps } from 'react-native';
 
+import { useAnnounce } from '../lib/announce';
 import { focusRing, useTheme } from '../lib/theme';
 import { AppText } from './AppText';
 
@@ -10,14 +11,16 @@ type Props = TextInputProps & { label: string; hint?: string; error?: string | n
 // 라벨은 늘 보이고(placeholder로 대신하지 않는다), 오류는 입력창 바로 아래에 글자로 적는다(색만으로 알리지 않는다).
 export function TextField({ label, hint, error, style, ...rest }: Props) {
   const { colors, radius, space, font } = useTheme();
+  const { say, region } = useAnnounce(); // 웹·안드로이드는 이 영역, iOS는 announceForAccessibility
 
   // 스크린리더는 새로 생긴 오류를 저절로 읽지 않는 경우가 있어 한 번 읽어 준다.
   useEffect(() => {
-    if (error) AccessibilityInfo.announceForAccessibility(error);
-  }, [error]);
+    if (error) say(error);
+  }, [error, say]);
 
   return (
     <View style={{ gap: space[1] }}>
+      {region}
       <AppText weight="600">{label}</AppText>
       {hint ? (
         <AppText variant="small" color="textMuted">

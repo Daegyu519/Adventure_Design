@@ -15,14 +15,12 @@ export function MentionPicker({ candidates, active, onSelect }: Props) {
   const { colors, space } = useTheme();
   const web = Platform.OS === 'web';
   return (
-    <View {...({ role: 'listbox' } as object)} nativeID={MENTION_LIST_ID} aria-label="멘션 후보" style={{ borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: colors.surface }}>
+    <View {...(web ? ({ role: 'listbox', nativeID: MENTION_LIST_ID, 'aria-label': '멘션 후보' } as object) : {})} style={{ borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: colors.surface }}>
       {candidates.map((c, i) => (
         <Pressable
           key={c.user_id}
-          nativeID={mentionOptionId(i)}
-          role="option"
-          aria-selected={i === active}
-          tabIndex={web ? -1 : undefined}
+          {...(web ? ({ role: 'option', nativeID: mentionOptionId(i), tabIndex: -1 } as object) : {})}
+          accessibilityState={{ selected: i === active }}
           onPress={() => onSelect(c.name)}
           accessibilityRole={web ? undefined : 'button'}
           accessibilityLabel={`${c.name} 언급`}
