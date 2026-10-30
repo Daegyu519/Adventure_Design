@@ -423,6 +423,13 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description rate_limited: 분당 요청 한도를 넘었다. Retry-After(초) 뒤에 다시 시도한다. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     feedback_v1_feedback_post: {
@@ -457,6 +464,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+            /** @description rate_limited: 분당 요청 한도를 넘었다. Retry-After(초) 뒤에 다시 시도한다. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -493,6 +507,13 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description rate_limited: 분당 요청 한도를 넘었다. Retry-After(초) 뒤에 다시 시도한다. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     mirror_answer_v1_mirror_answer_post: {
@@ -528,6 +549,13 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description rate_limited: 분당 요청 한도를 넘었다. Retry-After(초) 뒤에 다시 시도한다. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     mirror_today_v1_mirror_today_post: {
@@ -559,6 +587,13 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description rate_limited: 분당 요청 한도를 넘었다. Retry-After(초) 뒤에 다시 시도한다. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
         };
     };
     stats_me_v1_stats_me_get: {
@@ -589,6 +624,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+            /** @description rate_limited: 분당 요청 한도를 넘었다. Retry-After(초) 뒤에 다시 시도한다. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
