@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ComponentRef, type ReactNode } from 'react';
 import { AccessibilityInfo, findNodeHandle, Platform, View } from 'react-native';
 
+import { useAnnounce } from '../../lib/announce';
 import { engine, type MirrorAnswerReq, type MirrorAnswerRes } from '../../lib/engine';
 import { isStaleCard, mirrorErrorCopy, type Card } from '../../lib/mirror';
 import { useTheme } from '../../lib/theme';
@@ -16,15 +17,16 @@ const KIND: Record<Card['kind'], string> = { roleplay: '역할극', receive: '�
 // 네이티브에서 accessible로 묶으면 안의 읽힘·버튼이 하나로 합쳐져 따로 읽히지 않아서 묶지 않는다.
 export function FocusBox({ children, label }: { children: ReactNode; label?: string }) {
   const ref = useRef<ComponentRef<typeof View>>(null);
+  const { say, region } = useAnnounce();
   useEffect(() => {
     const node = ref.current as unknown as { focus?: () => void } | null;
     if (Platform.OS === 'web') node?.focus?.();
     else {
       const h = findNodeHandle(ref.current);
       if (h) AccessibilityInfo.setAccessibilityFocus(h);
-      if (label) AccessibilityInfo.announceForAccessibility(label);
+      if (label) say(label);
     }
-  }, [label]);
+  }, [label, say]);
   return (
     <View
       ref={ref}
@@ -33,6 +35,7 @@ export function FocusBox({ children, label }: { children: ReactNode; label?: str
       {...({ tabIndex: -1 } as object)}
       style={{ gap: 12, outlineStyle: 'none' } as object}
     >
+      {region}
       {children}
     </View>
   );

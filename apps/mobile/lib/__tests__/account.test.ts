@@ -51,3 +51,10 @@ test('no supabase client (no keys) → false, nothing touched', async () => {
   await expect(signOutAndClear()).resolves.toBe(false);
   expect(await AsyncStorage.getAllKeys()).toHaveLength(4);
 });
+
+test('sign-out clears cached signed photo URLs', async () => {
+  const images = require('../images');
+  const spy = jest.spyOn(images, 'clearSignedUrls');
+  await signOutAndClear();
+  expect(spy).toHaveBeenCalled();
+});

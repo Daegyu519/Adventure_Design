@@ -1,6 +1,6 @@
 # AGENTS.md
 
-이 저장소를 이어받는 AI 에이전트(Claude Code, Codex, Cursor, Gemini CLI 등)와 사람이 처음 읽는 문서다. 도구와 상관없이 같은 규칙으로 일한다. 기준: 2026-10-30, `main` = `land T-09d` 이후. land할 때마다 "2. 지금 상태"·"3. 진행 중"·"4. 다음 순서"를 같은 변경에서 고친다.
+이 저장소를 이어받는 AI 에이전트(Claude Code, Codex, Cursor, Gemini CLI 등)와 사람이 처음 읽는 문서다. 도구와 상관없이 같은 규칙으로 일한다. 기준: 2026-10-30, `main` = `land T-09c` 이후. land할 때마다 "2. 지금 상태"·"3. 진행 중"·"4. 다음 순서"를 같은 변경에서 고친다.
 
 ## 1. 무엇을 만드는가, 읽는 순서
 
@@ -21,27 +21,27 @@
 
 `docs/tasks.md` 기준으로 직접 센 값이다(`-live` 행과 선택은 따로).
 
-**필수 작업 48개 중 36개 완료.** `-live` 7개(전부 T-02 필요, 0개 완료). 선택 3개 중 1개 완료(T-38).
+**필수 작업 48개 중 37개 완료.** `-live` 8개(전부 T-02 필요, 0개 완료). 선택 3개 중 1개 완료(T-38).
 
 | 단계 | 필수 완료 | 남은 것 |
 |---|---|---|
 | 0. 기반 | 13 / 14 | T-02 (사람이 할 일) |
-| 1. 채팅 | 8 / 9 | T-09c |
+| 1. 채팅 | 9 / 9 | (없음) |
 | 2. AI 엔진 핵심 | 5 / 7 | T-15, T-16 (사람: 라벨) |
 | 3. 앙상블과 살펴보기 | 2 / 5 | T-18, T-20, T-22 |
 | 4. 털어놓기·거울·측정 | 8 / 10 | T-25, T-28a |
 | 5. 파일럿과 발표 | 0 / 3 | T-29, T-30, T-31 |
-| `-live` (단계 1·2) | 0 / 7 | T-07-live, T-08-live, T-09a-live, T-09b-live, T-09d-live, T-10-live, T-17-live |
+| `-live` (단계 1·2) | 0 / 8 | T-07-live, T-08-live, T-09a-live, T-09b-live, T-09c-live, T-09d-live, T-10-live, T-17-live |
 | 선택 | 1 / 3 | T-32, T-33 |
 
 (단계 0의 14개에는 이 문서를 만든 P-03이 들어 있다.)
 
-검사 기준치(`scripts/check`, 병합된 main, 2026-10-30): 엔진 pytest 515 passed, 1 skipped · 앱 jest 405 passed(40 suites) · supabase(PGlite) 24 pass · tsc·lint 0 · 대비 OK.
+검사 기준치(`scripts/check`, 병합된 main, 2026-10-30): 엔진 pytest 515 passed, 1 skipped · 앱 jest 499 passed(46 suites) · supabase(PGlite) 24 pass · tsc·lint 0 · 대비 OK.
 
 영역별:
 
 - **엔진**: 거의 끝. 실시간 힌트(`/v1/hint`), 살펴보기(`/v1/detail`), 털어놓기(`/v1/feedback`), 거울(`/v1/mirror/*`), 통계(`/v1/stats/me`), 웹훅(`/hooks/message`), 푸시·기준선·이벤트·trace 작업, JWKS 인증, 사용자별 429(T-38)가 main에 있다. 남은 것: T-18(두 번째 말투 전문가), T-20(가중치 학습).
-- **앱**: 동의, 로그인, 프로필, 리포트, 설정, 초대·그룹 만들기(`rooms/new`), 대화 목록(안 읽은 수)과 대화방 기본(`room/[id]`: 보내기, Realtime 수신, 과거 불러오기, 읽음 처리)이 있다. Realtime은 jest로만 확인했다(T-09a-live). 남은 큰 덩어리는 답장·공감·읽음 수(T-09b), 입력 중·사진·멘션(T-09c), 방 정보(T-09d), 그리고 입력 중 힌트(T-15).
+- **앱**: 동의, 로그인, 프로필, 리포트, 설정, 초대·그룹 만들기(`rooms/new`), 대화 목록과 대화방(`room/[id]`: 보내기, Realtime 수신, 과거 불러오기, 읽음 처리, 답장·공감·읽음 수, 입력 중·사진·멘션, 방 정보·검색·알림 끄기), 거울 탭이 있다. Realtime·Presence·Storage는 jest로만 확인했다(-live 행). 남은 큰 덩어리는 입력 중 힌트(T-15), 살펴보기 시트(T-22), 털어놓기 시트(T-25), 푸시 등록(T-28a).
 - **DB**: 마이그레이션 6개가 `supabase/migrations/`에 있고 로컬 PGlite 테스트로만 확인했다. **실제 Supabase 프로젝트는 아직 없다(T-02).**
 - **평가**: 대조 세트와 `--mock` 평가 스크립트, `eval/baseline.json`(정밀도 게이트)이 있다. 이 mock 수치는 배관 확인용이다. 라벨된 30쌍(T-16)이 있어야 `-live` 평가가 된다.
 - **배포**: 아직 없음. T-29(엔진), T-30(웹 + Android EAS), T-31(파일럿 1주).
@@ -50,9 +50,9 @@
 
 | 작업 | 브랜치 | 상태 |
 |---|---|---|
-| T-09c 입력 중 · 사진 · 멘션 (앱) | `t09c-media` | 구현 중 (원격에 WIP 커밋 있음, 리뷰 전) |
+| (없음) | | |
 
-둘 다 Claude가 잡았고 `app/room/[id]/` 대화방 화면을 고친다. 대화방 파일(`app/room/[id]/index.tsx`, `components/Bubble.tsx`·`Composer.tsx`·`MessageActions.tsx`, `lib/useRoomMessages.ts`)은 두 작업이 land될 때까지 건드리지 않는다. 보류(paused): 없음.
+Claude가 다음으로 T-15(입력 중 힌트)와 T-25(털어놓기 시트)를 잡는다 — 잡으면 브랜치를 바로 올리고 이 표에 적는다. 그 둘은 `components/Composer.tsx`·`MessageActions.tsx`·`app/room/[id]/index.tsx`를 고치므로 다른 사람은 대화방 파일을 피한다. 보류(paused): 없음.
 
 ## 4. 다음 순서
 
@@ -80,19 +80,19 @@
 | 4 | T-33 헤지 요청, T-32 디스코드 앱 (선택) | 다른 AI | 엔진 쪽, 필수 아님 |
 | — | **T-02 Supabase dev 프로젝트**, **T-16 라벨 30쌍** | **사람** | -live 확인 6개와 실제 평가(T-17-live·T-20)가 여기에 막혀 있다(5장) |
 
-Claude가 이어서 할 것: T-09c·T-09d 리뷰·land → T-25 털어놓기 시트(MessageActions를 고치므로 T-09c 뒤) → T-15 입력 중 힌트 → T-22 살펴보기 시트.
+Claude가 이어서 할 것: T-15 입력 중 힌트와 T-25 털어놓기 시트(병렬) → T-22 살펴보기 시트.
 
 그 뒤 순서:
 
 ```
-T-09c ─┬─ T-15 ── T-22
-       └─ T-25
+T-15 ── T-22
+T-25
 ```
 
 - T-15는 T-14·T-03b도 선행(완료). 힌트 설정(`tone_hint_on`)이 꺼져 있으면 `/v1/hint`를 보내지 않는 테스트를 T-15에서 쓴다(T-37이 저장만 한다).
 - T-22는 T-15와 T-21(완료) 뒤. T-25는 T-09b와 T-24(완료) 뒤.
 
-T-02 뒤에: T-07-live, T-08-live, T-09a-live, T-09b-live, T-09d-live, T-10-live (실제 Supabase로 로그인·초대·웹훅 확인) **[사람이 먼저 T-02]**.
+T-02 뒤에: T-07-live, T-08-live, T-09a-live, T-09b-live, T-09c-live, T-09d-live, T-10-live (실제 Supabase로 로그인·초대·웹훅 확인) **[사람이 먼저 T-02]**.
 
 평가: T-17-live는 T-16 라벨 뒤 **[사람]**. T-20은 T-17-live·T-18 뒤(T-17·T-19 완료).
 
@@ -213,7 +213,8 @@ flowchart LR
 - 리포트: 계획 문구 대신 MASTER 5장 + 승인 목업. 숫자 3개 = 예측과의 차이 · 이번 주 힌트(KST) · 스스로 고친 비율. "숫자는 나만 봐요"는 근거 없는 약속이라 빼고 "힌트 수는 점수가 아니에요…" 문구를 쓴다.
 - 설정(T-37)은 `tone_hint_on`을 저장만 한다. 꺼져 있으면 `/v1/hint`를 안 보내는 일은 T-15에서(테스트 포함) — 힌트 요청 코드가 그때 생기기 때문.
 - 공용 `Button`의 수정은 프리미티브 한 곳에서(모든 화면에 퍼지므로 T-07·T-34 테스트가 초록이어야 한다).
-- 화면 안내(스크린리더)는 `lib/announce.tsx`의 `useAnnounce()` → `{say, region}`으로 한다: iOS는 `announceForAccessibility`, 웹·Android는 늘 붙어 있는 polite 라이브 영역(같은 문구 반복도 다시 읽힘). **react-native-web의 `announceForAccessibility`는 아무것도 하지 않는다.** `region`은 화면마다 한 번 렌더한다. 방 정보·검색이 먼저 쓰고, `rooms/new`·`TextField`·거울·대화방은 옮겨야 한다(9장).
+- 화면 안내(스크린리더)는 `lib/announce.tsx`의 `useAnnounce()` → `{say, region}`으로만 한다: iOS는 `announceForAccessibility`, 웹·Android는 늘 붙어 있는 polite 라이브 영역(같은 문구 반복도 다시 읽힘). **react-native-web의 `announceForAccessibility`는 아무것도 하지 않는다.** `region`은 화면마다 한 번. 눈에 보이는 `role="alert"` 오류(예: `TextField`)는 웹·Android에서 이미 읽히므로 `say`는 iOS에서만 부른다(두 번 읽힘 방지).
+- 사진: 클라이언트는 jpg·png·webp만(움직이는 GIF는 멈출 수 없어 뺐다, WCAG 2.2.2), 5MB 이하, 경로 `room_id/<시각>-<무작위>.<확장자>`, `upsert:false`. 서명 주소는 55분, 만료 60초 전에 다시 받고, 로그아웃 때 캐시를 비운다. 멘션은 그룹방만, 같은 이름이 둘이면 후보에서 뺀다. 입력 중 표시는 Presence 키(내 id)에서 신원을 얻는다.
 - 대화방 메시지 목록은 웹에서 roving tabindex(탭 정지 하나, ↑/↓로 이동, Enter·Shift+F10·ContextMenu로 메뉴 시트). 메시지 이름은 보낸 사람·내용·시간·안 읽은 수를 한 줄로. 메뉴는 내 메시지에도 있다(키보드 접근).
 - 공감(reactions)은 insert / update(emoji) / delete만, upsert 금지. 메시지 `image_path`는 `room_id/`로 시작, 멘션은 방 멤버만 8명까지, 답장 대상 삭제 시 null.
 
@@ -263,9 +264,10 @@ flowchart LR
 - (T-29/T-30) `/health`가 모델 목록을 인증 없이 보여 준다 — 배포 때 다시 본다. 요청 크기 제한은 Cloudflare에서. 템플릿 아이콘·스플래시 교체. 인증 설정이 비면 401이 아니라 503 `auth_unavailable`.
 - (털어놓기) 사용자별 "처리 중인 털어놓기 작업 수" 한도도 고려(작업 하나가 최대 60초). 주간 한도 확인과 증가가 원자적이지 않아 작업자 2개면 최대 6까지. 중복 방지 키가 메모리뿐이라 재시작하면 잊는다 — 파일럿 규모에서 받아들임.
 - (T-09a) 대화방: "다시 불러오기" 줄이 사라질 때 포커스가 body로 떨어짐(웹 키보드), 언마운트 뒤 읽음 재시도 타이머가 남을 수 있음, 목록 Realtime INSERT마다 전체 다시 읽기(디바운스 없음), 다른 기기의 읽음 갱신(room_members UPDATE) 미반영.
-- (공통, 다음 작업) `announceForAccessibility`를 직접 부르는 `app/rooms/new.tsx`, `components/TextField.tsx`, `components/mirror/parts.tsx`, 대화방 `say()`를 `useAnnounce()`로 옮긴다 — 지금 웹에서 그 안내가 안 들린다.
 - (T-09d) 검색은 최근 50개만(쪽 넘김 없음, 화면에 안내함), `*`가 든 검색어는 50개 안에서 거른다, 0행 업데이트(알림 끄기)를 저장된 것으로 봄, 네이티브에서 검색 뒤 키보드가 결과를 가릴 수 있음, `createGroupInvite`를 `rooms/new`도 쓰게.
 - (T-09b) 대화방 키보드: 활성 메시지가 가상 스크롤로 빠지면 목록에 탭 정지가 없음, 마우스로 누른 메시지가 활성으로 안 바뀜(`onFocus`로 활성 갱신), 가장 오래된 메시지에서 ↑는 불러오기만 하고 안내 없음, 실패한 인용의 다시 불러오기 버튼이 roving 밖, 웹 Modal 바깥 dialog 이름 없음, 받은 메시지에 `unreadCount`가 나를 셈(1:1에서 "상대가 안 읽음"이 잠깐 들림), 공감 Realtime 재연결 따라잡기 없음.
+- (T-09c) 업로드 뒤 메시지 저장이 실패하면 Storage에 고아 파일이 남는다(클라이언트에 삭제 정책 없음) — 파일럿 전에 서비스 키로 청소. 이미 올라간 GIF는 버킷 MIME 목록에서도 빼야 한다(T-02 때). 멘션 강조가 저장된 mentions가 아니라 글자 기준, Shift+Enter가 멘션을 고름, 사진 실패 자리 안내 없음, 전체 크기 보기 없음.
+- (T-09c) 입력 중 표시는 Presence 키(내 id로 입장)에서 신원을 얻고 방 멤버만 보이지만, `realtime.messages` 정책은 키를 로그인한 사용자에 묶지 않는다 — 방 멤버가 다른 멤버의 키로 입장해 "입력 중"을 꾸밀 수 있다(표시만, 대화·데이터에는 영향 없음). 서버에서 막으려면 Realtime 인가가 키를 `auth.uid()`에 묶는지 T-02 뒤 실제 확인. 사진: 올린 뒤 메시지 insert가 실패하면 고아 파일이 남는다.
 - (T-36) 거울: 네이티브에서 "역할극 결과"에 진짜 포커스(지금은 안내만), 척도 화살표 키, 선택 안 된 칸 테두리 대비(1.3:1), 401·403 문구, 카드 묶음 이름 — 기기 확인 때.
 - (T-09 이후) 앱 접근성·글자 크기 한 번에: 리포트 막대 고정 높이, TextField 오류가 두세 번 읽힘, 누름 피드백 150~250ms(공용 Pressable), Button 높이 50 vs MASTER 48.
 - (엔진) 라틴 이름은 단어 경계 없이 가려짐(Al → also). 기준선은 평생 평균(느리게 적응하면 EWMA로). `repo.message`는 id로만 읽음.

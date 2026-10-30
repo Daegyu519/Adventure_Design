@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+import { clearSignedUrls } from './images';
 import { supabase } from './supabase';
 
 // 로그아웃해도 남기는 저장소 키. 나머지는 모두 "그 사람 것"으로 보고 지운다(같은 폰에서 다른 계정이 들어와도 새어 나가지 않게).
@@ -16,6 +17,7 @@ export async function signOutAndClear(): Promise<boolean> {
   } catch {
     return false;
   }
+  clearSignedUrls();
   try {
     const keys = await AsyncStorage.getAllKeys();
     await AsyncStorage.multiRemove(keys.filter((k) => !KEEP.includes(k)));

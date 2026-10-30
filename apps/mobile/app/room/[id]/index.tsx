@@ -11,10 +11,14 @@ import { Composer, type InputHandle } from '../../../components/Composer';
 import { MessageActions } from '../../../components/MessageActions';
 import { Button } from '../../../components/Button';
 import { IconButton } from '../../../components/IconButton';
+import { pickAndSendImage } from '../../../lib/images';
+import { activeMentionQuery, extractMentions, insertMention, mentionCandidates } from '../../../lib/mentions';
+import { useAnnounce } from '../../../lib/announce';
 import { dbErrorMessage, isUnreachable, NETWORK_MESSAGE } from '../../../lib/dbErrors';
 import { REACTION_LABELS, shouldMarkRead, summarizeReactions, unreadCount, type Emoji, type Msg } from '../../../lib/messages';
 import { fetchRoom, markRead, roomTitle, type Member } from '../../../lib/rooms';
 import { useMembers } from '../../../lib/useMembers';
+import { useTyping } from '../../../lib/useTyping';
 import { useReactions } from '../../../lib/useReactions';
 import { useRoomMessages, type SendError } from '../../../lib/useRoomMessages';
 import { useSession } from '../../../lib/session';
@@ -24,9 +28,6 @@ import type { Tables } from '../../../lib/types/db';
 
 // 방 정보를 못 받았을 때 줄 문구: 코드가 있는 DB 오류는 고정 문구, 그 밖(연결 끊김 등)은 연결 문구. 서버 글은 내지 않는다.
 const loadMessage = (e: unknown) => ((e as { code?: string })?.code ? dbErrorMessage(e as { message: string }, '대화방을 불러오지 못했어요. 다시 시도해 주세요.') : NETWORK_MESSAGE);
-
-// 화면 읽기 프로그램에만 보이는 한 줄(웹·네이티브 공통으로 화면 밖).
-const SR_ONLY = { position: 'absolute', width: 1, height: 1, overflow: 'hidden', opacity: 0 } as const;
 
 // 시작 직후 currentState가 비어(null/unknown) 올 수 있다. 배경·비활성일 때만 "앞이 아님"으로 본다.
 const isActive = (s: string | null | undefined) => s !== 'background' && s !== 'inactive';
@@ -62,10 +63,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
   const [sendError, setSendError] = useState<string | null>(null);
   const [appActive, setAppActive] = useState(isActive(AppState.currentState));
   const lastRead = useRef<string | null>(null);
-  const [announce, setAnnounce] = useState('');
-  const sayCount = useRef(0);
-  // 같은 문구가 연달아 와도 다시 읽히도록 번갈아 보이지 않는 글자를 붙인다.
-  const say = useCallback((t: string) => setAnnounce(t + (sayCount.current++ % 2 ? '\u200b' : '')), []);
+  const { say, region } = useAnnounce(); // 웹·안드로이드는 region, iOS는 announceForAccessibility
   const [activeId, setActiveId] = useState<number | null>(null); // 웹 roving tabindex: 탭 순서에 있는 메시지(기본은 가장 새 것)
   const [failedQuotes, setFailedQuotes] = useState<Set<number>>(new Set());
   const [quoteTick, setQuoteTick] = useState(0);
@@ -118,6 +116,17 @@ function RoomBody({ id, me }: { id: string; me: string }) {
   const { rows: reactionRows, toggle } = useReactions(id, useMemo(() => messages.map((x) => x.id), [messages]), me);
   const byId = useMemo(() => new Map(messages.map((x) => [x.id, x])), [messages]);
   const group = info?.room.kind === 'group';
+  const nameRecord = useMemo(() => Object.fromEntries(names), [names]);
+  const typing = useTyping(id, me, nameRecord);
+  const [cursor, setCursor] = useState(0);
+  const [selection, setSelection] = useState<{ start: number; end: number } | undefined>(undefined); // 멘션을 넣은 직후 커서 위치
+  const query = group ? activeMentionQuery(draft, cursor) : null;
+  const candidates = useMemo(() => (query === null ? null : mentionCandidates(info?.members ?? [], me, query)), [query, info, me]);
+  const changeDraft = useCallback((t: string) => {
+    setDraft(t);
+    setSelection(undefined);
+    typing.onDraftChange(t);
+  }, [typing]);
   const title = info ? roomTitle(info.room, info.members, me) : '대화방';
 
   // 읽음: 앞에 보이고 포커스가 있을 때만, 방에서 가장 새 메시지의 서버 시각으로(앞으로만).
@@ -200,8 +209,10 @@ function RoomBody({ id, me }: { id: string; me: string }) {
     sending.current = true;
     setSendError(null);
     setDraft(''); // 먼저 비운다. 실패하면 되돌린다.
+    typing.stop();
+    const mentions = group ? extractMentions(text, info?.members ?? [], me) : [];
     try {
-      await send(replyTarget ? { text, reply_to: replyTarget.id } : { text });
+      await send({ text, ...(replyTarget ? { reply_to: replyTarget.id } : {}), ...(mentions.length ? { mentions } : {}) });
       setReplyTarget(null);
     } catch (e) {
       const err = e as SendError;
@@ -210,7 +221,35 @@ function RoomBody({ id, me }: { id: string; me: string }) {
     } finally {
       sending.current = false;
     }
-  }, [draft, send, replyTarget]);
+  }, [draft, send, replyTarget, typing, group, info, me]);
+
+  const photoBusy = useRef(false);
+  const [photoSending, setPhotoSending] = useState(false);
+  const errCount = useRef(0);
+  const fail = useCallback((t: string) => setSendError(t + (errCount.current++ % 2 ? '\u200b' : '')), []); // 같은 문구가 연달아도 다시 읽히도록
+  const pickImage = useCallback(async () => {
+    if (photoBusy.current) return; // 보내는 중 두 번 눌러도 한 번만
+    photoBusy.current = true; // 고르는 동안의 중복 누름만 막는다. 버튼이 busy가 되는 것은 사진을 고른 뒤(onStart)
+    setSendError(null);
+    try {
+      const r = await pickAndSendImage(id, send, () => {
+        setPhotoSending(true);
+        say('사진 보내는 중');
+      });
+      if (unmounted.current) return;
+      if (r === 'sent') say('사진 보냄');
+      else if (r === 'unsupported') fail('이 형식의 사진은 보낼 수 없어요');
+      else if (r === 'toolarge') fail('사진이 너무 커요 (5MB 이하)');
+      else if (r === 'failed') fail('사진을 보내지 못했어요');
+    } finally {
+      photoBusy.current = false;
+      if (!unmounted.current) {
+        setPhotoSending(false);
+        // 웹: 파일 선택창이 닫히면(취소 포함) 포커스가 body로 떨어지지 않게 입력창으로
+        if (Platform.OS === 'web') inputRef.current?.focus();
+      }
+    }
+  }, [id, send, say, fail]);
 
   const data = useMemo(() => [...messages].reverse(), [messages]); // inverted: 새 것부터
 
@@ -314,9 +353,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
             />
           </View>
         )}
-        <View accessibilityLiveRegion="polite" aria-live="polite" style={SR_ONLY}>
-          <AppText>{announce}</AppText>
-        </View>
+        {region}
         <FlatList
           ref={listRef}
           inverted
@@ -357,6 +394,8 @@ function RoomBody({ id, me }: { id: string; me: string }) {
                   message={item}
                   mine={mine}
                   speaker={mine ? '나' : (names.get(item.sender_id) ?? '상대')}
+                  mentionNames={group ? (info?.members ?? []).map((x) => x.name) : undefined}
+                  mentionsMe={item.mentions.includes(me)}
                   unreadText={unreadCount(item, members) > 0 ? (group ? `안 읽은 사람 ${unreadCount(item, members)}명` : '상대가 안 읽음') : ''}
                   active={item.id === (activeId ?? data[0]?.id)}
                   onNavigate={(dir) => navigate(item.id, dir)}
@@ -378,7 +417,24 @@ function RoomBody({ id, me }: { id: string; me: string }) {
         />
         <Composer
           value={draft}
-          onChangeText={setDraft}
+          onChangeText={changeDraft}
+          onPickImage={() => void pickImage()}
+          photoBusy={photoSending}
+          typingLabel={typing.label}
+          mentionCandidates={candidates}
+          onSelectionChange={(c) => {
+            setCursor(c);
+            setSelection(undefined);
+          }}
+          selection={selection}
+          onBlur={typing.stop}
+          say={say}
+          onSelectMention={(name) => {
+            const r = insertMention(draft, cursor, name);
+            changeDraft(r.text);
+            setCursor(r.cursor);
+            setSelection({ start: r.cursor, end: r.cursor });
+          }}
           onSend={() => void onSend()}
           inputRef={inputRef}
           replyTo={replyTarget ? { id: replyTarget.id, name: replyTarget.sender_id === me ? '나' : (names.get(replyTarget.sender_id) ?? '상대'), text: firstLine(replyTarget) } : null}

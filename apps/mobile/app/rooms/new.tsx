@@ -8,6 +8,7 @@ import { AppText } from '../../components/AppText';
 import { Button } from '../../components/Button';
 import { ChipRow } from '../../components/ChipRow';
 import { TextField } from '../../components/TextField';
+import { useAnnounce } from '../../lib/announce';
 import { dbErrorMessage, isUnreachable, NETWORK_MESSAGE } from '../../lib/dbErrors';
 import { GROUP_MAX, inviteErrorMessage, normalizeInviteCode, RELATIONS, validateGroupTitle, type Relation } from '../../lib/invite';
 import { useSession } from '../../lib/session';
@@ -58,6 +59,7 @@ export default function NewRoom() {
   const [relation, setRelation] = useState<Relation>('친구');
   const [title, setTitle] = useState('');
   const [code, setCode] = useState('');
+  const { say, region } = useAnnounce();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // 만든 초대 코드. 그룹은 방이 먼저 생기므로 방 id도 같이 들고 있다(코드만 실패했을 때 방을 또 만들지 않으려고).
@@ -73,8 +75,8 @@ export default function NewRoom() {
   useEffect(() => {
     if (!madeCode) return;
     focusNode(codeRef.current);
-    AccessibilityInfo.announceForAccessibility(`초대 코드를 만들었어요. ${madeIsGroup ? '72시간 안에 쓸 수 있어요' : '72시간 안에 한 번 쓸 수 있어요'}`);
-  }, [madeCode, madeIsGroup]);
+    say(`초대 코드를 만들었어요. ${madeIsGroup ? '72시간 안에 쓸 수 있어요' : '72시간 안에 한 번 쓸 수 있어요'}`);
+  }, [madeCode, madeIsGroup, say]);
   useEffect(() => {
     if (formFocus > 0) focusNode(formRef.current);
   }, [formFocus]);
@@ -162,6 +164,7 @@ export default function NewRoom() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        {region}
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: space[3], paddingBottom: space[6] }}>
           <View style={{ width: '100%', maxWidth: 560, alignSelf: 'center', gap: space[5] }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[1] }}>

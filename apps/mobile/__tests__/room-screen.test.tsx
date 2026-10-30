@@ -9,6 +9,7 @@ jest.mock('lucide-react-native/icons/info', () => () => null);
 jest.mock('lucide-react-native/icons/send', () => () => null);
 jest.mock('lucide-react-native/icons/ellipsis', () => () => null);
 jest.mock('lucide-react-native/icons/x', () => () => null);
+jest.mock('lucide-react-native/icons/image-plus', () => () => null);
 jest.mock('react-native-safe-area-context', () => ({ SafeAreaView: ({ children }: { children: unknown }) => children }));
 const mockRouter = { push: jest.fn(), back: jest.fn(), replace: jest.fn(), canGoBack: () => true };
 let mockFocused = true;
@@ -44,6 +45,12 @@ jest.mock('../lib/useRoomMessages', () => ({
   useRoomMessages: () => ({ messages: mockMessages, hasMore: mockHasMore, error: false, olderError: mockOlderError, reload: mockReload, loadOlder: mockLoadOlder, send: (...a: unknown[]) => mockSend(...a) }),
 }));
 
+const mockTyping = { label: null as string | null, onDraftChange: jest.fn(), stop: jest.fn() };
+jest.mock('../lib/useTyping', () => ({ useTyping: () => mockTyping }));
+const mockPickImage = jest.fn();
+jest.mock('../lib/images', () => ({ pickAndSendImage: (...a: unknown[]) => mockPickImage(...a), useSignedUrl: (p: string | null) => ({ url: p && !p.includes('pending') && !p.includes('broken') ? `https://img/${p}` : null, failed: !!p && p.includes('broken'), retry: mockRetryPhoto }) }));
+const mockRetryPhoto = jest.fn();
+
 let mockReactionRows: { message_id: number; user_id: string; emoji: string; created_at: string }[] = [];
 const mockToggle = jest.fn();
 jest.mock('../lib/useReactions', () => ({ useReactions: () => ({ rows: mockReactionRows, toggle: (...a: unknown[]) => mockToggle(...a) }) }));
@@ -66,10 +73,16 @@ async function setup() {
 }
 
 beforeEach(() => {
+  jest.replaceProperty(Platform, 'OS', 'android'); // 알림 영역이 그려지는 플랫폼(iOS는 announceForAccessibility)
   mockMessages = [m(1, 'u2', '안녕'), m(2, 'me', '반가워')];
   mockFocused = true;
   mockParams = { id: 'r1' };
   mockSend.mockReset();
+  mockPickImage.mockReset();
+  mockRetryPhoto.mockReset();
+  mockTyping.label = null;
+  mockTyping.onDraftChange.mockReset();
+  mockTyping.stop.mockReset();
   mockLoadOlder.mockReset();
   mockReload.mockReset();
   mockOlderError = false;
@@ -409,7 +422,7 @@ test('읽음 재시도 타이머: 새 타이머 전에 이전 것을 지운다',
 });
 
 // ── T-09b fix round 1 ──
-import { Platform } from 'react-native';
+import { AccessibilityInfo, Platform } from 'react-native';
 
 const keyEv = (key: string, extra: object = {}) => ({ key, preventDefault() {}, stopPropagation() {}, ...extra });
 const bodies = (root: Q) => root.container.queryAll((n) => (n as unknown as N).props.accessibilityHint === '메시지 메뉴 열기') as unknown as N[]; // 화면 위쪽(오래된)부터가 아니라 data 순서: 새 것부터
@@ -574,6 +587,216 @@ test('답장 중이면 입력창 이름에 대상이 들어가고, 취소하면 
   expect(input().props.accessibilityLabel).toBe('메시지 입력');
   const live = textOf(root.container.queryAll((n) => n.props.accessibilityLiveRegion === 'polite')[0] as unknown as TestNode);
   expect(live).toContain('답장 취소됨');
+});
+
+const press2 = (root: Q, label: string) => act(async () => (root.container.queryAll((n) => (n as unknown as N).props.accessibilityLabel === label)[0] as unknown as N).props.onClick({ stopPropagation() {}, nativeEvent: {} }));
+describe('T-09c 입력 중 · 사진 · 멘션', () => {
+  const sel = (n: number) => ({ nativeEvent: { selection: { start: n, end: n } } });
+  const alerts = (root: Q) => root.container.queryAll((n) => (n as unknown as N).props.accessibilityRole === 'alert');
+
+  test('입력 중: 글이 바뀔 때 onDraftChange, 보내면 stop, 입력창을 벗어나면 stop', async () => {
+    mockSend.mockResolvedValue(m(3, 'me', 'hi'));
+    const { type, press, input } = await setup();
+    await type('h');
+    expect(mockTyping.onDraftChange).toHaveBeenLastCalledWith('h');
+    await act(async () => input().props.onBlur());
+    expect(mockTyping.stop).toHaveBeenCalledTimes(1);
+    await press('보내기');
+    expect(mockTyping.stop).toHaveBeenCalledTimes(2);
+  });
+
+  test('입력 중 표시는 입력창 위 polite 영역에 있고, 없을 때도 영역은 남아 있다', async () => {
+    const { root, texts } = await setup();
+    const live = () => root.container.queryAll((n) => n.props.accessibilityLiveRegion === 'polite' && n.props['aria-live'] === 'polite');
+    const before = live().length;
+    expect(texts()).not.toContain('입력 중');
+    mockTyping.label = '민수님이 입력 중';
+    await act(async () => root.render(<Room />));
+    expect(texts()).toContain('민수님이 입력 중');
+    expect(live().length).toBe(before);
+  });
+
+  test('사진 보내기: 고른 뒤 결과별 문구. 취소는 조용히', async () => {
+    const { press, root, texts } = await setup();
+    mockPickImage.mockResolvedValue('cancelled');
+    await press('사진 보내기');
+    expect(mockPickImage).toHaveBeenCalledWith('r1', expect.any(Function), expect.any(Function));
+    expect(alerts(root)).toHaveLength(0);
+    mockPickImage.mockResolvedValue('unsupported');
+    await press('사진 보내기');
+    expect(texts()).toContain('이 형식의 사진은 보낼 수 없어요');
+    mockPickImage.mockResolvedValue('failed');
+    await press('사진 보내기');
+    expect(texts()).toContain('사진을 보내지 못했어요');
+    expect(texts()).not.toContain('이 형식의 사진은 보낼 수 없어요');
+    mockPickImage.mockResolvedValue('sent');
+    await press('사진 보내기');
+    expect(alerts(root)).toHaveLength(0);
+  });
+
+  test('사진 보내기는 useRoomMessages.send로 보낸다(힌트·엔진 없음)', async () => {
+    mockSend.mockResolvedValue(m(9, 'me', ''));
+    mockPickImage.mockImplementation(async (_r: string, send: (x: object) => Promise<unknown>) => (await send({ text: '', image_path: 'r1/a.jpg' }), 'sent'));
+    const { press } = await setup();
+    await press('사진 보내기');
+    expect(mockSend).toHaveBeenCalledWith({ text: '', image_path: 'r1/a.jpg' });
+  });
+
+  test('사진 말풍선: 대체 글이 "보낸 사람이 보낸 사진", 합친 이름에 "사진", 글이 같이 있으면 글도', async () => {
+    mockMessages = [{ ...m(1, 'u2', ''), image_path: 'r1/a.jpg' }, { ...m(2, 'me', '봐봐'), image_path: 'r1/b.jpg' }];
+    const { root } = await setup();
+    const imgs = root.container.queryAll((n) => n.props.source?.uri?.startsWith?.('https://img/'));
+    expect(imgs.map((i) => i.props.accessibilityLabel).sort()).toEqual(['내가 보낸 사진', '민수님이 보낸 사진']);
+    const labels = bodies(root).map((b) => b.props.accessibilityLabel as string);
+    expect(labels.find((l) => l.startsWith('민수, 사진, '))).toBeTruthy();
+    expect(labels.find((l) => l.startsWith('나, 사진, 봐봐, '))).toBeTruthy();
+  });
+
+  test('사진 말풍선: 주소가 오기 전에는 같은 크기의 자리 상자(그림 없음)', async () => {
+    mockMessages = [{ ...m(1, 'u2', ''), image_path: 'r1/pending.jpg' }];
+    const { root } = await setup();
+    expect(root.container.queryAll((n) => n.props.source?.uri)).toHaveLength(0);
+    expect(root.container.queryAll((n) => n.props.accessibilityLabel === '사진 불러오는 중')).toHaveLength(1);
+  });
+
+  test('사진 말풍선: 불러오기 실패는 문구와 다시 불러오기 버튼(탭 순서 안), 누르면 retry', async () => {
+    mockMessages = [{ ...m(1, 'u2', ''), image_path: 'r1/broken.jpg' }];
+    const { root, texts } = await setup();
+    expect(texts()).toContain('사진을 불러오지 못했어요');
+    await press2(root, '사진 다시 불러오기');
+    expect(mockRetryPhoto).toHaveBeenCalledTimes(1);
+  });
+
+  test('사진 보내기: 고르는 동안엔 busy가 아니고 두 번째 누름은 무시, 고른 뒤(onStart)부터 aria-busy, 알림은 "보내는 중" → "보냄"', async () => {
+    let done: (v: string) => void = () => {};
+    let start: () => void = () => {};
+    mockPickImage.mockImplementation((_r: string, _s: unknown, onStart: () => void) => new Promise((r) => ((done = r), (start = onStart))));
+    const { press, root, texts } = await setup();
+    const btn = () => root.container.queryAll((n) => n.props.accessibilityRole === 'button' && n.props.accessibilityLabel === '사진 보내기')[0];
+    await press('사진 보내기');
+    await press('사진 보내기');
+    expect(mockPickImage).toHaveBeenCalledTimes(1);
+    expect(btn().props.accessibilityState?.busy).toBeFalsy();
+    await act(async () => start());
+    expect(btn().props.accessibilityState?.busy).toBe(true);
+    expect(texts()).toContain('사진 보내는 중');
+    await act(async () => done('sent'));
+    expect(texts()).toContain('사진 보냄');
+    expect(btn().props.accessibilityState?.busy).toBeFalsy();
+  });
+
+  test('사진 고르기를 취소해도(onStart 없이 끝나도) 다시 누를 수 있다', async () => {
+    mockPickImage.mockResolvedValue('cancelled');
+    const { press } = await setup();
+    await press('사진 보내기');
+    await press('사진 보내기');
+    expect(mockPickImage).toHaveBeenCalledTimes(2);
+  });
+
+  test('안내 영역(polite)은 화면에 한 번만 그려지고, 입력 중 문구는 say로 그 영역에 들어간다', async () => {
+    const { root, texts } = await setup();
+    const live = () => root.container.queryAll((n) => n.props.accessibilityLiveRegion === 'polite');
+    expect(live()).toHaveLength(1);
+    mockTyping.label = '민수님이 입력 중';
+    await act(async () => root.render(<Room />));
+    expect(live()).toHaveLength(1);
+    expect(texts()).toContain('민수님이 입력 중');
+  });
+
+  test('iOS: 안내는 영역 없이 announceForAccessibility로', async () => {
+    jest.replaceProperty(Platform, 'OS', 'ios');
+    const spy = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {});
+    mockMessages = [m(1, 'u2', '안녕')];
+    const { root } = await setup();
+    mockMessages = [m(1, 'u2', '안녕'), m(2, 'u2', '또')];
+    await act(async () => root.render(<Room />));
+    expect(spy).toHaveBeenCalledWith('민수: 또');
+    expect(root.container.queryAll((n) => n.props.accessibilityLiveRegion === 'polite')).toHaveLength(0);
+  });
+
+  test('사진이 너무 크면 크기 문구', async () => {
+    mockPickImage.mockResolvedValue('toolarge');
+    const { press, texts } = await setup();
+    await press('사진 보내기');
+    expect(texts()).toContain('사진이 너무 커요 (5MB 이하)');
+  });
+
+  test('같은 실패가 연달아도 다시 읽히도록 문구가 달라진다', async () => {
+    mockPickImage.mockResolvedValue('failed');
+    const { press, root } = await setup();
+    const alertText = () => textOf(root.container.queryAll((n) => n.props.accessibilityRole === 'alert')[0] as unknown as TestNode);
+    await press('사진 보내기');
+    const a = alertText();
+    await press('사진 보내기');
+    expect(alertText()).not.toBe(a);
+    expect(alertText().replace('\u200b', '')).toBe(a.replace('\u200b', ''));
+  });
+
+  test('이름이 같은 멤버는 후보에 없다', async () => {
+    mockFetchRoom.mockImplementation(() => okRoom().then((r) => ({ ...r, members: [...r.members, { user_id: 'u3', name: '민수', last_read_at: null, muted: false }] })));
+    const { type, input, root } = await setup();
+    await type('@민');
+    await act(async () => input().props.onSelectionChange(sel(2)));
+    expect(buttons(root, '민수 언급')).toHaveLength(0);
+  });
+
+  test('멘션(그룹): @와 이름 앞글자를 치면 후보가 뜨고, 고르면 이름이 들어가며 입력창으로 포커스', async () => {
+    jest.useFakeTimers();
+    try {
+      const { type, input, press, root } = await setup();
+      await type('@민');
+      await act(async () => input().props.onSelectionChange(sel(2)));
+      expect(buttons(root, '민수 언급')).toHaveLength(1);
+      expect(buttons(root, '나 언급')).toHaveLength(0);
+      await press('민수 언급');
+      expect(input().props.value).toBe('@민수 ');
+      expect(buttons(root, '민수 언급')).toHaveLength(0);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test('멘션: 보낼 때 mentions에 id, 없으면 필드 자체가 없다', async () => {
+    mockSend.mockResolvedValue(m(3, 'me', 'x'));
+    const { type, press } = await setup();
+    await type('@민수 안녕');
+    await press('보내기');
+    expect(mockSend).toHaveBeenCalledWith({ text: '@민수 안녕', mentions: ['u2'] });
+    await type('그냥');
+    await press('보내기');
+    expect(mockSend).toHaveBeenLastCalledWith({ text: '그냥' });
+  });
+
+  test('멘션 실패(mention_not_member): 문구를 고르고 글을 되돌리며, 다시 보내면 같은 멘션', async () => {
+    mockSend.mockRejectedValueOnce(Object.assign(new Error('mention_not_member'), { status: 400 })).mockResolvedValue(m(3, 'me', 'x'));
+    const { type, press, input, texts } = await setup();
+    await type('@민수 안녕');
+    await press('보내기');
+    expect(texts()).toContain('이 방에 없는 사람은 언급할 수 없어요');
+    expect(input().props.value).toBe('@민수 안녕');
+    await press('보내기');
+    expect(mockSend).toHaveBeenLastCalledWith({ text: '@민수 안녕', mentions: ['u2'] });
+  });
+
+  test('1:1 방에서는 멘션 후보도 mentions도 없다', async () => {
+    mockFetchRoom.mockImplementation(() => okRoom().then((r) => ({ ...r, room: { ...r.room, kind: 'direct' } })));
+    mockSend.mockResolvedValue(m(3, 'me', 'x'));
+    const { type, input, press, root } = await setup();
+    await type('@민');
+    await act(async () => input().props.onSelectionChange(sel(2)));
+    expect(buttons(root, '민수 언급')).toHaveLength(0);
+    await type('@민수 안녕');
+    await press('보내기');
+    expect(mockSend).toHaveBeenLastCalledWith({ text: '@민수 안녕' });
+  });
+
+  test('말풍선의 @이름은 굵게, 합친 이름에는 "나를 언급"이 붙는다', async () => {
+    mockMessages = [{ ...m(1, 'u2', '@나 확인'), mentions: ['me'] }];
+    const { root } = await setup();
+    const strong = root.container.queryAll((n) => n.props.children === '@나' && n.props.style);
+    expect(strong.length).toBeGreaterThan(0);
+    expect(bodies(root)[0].props.accessibilityLabel).toMatch(/^민수, @나 확인, .+, 나를 언급$/);
+  });
 });
 
 test('검색에서 온 ?at=: 그 메시지로 이동하고 알린다', async () => {
