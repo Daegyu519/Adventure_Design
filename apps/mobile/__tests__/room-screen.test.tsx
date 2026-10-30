@@ -59,6 +59,9 @@ jest.mock('../lib/useMembers', () => ({
   useMembers: (_id: string, initial: { user_id: string; last_read_at: string | null }[] = []) => initial.map((x) => ({ ...x, last_read_at: x.user_id in mockMembersLastRead ? mockMembersLastRead[x.user_id] : x.last_read_at })),
 }));
 
+const mockFeedback = jest.fn();
+jest.mock('../lib/engine', () => ({ ...jest.requireActual('../lib/engine'), engine: { isMock: true, feedback: (...a: unknown[]) => mockFeedback(...a) } }));
+
 const m = (id: number, sender: string, text: string, ts = '2026-10-27 01:32:17.123456+00'): Msg => ({ id, room_id: 'r1', sender_id: sender, text, image_path: null, reply_to: null, mentions: [], created_at: ts });
 const textOf = (n: TestNode): string => (typeof n === 'string' ? n : n.children.map(textOf).join(''));
 
@@ -78,6 +81,7 @@ beforeEach(() => {
   mockFocused = true;
   mockParams = { id: 'r1' };
   mockSend.mockReset();
+  mockFeedback.mockReset();
   mockPickImage.mockReset();
   mockRetryPhoto.mockReset();
   mockTyping.label = null;
@@ -810,4 +814,119 @@ test('?at= 메시지가 불러온 범위 밖이면 더 불러온다', async () =
   mockHasMore = true;
   await setup();
   expect(mockLoadOlder).toHaveBeenCalled();
+});
+
+// ── T-25: 털어놓기 ──
+const VENT = 'AI에게만 털어놓기';
+const ventInput = (root: Q) => root.container.queryAll((n) => (n as unknown as N).props.accessibilityLabel === '털어놓을 내용')[0] as unknown as N;
+
+test('털어놓기: 내 메시지 메뉴에는 없고 받은 메시지 메뉴에만 있다', async () => {
+  const { root } = await setup();
+  await click(buttons(root, '메시지 메뉴')[0]); // 내 메시지
+  expect(buttons(root, VENT)).toHaveLength(0);
+  expect(buttons(root, '답장')).toHaveLength(1);
+});
+
+test('털어놓기: 사진만 있는 받은 메시지에는 없다', async () => {
+  mockMessages = [{ ...m(1, 'u2', ''), image_path: 'p.jpg' }];
+  const { root } = await setup();
+  await click(buttons(root, '메시지 메뉴')[0]);
+  expect(buttons(root, VENT)).toHaveLength(0);
+});
+
+test('털어놓기: 받은 메시지에서 열고 → 안내 문구 → 남기기가 feedback을 부르고 시트가 닫히며 토스트에 ack, 글은 남지 않는다', async () => {
+  mockFeedback.mockResolvedValue({ ack: '남겨 주셔서 고마워요.' });
+  const { root, texts } = await setup();
+  await click(buttons(root, '메시지 메뉴')[1]);
+  await click(buttons(root, VENT)[0]);
+  expect(buttons(root, '답장')).toHaveLength(0); // 메뉴는 닫힘
+  expect(texts()).toContain('상대에게 직접 보이지 않아요. 누가 남겼는지 드러나지 않도록 해요.');
+  await act(async () => ventInput(root).props.onChangeText('  너무 차가웠어요  '));
+  expect(texts()).toContain('12/1000');
+  await click(buttons(root, '남기기')[0]);
+  expect(mockFeedback).toHaveBeenCalledWith({ room_id: 'r1', message_id: 1, text: '너무 차가웠어요' });
+  expect(ventInput(root)).toBeUndefined();
+  expect(texts()).toContain('남겨 주셔서 고마워요.');
+  expect(texts()).not.toContain('너무 차가웠어요');
+  await click(buttons(root, '남겨 주셔서 고마워요. 닫기')[0]);
+  expect(buttons(root, '남겨 주셔서 고마워요. 닫기')).toHaveLength(0); // 토스트가 사라짐(읽어 주는 영역의 글은 남는다)
+});
+
+test('털어놓기: 빈 글은 보내지 않고, 실패는 고정 문구(서버 글 없음), 다시 열면 글이 비어 있다', async () => {
+  const { EngineError } = jest.requireActual('../lib/engine');
+  mockFeedback.mockRejectedValue(new EngineError(429, 'secret server text'));
+  const { root, texts } = await setup();
+  await click(buttons(root, '메시지 메뉴')[1]);
+  await click(buttons(root, VENT)[0]);
+  await click(buttons(root, '남기기')[0]);
+  expect(mockFeedback).not.toHaveBeenCalled();
+  expect(texts()).toContain('적어 주세요');
+  await act(async () => ventInput(root).props.onChangeText('힘들어요'));
+  await click(buttons(root, '남기기')[0]);
+  expect(texts()).toContain('잠시 뒤 다시 남겨 주세요');
+  expect(texts()).not.toContain('secret server text');
+  await click(buttons(root, '닫기')[0]);
+  await click(buttons(root, '메시지 메뉴')[1]);
+  await click(buttons(root, VENT)[0]);
+  expect(ventInput(root).props.value).toBe('');
+});
+
+// ── T-25 fix round 1 ──
+const nodeWith = (root: Q, f: (p: Record<string, any>) => boolean) => root.container.queryAll((n) => f((n as unknown as N).props)) as unknown as N[];
+
+test('털어놓기: 입력창이 안내 문구와 인용을 aria-describedby로 가리킨다', async () => {
+  const { root } = await setup();
+  await click(buttons(root, '메시지 메뉴')[1]);
+  await click(buttons(root, VENT)[0]);
+  const ids = String(ventInput(root).props['aria-describedby']).split(' ');
+  expect(ids).toEqual(['vent-help', 'vent-quote']);
+  for (const id of ids) expect(nodeWith(root, (p) => p.nativeID === id)).not.toHaveLength(0);
+  expect(ventInput(root).props.accessibilityHint).toContain('상대에게');
+});
+
+test('털어놓기: 닫으면 그 메시지가 로빙 탭 순서(tabIndex 0)가 된다 — 닫기·남기기 모두', async () => {
+  jest.replaceProperty(Platform, 'OS', 'web');
+  mockFeedback.mockResolvedValue({ ack: 'ok' });
+  const { root } = await setup();
+  const tab = () => nodeWith(root, (p) => p.nativeID === 'msg-body-1')[0].props.tabIndex;
+  expect(tab()).toBe(-1); // 기본 활성은 가장 새 메시지
+  await click(buttons(root, '메시지 메뉴')[1]);
+  await click(buttons(root, VENT)[0]);
+  await click(buttons(root, '닫기')[0]);
+  expect(tab()).toBe(0);
+  await click(nodeWith(root, (p) => p.nativeID === 'msg-body-2')[0]); // 활성 옮기기
+  await click(buttons(root, '메시지 메뉴')[1]);
+  await click(buttons(root, VENT)[0]);
+  await act(async () => ventInput(root).props.onChangeText('x'));
+  await click(buttons(root, '남기기')[0]);
+  expect(tab()).toBe(0);
+});
+
+test('토스트는 탭 정류장이 아니다(눌러 닫기만)', async () => {
+  mockFeedback.mockResolvedValue({ ack: '고마워요' });
+  const { root } = await setup();
+  await click(buttons(root, '메시지 메뉴')[1]);
+  await click(buttons(root, VENT)[0]);
+  await act(async () => ventInput(root).props.onChangeText('x'));
+  await click(buttons(root, '남기기')[0]);
+  const toast = buttons(root, '고마워요 닫기')[0];
+  expect(toast.props.tabIndex).toBe(-1);
+  expect(toast.props.focusable).toBe(false);
+});
+
+test('털어놓기: 같은 틱에 남기기를 두 번 눌러도 한 번만 보내고 "보내는 중"을 읽어 준다', async () => {
+  let done!: (v: { ack: string }) => void;
+  mockFeedback.mockReturnValue(new Promise((r) => (done = r)));
+  const { root, texts } = await setup();
+  await click(buttons(root, '메시지 메뉴')[1]);
+  await click(buttons(root, VENT)[0]);
+  await act(async () => ventInput(root).props.onChangeText('x'));
+  const send = buttons(root, '남기기')[0];
+  await act(async () => {
+    send.props.onClick({ stopPropagation() {}, nativeEvent: {} });
+    send.props.onClick({ stopPropagation() {}, nativeEvent: {} });
+  });
+  expect(mockFeedback).toHaveBeenCalledTimes(1);
+  expect(texts()).toContain('보내는 중');
+  await act(async () => done({ ack: 'ok' }));
 });

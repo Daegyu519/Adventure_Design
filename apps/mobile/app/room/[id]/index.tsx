@@ -9,6 +9,9 @@ import { AppText } from '../../../components/AppText';
 import { Bubble, firstLine } from '../../../components/Bubble';
 import { Composer, type InputHandle } from '../../../components/Composer';
 import { MessageActions } from '../../../components/MessageActions';
+import { Toast } from '../../../components/Toast';
+import { VentSheet } from '../../../components/VentSheet';
+import { canVent } from '../../../lib/vent';
 import { Button } from '../../../components/Button';
 import { IconButton } from '../../../components/IconButton';
 import { pickAndSendImage } from '../../../lib/images';
@@ -76,6 +79,9 @@ function RoomBody({ id, me }: { id: string; me: string }) {
   const listRef = useRef<FlatList<Msg>>(null);
   const retryFocus = useRef(false); // 포커스가 있던 "다시 불러오기" 줄이 사라지면 입력창으로 옮긴다(웹 키보드가 body로 떨어지지 않게)
   const [menuFor, setMenuFor] = useState<Msg | null>(null);
+  const [ventFor, setVentFor] = useState<Msg | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+  const hideToast = useCallback(() => setToast(null), []);
   const [replyTarget, setReplyTarget] = useState<Msg | null>(null);
   const [extra, setExtra] = useState<Map<number, Msg>>(new Map()); // 불러온 범위 밖 원문(인용용). 목록에는 넣지 않는다
   const asked = useRef(new Set<number>());
@@ -272,8 +278,16 @@ function RoomBody({ id, me }: { id: string; me: string }) {
 
   // 웹: 메시지 본문으로 포커스를 옮긴다(가상화된 목록이라 그려진 뒤에).
   const focusItem = useCallback((id: number) => {
+    setActiveId(id); // 로빙 tabindex: 포커스를 받은 메시지가 탭 순서에 있어야 Tab이 거기서 이어진다
     if (Platform.OS !== 'web' || typeof document === 'undefined') return;
-    setTimeout(() => document.getElementById(`msg-body-${id}`)?.focus(), 60);
+    // Modal이 닫히며 자기 포커스 복원을 끝낸 뒤에 옮긴다: 목표에 닿을 때까지 몇 번 다시 시도(고정 지연 한 번에 기대지 않는다).
+    let tries = 0;
+    const step = () => {
+      const el = document.getElementById(`msg-body-${id}`);
+      el?.focus();
+      if (document.activeElement !== el && ++tries < 10) setTimeout(step, 50);
+    };
+    setTimeout(step, 30);
   }, []);
   const scrollTo = useCallback((index: number) => {
     try {
@@ -470,11 +484,34 @@ function RoomBody({ id, me }: { id: string; me: string }) {
           }
           setMenuFor(null);
         }}
+        onVent={
+          menuFor && canVent(menuFor, me)
+            ? () => {
+                setVentFor(menuFor);
+                setMenuFor(null);
+              }
+            : undefined
+        }
         onReact={(e) => {
           if (menuFor) toggleReaction(menuFor.id, e);
           setMenuFor(null);
         }}
       />
+      <VentSheet
+        visible={ventFor !== null}
+        say={say}
+        roomId={id}
+        message={ventFor}
+        onClose={() => {
+          if (ventFor) focusItem(ventFor.id); // 닫으면 포커스는 그 메시지로(body로 떨어지지 않게)
+          setVentFor(null);
+        }}
+        onDone={(ack) => {
+          setToast(ack);
+          say(ack);
+        }}
+      />
+      <Toast message={toast} onHide={hideToast} />
     </SafeAreaView>
   );
 }
