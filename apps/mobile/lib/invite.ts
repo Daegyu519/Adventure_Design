@@ -1,5 +1,5 @@
 import type { Checked } from './auth';
-import { dbErrorMessage } from './dbErrors';
+import { dbErrorMessage, isUnreachable, NETWORK_MESSAGE } from './dbErrors';
 
 // rooms.relation·invites.relation의 check 값. 생성된 db.ts는 check 제약을 string으로만 주므로 값 목록은 여기 한 곳에 두고,
 // 마이그레이션 SQL과 어긋나면 __tests__/invite.test.ts가 깨진다.
@@ -24,4 +24,18 @@ export function validateGroupTitle(s: string): Checked {
   if (n === 0) return { ok: false, message: '방 이름을 적어 주세요' };
   if (n > 30) return { ok: false, message: '30자까지 쓸 수 있어요' };
   return { ok: true, value };
+}
+
+// 그룹 방의 초대 코드를 만든다(rooms/new.tsx의 create_invite 호출과 같은 모양). 성공이면 코드, 아니면 화면에 낼 고정 문구만.
+// 서버에 닿지 못했거나(상태 0·5xx·던짐) 응답이 이상하면 코드 탓을 하지 않는다.
+export async function createGroupInvite(
+  rpc: PromiseLike<{ data: unknown; error: { message: string } | null; status: number }>,
+): Promise<{ ok: true; code: string } | { ok: false; message: string }> {
+  try {
+    const { data, error, status } = await rpc;
+    if (error || typeof data !== 'string' || !data) return { ok: false, message: isUnreachable(status) ? NETWORK_MESSAGE : dbErrorMessage(error, '코드를 만들지 못했어요. 잠시 뒤 다시 해 주세요.') };
+    return { ok: true, code: data };
+  } catch {
+    return { ok: false, message: NETWORK_MESSAGE };
+  }
 }

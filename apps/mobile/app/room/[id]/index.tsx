@@ -317,6 +317,15 @@ function RoomBody({ id, me }: { id: string; me: string }) {
     stepJump();
   }, [stepJump]);
 
+  // 방 안 검색에서 온 이동(?at=<메시지 id>): 인용 이동과 같은 길(불러오며 찾기 → 활성·포커스·안내)을 쓴다. k는 같은 결과를 다시 눌러도 다시 움직이게 하는 값.
+  const { at, k } = useLocalSearchParams<{ at?: string; k?: string }>();
+  const loaded = messages.length > 0;
+  useEffect(() => {
+    const target = Number(at);
+    if (at && loaded && Number.isInteger(target)) goTo(target);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 주소의 at·k가 바뀔 때(와 처음 불러왔을 때)만
+  }, [at, k, loaded]);
+
   const quotedName = (x: Msg) => {
     const q = x.reply_to === null ? null : (byId.get(x.reply_to) ?? extra.get(x.reply_to));
     return q ? (q.sender_id === me ? '나' : names.get(q.sender_id)) : undefined;

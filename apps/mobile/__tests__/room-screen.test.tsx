@@ -13,7 +13,8 @@ jest.mock('lucide-react-native/icons/image-plus', () => () => null);
 jest.mock('react-native-safe-area-context', () => ({ SafeAreaView: ({ children }: { children: unknown }) => children }));
 const mockRouter = { push: jest.fn(), back: jest.fn(), replace: jest.fn(), canGoBack: () => true };
 let mockFocused = true;
-jest.mock('expo-router', () => ({ useRouter: () => mockRouter, useLocalSearchParams: () => ({ id: 'r1' }), useIsFocused: () => mockFocused }));
+let mockParams: Record<string, string> = { id: 'r1' };
+jest.mock('expo-router', () => ({ useRouter: () => mockRouter, useLocalSearchParams: () => mockParams, useIsFocused: () => mockFocused }));
 jest.mock('../lib/session', () => ({ useSession: () => ({ userId: 'me' }) }));
 const mockFrom = jest.fn();
 jest.mock('../lib/supabase', () => ({ supabase: { from: (...a: unknown[]) => mockFrom(...a) } }));
@@ -74,6 +75,7 @@ async function setup() {
 beforeEach(() => {
   mockMessages = [m(1, 'u2', '안녕'), m(2, 'me', '반가워')];
   mockFocused = true;
+  mockParams = { id: 'r1' };
   mockSend.mockReset();
   mockPickImage.mockReset();
   mockRetryPhoto.mockReset();
@@ -762,4 +764,15 @@ describe('T-09c 입력 중 · 사진 · 멘션', () => {
     expect(strong.length).toBeGreaterThan(0);
     expect(bodies(root)[0].props.accessibilityLabel).toMatch(/^민수, @나 확인, .+, 나를 언급$/);
   });
+test('검색에서 온 ?at=: 그 메시지로 이동하고 알린다', async () => {
+  mockParams = { id: 'r1', at: '1', k: '1' };
+  const { texts } = await setup();
+  expect(texts()).toContain('원문으로 이동했어요');
+});
+
+test('?at= 메시지가 불러온 범위 밖이면 더 불러온다', async () => {
+  mockParams = { id: 'r1', at: '99', k: '1' };
+  mockHasMore = true;
+  await setup();
+  expect(mockLoadOlder).toHaveBeenCalled();
 });
