@@ -19,6 +19,7 @@ export type MirrorAnswerRes = paths['/v1/mirror/answer']['post']['responses'][20
 /** status: HTTP 상태. 0 = 네트워크 오류 · 시간 초과, 401 = 로그인 토큰 없음. 호출자가 끊으면 EngineError가 아니라 AbortError다. */
 export class EngineError extends Error {
   status: number;
+  retryAfterMs?: number; // 429의 Retry-After(초)를 ms로
   constructor(status: number, message = `engine error ${status}`) {
     super(message);
     this.name = 'EngineError';
@@ -74,7 +75,12 @@ export function createEngine(o: {
         body: body === undefined ? undefined : JSON.stringify(body),
         signal: ctrl.signal,
       });
-      if (!res.ok) throw new EngineError(res.status);
+      if (!res.ok) {
+        const err = new EngineError(res.status);
+        const ra = Number(res.headers?.get?.('Retry-After'));
+        if (res.status === 429 && Number.isFinite(ra) && ra >= 0) err.retryAfterMs = ra * 1000;
+        throw err;
+      }
       return (await res.json()) as T;
     } catch (e) {
       if (caller?.aborted) throw abortError();

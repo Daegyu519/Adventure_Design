@@ -6,7 +6,9 @@ import { Platform, TextInput, View } from 'react-native';
 
 import { shouldSubmitOnKey } from '../lib/composer';
 import { focusRing, useTheme } from '../lib/theme';
+import type { Hint } from '../lib/hintScheduler';
 import { AppText } from './AppText';
+import { HintBar } from './HintBar';
 import { IconButton } from './IconButton';
 import { MAX_SHOWN, MENTION_LIST_ID, MentionPicker, mentionOptionId } from './MentionPicker';
 import type { Member } from '../lib/rooms';
@@ -30,9 +32,12 @@ type Props = {
   selection?: { start: number; end: number }; // 멘션을 넣은 뒤 커서를 옮길 때만
   onBlur?(): void;
   say?(t: string): void; // 화면의 useAnnounce().say: 입력 중·멘션 후보 수 안내
+  hint?: Hint | null; // 입력 중 힌트(보낸 사람에게만). 입력창 바로 위, 보내기를 막지 않는다
+  onDismissHint?(): void;
+  onOpenHintDetail?(): void; // T-22가 넘긴다
   photoBusy?: boolean; // 사진을 올리는 중: 사진 버튼이 aria-busy(진짜 disabled 아님)
 };
-export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, inputRef, onPickImage, typingLabel, mentionCandidates, onSelectMention, onSelectionChange, selection, onBlur, photoBusy, say }: Props) {
+export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, inputRef, onPickImage, typingLabel, mentionCandidates, onSelectMention, onSelectionChange, selection, onBlur, photoBusy, say, hint, onDismissHint, onOpenHintDetail }: Props) {
   const { colors, radius, space, font } = useTheme();
   const own = useRef<InputHandle>(null);
   const ref = inputRef ?? own;
@@ -66,6 +71,11 @@ export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, 
   useEffect(() => {
     if (mentionSay) say?.(mentionSay);
   }, [mentionSay, say]);
+  // 힌트는 나타나거나 제목이 바뀔 때 한 번만 읽는다(디바운스마다 읽지 않는다).
+  const hintTitle = hint?.title ?? null;
+  useEffect(() => {
+    if (hintTitle) say?.(`힌트: ${hintTitle}`);
+  }, [hintTitle, say]);
   const choose = (name: string) => {
     onSelectMention?.(name);
     ref.current?.focus(); // 목록이 사라져도 포커스가 body로 떨어지지 않게
@@ -93,6 +103,7 @@ export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, 
           />
         </View>
       )}
+      {hint ? <HintBar hint={hint} onDismiss={() => { onDismissHint?.(); ref.current?.focus(); }} onOpenDetail={onOpenHintDetail} /> : null}
       <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: space[1], paddingHorizontal: space[3], paddingVertical: space[1] }}>
         {onPickImage ? <IconButton icon={ImagePlus} label="사진 보내기" onPress={onPickImage} busy={photoBusy} disabled={photoBusy} /> : null}
         <TextInput

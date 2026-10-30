@@ -213,3 +213,14 @@ test.each([
   expect(s.hints_by_week.at(-1)?.week).toBe(lastWeek);
   expect(s.hints_by_week).toHaveLength(5);
 });
+
+test('429 carries Retry-After as retryAfterMs; other statuses do not', async () => {
+  const h = (v: string | null) => ({ get: () => v });
+  const f429 = jest.fn(async () => ({ ok: false, status: 429, headers: h('3'), json: async () => ({}) }) as unknown as Response);
+  const e = await real(f429).hint({ room_id: R, text: 'a', seq: 1 }).catch((x) => x);
+  expect(e).toBeInstanceOf(EngineError);
+  expect(e.status).toBe(429);
+  expect(e.retryAfterMs).toBe(3000);
+  const f503 = jest.fn(async () => ({ ok: false, status: 503, headers: h('3'), json: async () => ({}) }) as unknown as Response);
+  expect((await real(f503).hint({ room_id: R, text: 'a', seq: 1 }).catch((x) => x)).retryAfterMs).toBeUndefined();
+});
