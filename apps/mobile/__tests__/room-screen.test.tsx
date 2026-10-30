@@ -9,6 +9,7 @@ jest.mock('lucide-react-native/icons/info', () => () => null);
 jest.mock('lucide-react-native/icons/send', () => () => null);
 jest.mock('lucide-react-native/icons/ellipsis', () => () => null);
 jest.mock('lucide-react-native/icons/x', () => () => null);
+jest.mock('lucide-react-native/icons/check', () => () => null);
 jest.mock('lucide-react-native/icons/image-plus', () => () => null);
 jest.mock('react-native-safe-area-context', () => ({ SafeAreaView: ({ children }: { children: unknown }) => children }));
 const mockRouter = { push: jest.fn(), back: jest.fn(), replace: jest.fn(), canGoBack: () => true };
@@ -60,7 +61,15 @@ jest.mock('../lib/useMembers', () => ({
 }));
 
 const mockFeedback = jest.fn();
-jest.mock('../lib/engine', () => ({ ...jest.requireActual('../lib/engine'), engine: { isMock: true, feedback: (...a: unknown[]) => mockFeedback(...a) } }));
+const mockDetail = jest.fn();
+jest.mock('../lib/engine', () => ({ ...jest.requireActual('../lib/engine'), engine: { isMock: true, feedback: (...a: unknown[]) => mockFeedback(...a), detail: (...a: unknown[]) => mockDetail(...a) } }));
+// 힌트는 화면 밖(useToneHint)에서 만들어진다. 여기서는 떠 있는 힌트와 그 호출만 본다(T-22).
+let mockHint: { title: string; detail: string } | null = null;
+const mockToneInput = jest.fn();
+const mockToneSent = jest.fn();
+jest.mock('../lib/useToneHint', () => ({ useToneHint: () => ({ hint: mockHint, input: (...a: unknown[]) => mockToneInput(...a), dismiss: jest.fn(), sent: () => mockToneSent() }) }));
+const mockLogTone = jest.fn();
+jest.mock('../lib/toneEvents', () => ({ logToneEvent: (...a: unknown[]) => mockLogTone(...a) }));
 
 const m = (id: number, sender: string, text: string, ts = '2026-10-27 01:32:17.123456+00'): Msg => ({ id, room_id: 'r1', sender_id: sender, text, image_path: null, reply_to: null, mentions: [], created_at: ts });
 const textOf = (n: TestNode): string => (typeof n === 'string' ? n : n.children.map(textOf).join(''));
@@ -82,6 +91,11 @@ beforeEach(() => {
   mockParams = { id: 'r1' };
   mockSend.mockReset();
   mockFeedback.mockReset();
+  mockDetail.mockReset();
+  mockHint = null;
+  mockToneInput.mockReset();
+  mockToneSent.mockReset();
+  mockLogTone.mockReset();
   mockPickImage.mockReset();
   mockRetryPhoto.mockReset();
   mockTyping.label = null;
@@ -929,4 +943,61 @@ test('털어놓기: 같은 틱에 남기기를 두 번 눌러도 한 번만 보�
   expect(mockFeedback).toHaveBeenCalledTimes(1);
   expect(texts()).toContain('보내는 중');
   await act(async () => done({ ack: 'ok' }));
+});
+
+// ── T-22: 살펴보기 시트 ──
+const DETAIL_RES = {
+  alert: true,
+  top_reading: '차갑게',
+  readings: { 차갑게: '자주', 성의없게: '가끔', 화나게: '드물어요', 무난하게: '가끔', 따뜻하게: '드물어요' },
+  why: ['이유 없이 짧게 끊으면 차갑게 읽힐 수도 있어요'],
+  options: [{ label: '조금만 바꾼 문장', text: '지금은 어려워요.', keep: ['뜻'], change: ['이유'] }],
+  mismatch: null,
+  footnote: '틀릴 수도 있어요.',
+  trace_id: '11111111-1111-4111-8111-111111111111',
+};
+async function openDetail() {
+  mockHint = { title: '차갑게 느껴질 수도 있어요', detail: 'd' };
+  mockDetail.mockResolvedValue(DETAIL_RES);
+  const s = await setup();
+  await s.type('  안 돼요.  ');
+  await s.press('살펴보기');
+  return s;
+}
+const applyBtn = (root: Q) => root.container.queryAll((n) => String((n as unknown as N).props.accessibilityLabel).startsWith('입력창에 적용'))[0] as unknown as N;
+
+test('살펴보기: 힌트의 버튼으로 열면 입력창 글(다듬은)로 detail을 부른다', async () => {
+  await openDetail();
+  expect(mockDetail.mock.calls[0][0]).toEqual({ room_id: 'r1', text: '안 돼요.' });
+});
+
+test('살펴보기: 입력창에 적용 → 입력창 글이 바뀌고 힌트를 다시 확인하며 option_chosen(A)을 기록, 시트가 닫히고 보내지 않는다', async () => {
+  const { root, input } = await openDetail();
+  await click(applyBtn(root));
+  expect(input().props.value).toBe('지금은 어려워요.');
+  expect(mockToneInput).toHaveBeenLastCalledWith('지금은 어려워요.');
+  expect(mockLogTone).toHaveBeenCalledWith({ room_id: 'r1', kind: 'option_chosen', choice: 'A', top_reading: '차갑게', signals: { trace_id: DETAIL_RES.trace_id } });
+  expect(mockSend).not.toHaveBeenCalled();
+  expect(buttons(root, '그대로 보낼게요')).toHaveLength(0);
+  expect(JSON.stringify(mockLogTone.mock.calls)).not.toContain('어려워요'); // 글은 기록하지 않는다
+});
+
+test('살펴보기: 그대로 보낼게요 → original 기록 + 지금 글을 바로 보낸다', async () => {
+  const { root } = await openDetail();
+  await click(buttons(root, '그대로 보낼게요')[0]);
+  expect(mockLogTone).toHaveBeenCalledWith({ room_id: 'r1', kind: 'option_chosen', choice: 'original', top_reading: '차갑게', signals: { trace_id: DETAIL_RES.trace_id } });
+  expect(mockSend).toHaveBeenCalledWith({ text: '안 돼요.' });
+  expect(mockToneSent).toHaveBeenCalled();
+  expect(buttons(root, '그대로 보낼게요')).toHaveLength(0);
+});
+
+test('살펴보기: 모르는 label이면 적용만 하고 option_chosen은 기록하지 않는다', async () => {
+  mockHint = { title: 't', detail: 'd' };
+  mockDetail.mockResolvedValue({ ...DETAIL_RES, options: [{ label: '다른 문장', text: '새 글', keep: [], change: [] }] });
+  const { root, input, type, press } = await setup();
+  await type('안 돼요.');
+  await press('살펴보기');
+  await click(applyBtn(root));
+  expect(input().props.value).toBe('새 글');
+  expect(mockLogTone).not.toHaveBeenCalled();
 });

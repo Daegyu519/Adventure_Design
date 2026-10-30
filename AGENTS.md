@@ -36,7 +36,7 @@
 
 (단계 0의 14개에는 이 문서를 만든 P-03이 들어 있다.)
 
-검사 기준치(`scripts/check`, 병합된 main, 2026-10-30): 엔진 pytest 515 passed, 1 skipped · 앱 jest 513 passed(47 suites) · supabase(PGlite) 24 pass · tsc·lint 0 · 대비 OK.
+검사 기준치(`scripts/check`, 병합된 main, 2026-10-30): 엔진 pytest 516 passed, 1 skipped · 앱 jest 564 passed(53 suites) · supabase(PGlite) 24 pass · tsc·lint 0 · 대비 OK.
 
 영역별:
 
@@ -50,9 +50,9 @@
 
 | 작업 | 브랜치 | 상태 |
 |---|---|---|
-| (없음) | | |
+| T-22 살펴보기 시트 | `t22-detail-ui` | 진행 중 (`components/DetailSheet.tsx` 새로, 대화방에 연결) |
 
-Claude가 다음으로 T-22(살펴보기 시트)를 잡는다 — 잡으면 브랜치를 바로 올리고 이 표에 적는다. T-22는 `components/HintBar.tsx`(살펴보기 버튼)와 새 시트를 고친다. 보류(paused): 없음.
+보류(paused): 없음.
 
 ## 4. 다음 순서
 
