@@ -514,7 +514,6 @@ function RoomBody({ id, me }: { id: string; me: string }) {
       />
       <VentSheet
         visible={ventFor !== null}
-        say={say}
         roomId={id}
         message={ventFor}
         onClose={() => {
@@ -532,7 +531,6 @@ function RoomBody({ id, me }: { id: string; me: string }) {
         text={detailText ?? ''}
         hintTitle={toneHint?.title ?? null}
         replyTo={replyTarget?.id ?? null}
-        say={say}
         onClose={closeDetail}
         onApply={({ text, choice, topReading, traceId }) => {
           changeDraft(text);

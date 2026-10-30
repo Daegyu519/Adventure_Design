@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppText } from '../../components/AppText';
 import { Button } from '../../components/Button';
 import { FocusBox } from '../../components/mirror/parts';
+import { useAnnounce } from '../../lib/announce';
 import { PredictCard } from '../../components/mirror/PredictCard';
 import { ReceiveCard } from '../../components/mirror/ReceiveCard';
 import { RoleplayCard } from '../../components/mirror/RoleplayCard';
@@ -13,10 +14,12 @@ import type { Card } from '../../lib/mirror';
 import { useTheme } from '../../lib/theme';
 
 // 다시 받은 뒤에는 포커스를 카드 묶음으로 옮긴다(누르던 버튼이 사라지므로). 처음 열 때는 옮기지 않는다.
-function CardList({ children, focusOnMount }: { children: ReactNode; focusOnMount: boolean }) {
+function CardList({ children, focusOnMount, say }: { children: ReactNode; focusOnMount: boolean; say(t: string): void }) {
   const { space } = useTheme();
   return focusOnMount ? (
-    <FocusBox label="오늘의 카드">{children}</FocusBox>
+    <FocusBox label="오늘의 카드" say={say}>
+      {children}
+    </FocusBox>
   ) : (
     <View style={{ gap: space[3] }}>{children}</View>
   );
@@ -32,6 +35,7 @@ export default function Mirror() {
   const [loading, setLoading] = useState(true);
   const [attempt, setAttempt] = useState(0); // 다시 시도·카드 새로 받기만 올린다. 포커스로는 다시 받지 않는다
   const [done, setDone] = useState<Set<string>>(new Set());
+  const { say, region } = useAnnounce(); // 영역은 화면에 하나: 카드·결과 상자는 이 say를 받는다
 
   useEffect(() => {
     let alive = true;
@@ -64,6 +68,7 @@ export default function Mirror() {
           <AppText accessibilityRole="header" aria-level={1} variant="title">
             거울
           </AppText>
+          {region}
           {failed && (
             <View style={{ gap: space[3], alignItems: 'flex-start' }}>
               <AppText accessibilityRole="alert">지금은 카드를 불러오지 못했어요. 잠시 뒤 다시 해 주세요.</AppText>
@@ -75,10 +80,10 @@ export default function Mirror() {
           ) : (
             <>
               <AppText variant="small" color="textMuted">{`오늘 푼 카드 ${done.size} / ${cards.length}`}</AppText>
-              <CardList key={attempt} focusOnMount={attempt > 0}>
+              <CardList key={attempt} focusOnMount={attempt > 0} say={say}>
                 {cards.map((c) => {
                   const Body = CARD[c.kind];
-                  return <Body key={c.card_id} card={c} onRefresh={retry} onDone={() => setDone((d) => new Set(d).add(c.card_id))} />;
+                  return <Body key={c.card_id} card={c} say={say} onRefresh={retry} onDone={() => setDone((d) => new Set(d).add(c.card_id))} />;
                 })}
               </CardList>
               {/* 마무리는 늘 있는 polite 자리에 글만 채운다. 포커스를 가져오거나 alert로 마지막 카드 결과를 덮지 않는다. */}

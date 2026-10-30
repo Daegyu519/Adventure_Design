@@ -20,7 +20,6 @@ type Props = {
   text: string;
   replyTo: number | null;
   hintTitle: string | null; // 입력창 위 힌트 제목. 없으면 기본 제목
-  say(t: string): void; // 화면의 useAnnounce().say
   onClose(): void;
   onApply(p: Apply): void;
   onSendAsIs(p: { topReading: string | null; traceId: string | null }): void;
@@ -29,7 +28,8 @@ type Props = {
 // 칩을 바꾼 뒤 읽어 주는 말: 어긋남 한 줄(엔진 글 그대로) + 후보가 있는지
 const changed = (r: DetailRes) => `${r.mismatch ? `${r.mismatch}. ` : ''}${r.options.length ? '후보를 바꿨어요' : '후보가 없어요'}`;
 
-function DetailBody({ roomId, text, replyTo, hintTitle, say, onApply, onSendAsIs }: Omit<Props, 'visible' | 'onClose'>) {
+// say: 시트 자기 안내 영역(Sheet). 웹 Modal이 열린 동안 화면 쪽 영역은 가려진다.
+function DetailBody({ roomId, text, replyTo, hintTitle, say, onApply, onSendAsIs }: Omit<Props, 'visible' | 'onClose'> & { say(t: string): void }) {
   const { colors, radius, space } = useTheme();
   const { height } = useWindowDimensions();
   const [intent, setIntent] = useState<Intent | null>(null);
@@ -192,7 +192,7 @@ function DetailBody({ roomId, text, replyTo, hintTitle, say, onApply, onSendAsIs
 export function DetailSheet({ visible, onClose, ...rest }: Props) {
   return (
     <Sheet visible={visible} onClose={onClose} title="살펴보기" initialFocus="detail-text">
-      {visible ? <DetailBody {...rest} /> : null}
+      {(say) => (visible ? <DetailBody {...rest} say={say} /> : null)}
     </Sheet>
   );
 }

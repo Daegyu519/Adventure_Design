@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Animated, Modal, Platform, Pressable, View } from 'react-native';
 
+import { useAnnounce } from '../lib/announce';
 import { MOTION_MS, useReducedMotion } from '../lib/motion';
 import { focusRing, useTheme } from '../lib/theme';
 import { AppText } from './AppText';
@@ -8,9 +9,12 @@ import { Button } from './Button';
 
 // 아래에서 올라오는 시트. 배경(colors.text + opacity 0.4)을 누르면 닫힘, Android 뒤로·웹 Esc도 onRequestClose로 닫힌다.
 // 웹의 Modal은 포커스를 안에 가두고 닫을 때 원래 자리로 돌려준다.
-export function Sheet({ visible, onClose, title, children, initialFocus }: { visible: boolean; onClose(): void; title?: string; children: ReactNode; initialFocus?: string }) {
+// 시트 안 안내는 시트 자기 영역으로: children을 함수로 주면 시트의 say를 받는다(aria-modal 밖인 화면 영역은 웹에서 가려진다).
+type Say = (t: string) => void;
+export function Sheet({ visible, onClose, title, children, initialFocus }: { visible: boolean; onClose(): void; title?: string; children: ReactNode | ((say: Say) => ReactNode); initialFocus?: string }) {
   const { colors, radius, space } = useTheme();
   const reduced = useReducedMotion();
+  const { say, region } = useAnnounce();
   const [t] = useState(() => new Animated.Value(0));
   useEffect(() => {
     if (!visible) return;
@@ -53,12 +57,13 @@ export function Sheet({ visible, onClose, title, children, initialFocus }: { vis
             gap: space[2],
           }}
         >
+          {region}
           {title ? (
             <AppText accessibilityRole="header" weight="600">
               {title}
             </AppText>
           ) : null}
-          {children}
+          {typeof children === 'function' ? children(say) : children}
           <Button label="닫기" kind="ghost" onPress={onClose} />
         </Animated.View>
       </View>

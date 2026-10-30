@@ -945,6 +945,9 @@ test('털어놓기: 같은 틱에 남기기를 두 번 눌러도 한 번만 보�
   });
   expect(mockFeedback).toHaveBeenCalledTimes(1);
   expect(texts()).toContain('보내는 중');
+  // 시트가 열린 동안 웹은 Modal 밖 화면 영역을 가린다: "보내는 중"은 시트(dialog) 안의 영역에 있어야 한다(AI-2)
+  const sheet = root.container.queryAll((n) => n.props.role === 'dialog' && n.props['aria-label'] === 'AI에게만 털어놓기')[0];
+  expect(sheet.queryAll((n) => n.props.accessibilityLiveRegion === 'polite').map((n) => textOf(n as unknown as TestNode)).join('|')).toContain('보내는 중');
   await act(async () => done({ ack: 'ok' }));
 });
 

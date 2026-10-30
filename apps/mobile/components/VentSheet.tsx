@@ -16,7 +16,7 @@ const HELP = '상대에게 직접 보이지 않아요. 누가 남겼는지 드�
 
 function VentForm(p: { say(t: string): void; roomId: string; message: Msg; onClose(): void; onDone(ack: string): void }) {
   const { colors, radius, space, font } = useTheme();
-  const { say } = p; // 대화방의 useAnnounce().say(자기 region이 없으면 웹·안드로이드에서 안 읽힌다)
+  const { say } = p; // 시트 자기 안내 영역(Sheet). 웹 Modal이 열린 동안 화면 쪽 영역은 가려진다
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -94,10 +94,10 @@ function VentForm(p: { say(t: string): void; roomId: string; message: Msg; onClo
 }
 
 // Sheet(Modal)의 자식은 닫히면 사라지므로 글·오류가 저절로 비워진다(초안을 남기지 않는다).
-export function VentSheet(p: { visible: boolean; say(t: string): void; roomId: string; message: Msg | null; onClose(): void; onDone(ack: string): void }) {
+export function VentSheet(p: { visible: boolean; roomId: string; message: Msg | null; onClose(): void; onDone(ack: string): void }) {
   return (
     <Sheet initialFocus="vent-input" visible={p.visible && p.message !== null} onClose={p.onClose} title="AI에게만 털어놓기">
-      {p.message ? <VentForm say={p.say} roomId={p.roomId} message={p.message} onClose={p.onClose} onDone={p.onDone} /> : null}
+      {(say) => (p.message ? <VentForm say={say} roomId={p.roomId} message={p.message} onClose={p.onClose} onDone={p.onDone} /> : null)}
     </Sheet>
   );
 }
