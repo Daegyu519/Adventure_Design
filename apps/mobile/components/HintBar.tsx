@@ -10,7 +10,9 @@ import { AppText } from './AppText';
 // 입력창 바로 위 힌트 한 줄(보낸 사람에게만). 보내기를 막지 않고 포커스를 가져가지 않는다.
 // 읽어 주기는 화면의 say()가 한 번만 한다(여기에 live region을 두면 같은 말이 두 번 읽힌다).
 // 색만으로 알리지 않는다: 점 + 제목 글자. 진동 없음.
-export function HintBar({ hint, onDismiss, onOpenDetail }: { hint: Hint | null; onDismiss(): void; onOpenDetail?(): void }) {
+export const HINT_TEXT_ID = 'tone-hint'; // 입력창의 aria-describedby 대상
+
+export function HintBar({ hint, onDismiss, onOpenDetail, onFocusInside }: { hint: Hint | null; onDismiss(): void; onOpenDetail?(): void; onFocusInside?(inside: boolean): void }) {
   const { colors, radius, space } = useTheme();
   const reduced = useReducedMotion();
   const [anim] = useState(() => new Animated.Value(1));
@@ -41,17 +43,17 @@ export function HintBar({ hint, onDismiss, onOpenDetail }: { hint: Hint | null; 
       }}
     >
       <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colors.hintText }} />
-      <AppText variant="small" style={{ flex: 1, color: colors.hintText }}>
+      <AppText nativeID={HINT_TEXT_ID} variant="small" style={{ flex: 1, color: colors.hintText }}>
         {hint.title}
       </AppText>
       {onOpenDetail ? (
-        <Pressable onPress={onOpenDetail} accessibilityRole="button" accessibilityLabel="살펴보기" style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: space[0], ...focusRing(colors.primary) }}>
+        <Pressable onPress={onOpenDetail} onFocus={() => onFocusInside?.(true)} onBlur={() => onFocusInside?.(false)} accessibilityRole="button" accessibilityLabel="살펴보기" style={{ minHeight: 44, minWidth: 44, justifyContent: 'center', paddingHorizontal: space[0], ...focusRing(colors.primary) }}>
           <AppText variant="small" weight="600" style={{ color: colors.hintText }}>
             살펴보기 ›
           </AppText>
         </Pressable>
       ) : null}
-      <Pressable onPress={onDismiss} accessibilityRole="button" accessibilityLabel="힌트 닫기" style={{ minHeight: 44, minWidth: 44, alignItems: 'center', justifyContent: 'center', ...focusRing(colors.primary) }}>
+      <Pressable onPress={onDismiss} onFocus={() => onFocusInside?.(true)} onBlur={() => onFocusInside?.(false)} accessibilityRole="button" accessibilityLabel="힌트 닫기" style={{ minHeight: 44, minWidth: 44, alignItems: 'center', justifyContent: 'center', ...focusRing(colors.primary) }}>
         <X color={colors.hintText} size={20} />
       </Pressable>
     </Animated.View>

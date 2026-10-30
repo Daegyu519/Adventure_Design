@@ -77,8 +77,9 @@ export function createEngine(o: {
       });
       if (!res.ok) {
         const err = new EngineError(res.status);
-        const ra = Number(res.headers?.get?.('Retry-After'));
-        if (res.status === 429 && Number.isFinite(ra) && ra >= 0) err.retryAfterMs = ra * 1000;
+        const raw = res.headers?.get?.('Retry-After');
+        const ra = raw ? Number(raw) : NaN; // 없음·빈 값·날짜 형식은 NaN → 미설정(호출자가 기본 대기를 쓴다)
+        if (res.status === 429 && Number.isFinite(ra) && ra > 0) err.retryAfterMs = ra * 1000;
         throw err;
       }
       return (await res.json()) as T;

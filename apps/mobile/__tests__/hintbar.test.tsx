@@ -1,5 +1,15 @@
 import { act } from 'react';
-import { createRoot } from 'test-renderer';
+import { createRoot as create } from 'test-renderer';
+
+const roots: ReturnType<typeof create>[] = [];
+const createRoot = () => {
+  const r = create();
+  roots.push(r);
+  return r;
+};
+afterEach(async () => {
+  await act(async () => roots.splice(0).forEach((r) => r.unmount()));
+});
 
 type TestNode = Parameters<Parameters<ReturnType<typeof createRoot>['container']['queryAll']>[0]>[0] | string;
 const textOf = (n: TestNode): string => (typeof n === 'string' ? n : n.children.map(textOf as never).join(''));

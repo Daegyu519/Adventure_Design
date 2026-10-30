@@ -224,3 +224,10 @@ test('429 carries Retry-After as retryAfterMs; other statuses do not', async () 
   const f503 = jest.fn(async () => ({ ok: false, status: 503, headers: h('3'), json: async () => ({}) }) as unknown as Response);
   expect((await real(f503).hint({ room_id: R, text: 'a', seq: 1 }).catch((x) => x)).retryAfterMs).toBeUndefined();
 });
+
+test.each([[null], [''], ['abc'], ['0'], ['Wed, 21 Oct 2026 07:28:00 GMT']])('429 with unusable Retry-After %p leaves retryAfterMs unset', async (v) => {
+  const f = jest.fn(async () => ({ ok: false, status: 429, headers: { get: () => v }, json: async () => ({}) }) as unknown as Response);
+  const e = await real(f).hint({ room_id: R, text: 'a', seq: 1 }).catch((x) => x);
+  expect(e.status).toBe(429);
+  expect(e.retryAfterMs).toBeUndefined();
+});

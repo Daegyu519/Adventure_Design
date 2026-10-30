@@ -1,5 +1,12 @@
 import { act } from 'react';
-import { createRoot } from 'test-renderer';
+import { createRoot as create } from 'test-renderer';
+
+const roots: ReturnType<typeof create>[] = [];
+const createRoot = () => {
+  const r = create();
+  roots.push(r);
+  return r;
+};
 
 import { useToneHint } from '../lib/useToneHint';
 
@@ -31,7 +38,10 @@ beforeEach(() => {
   mockHint.mockReset().mockImplementation(async (b: { seq: number }) => ({ seq: b.seq, hint: H, trace_id: 'tr' }));
   mockLog.mockReset();
 });
-afterEach(() => jest.useRealTimers());
+afterEach(async () => {
+  await act(async () => roots.splice(0).forEach((r) => r.unmount()));
+  jest.useRealTimers();
+});
 
 test('requests with room, seq, reply_to, signal and timeout; shows hint; logs hint_shown once', async () => {
   await mount(true, 7);
@@ -68,4 +78,16 @@ test('fixed then sent logs sent_after_fix', async () => {
   expect(api.hint).toBeNull();
   await act(async () => api.sent());
   expect(mockLog).toHaveBeenCalledWith({ room_id: 'r1', kind: 'sent_after_fix' });
+});
+
+test('turning hints off clears a showing hint and aborts the in-flight request', async () => {
+  const root = await mount(true);
+  await type('안 돼요.');
+  expect(api.hint).toEqual(H);
+  let signal!: AbortSignal;
+  mockHint.mockImplementation((_b: unknown, o: { signal: AbortSignal }) => ((signal = o.signal), new Promise(() => {})));
+  await type('안 돼요..');
+  await act(async () => void root.render(<Probe on={false} />));
+  expect(api.hint).toBeNull();
+  expect(signal.aborted).toBe(true);
 });

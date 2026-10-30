@@ -153,3 +153,44 @@ test('dispose aborts and silences', async () => {
   await jest.advanceTimersByTimeAsync(0);
   expect(results).toHaveLength(0);
 });
+
+const failThenType = async (s: ReturnType<typeof mk>, err: unknown) => {
+  s.input('a');
+  await jest.advanceTimersByTimeAsync(500);
+  calls[0].reject(err);
+  await jest.advanceTimersByTimeAsync(0);
+  s.input('ab');
+};
+
+test.each([
+  ['503', new EngineError(503)],
+  ['network/timeout (0)', new EngineError(0)],
+  ['429 without Retry-After', new EngineError(429)],
+  ['429 with Retry-After 0', Object.assign(new EngineError(429), { retryAfterMs: 0 })],
+])('%s backs off 5s by default', async (_n, err) => {
+  const s = mk();
+  await failThenType(s, err);
+  await jest.advanceTimersByTimeAsync(4400);
+  expect(request).toHaveBeenCalledTimes(1);
+  await jest.advanceTimersByTimeAsync(700);
+  expect(request).toHaveBeenCalledTimes(2);
+});
+
+test('huge Retry-After is clamped to 60s', async () => {
+  const s = mk();
+  await failThenType(s, Object.assign(new EngineError(429), { retryAfterMs: 3_600_000 }));
+  await jest.advanceTimersByTimeAsync(59_000);
+  expect(request).toHaveBeenCalledTimes(1);
+  await jest.advanceTimersByTimeAsync(1500);
+  expect(request).toHaveBeenCalledTimes(2);
+});
+
+test('a caller abort does not start a back-off', async () => {
+  const s = mk();
+  s.input('a');
+  await jest.advanceTimersByTimeAsync(500);
+  s.input('ab');
+  calls[0].reject(new EngineError(0));
+  await jest.advanceTimersByTimeAsync(500);
+  expect(request).toHaveBeenCalledTimes(2);
+});

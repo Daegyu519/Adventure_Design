@@ -37,6 +37,11 @@ export function useToneHint(roomId: string, replyToId: number | null, enabled: b
     };
   }, [roomId]);
 
+  // 힌트를 끄면 떠 있는 힌트를 치우고 진행 중 요청을 끊는다.
+  useEffect(() => {
+    if (!enabled) sched.current?.sent();
+  }, [enabled]);
+
   const input = useCallback((text: string) => sched.current?.input(text), []);
   const dismiss = useCallback(() => {
     tracker.current.dismissed();

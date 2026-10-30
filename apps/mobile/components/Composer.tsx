@@ -8,7 +8,7 @@ import { shouldSubmitOnKey } from '../lib/composer';
 import { focusRing, useTheme } from '../lib/theme';
 import type { Hint } from '../lib/hintScheduler';
 import { AppText } from './AppText';
-import { HintBar } from './HintBar';
+import { HINT_TEXT_ID, HintBar } from './HintBar';
 import { IconButton } from './IconButton';
 import { MAX_SHOWN, MENTION_LIST_ID, MentionPicker, mentionOptionId } from './MentionPicker';
 import type { Member } from '../lib/rooms';
@@ -71,11 +71,24 @@ export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, 
   useEffect(() => {
     if (mentionSay) say?.(mentionSay);
   }, [mentionSay, say]);
-  // 힌트는 나타나거나 제목이 바뀔 때 한 번만 읽는다(디바운스마다 읽지 않는다).
+  // 힌트는 나타나거나 제목이 바뀔 때 한 번만 읽는다(디바운스마다 읽지 않는다). 멘션 목록이 열려 있으면 "멘션 후보 N명"을 덮지 않도록 닫힌 뒤에 읽는다.
   const hintTitle = hint?.title ?? null;
+  const said = useRef<string | null>(null);
   useEffect(() => {
-    if (hintTitle) say?.(`힌트: ${hintTitle}`);
-  }, [hintTitle, say]);
+    if (hintTitle === null) said.current = null;
+    else if (!picking && said.current !== hintTitle) {
+      said.current = hintTitle;
+      say?.(`힌트: ${hintTitle}`);
+    }
+  }, [hintTitle, picking, say]);
+  // 포커스가 힌트 막대(닫기·살펴보기) 안에 있다가 막대가 사라지면 입력창으로(body로 떨어지지 않게).
+  const barFocus = useRef(false);
+  useEffect(() => {
+    if (hintTitle === null && barFocus.current) {
+      barFocus.current = false;
+      ref.current?.focus();
+    }
+  }, [hintTitle, ref]);
   const choose = (name: string) => {
     onSelectMention?.(name);
     ref.current?.focus(); // 목록이 사라져도 포커스가 body로 떨어지지 않게
@@ -86,6 +99,17 @@ export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, 
         <AppText variant="small" color="textMuted" style={{ paddingHorizontal: space[3], paddingTop: space[0] }}>
           {typingLabel}
         </AppText>
+      ) : null}
+      {hint ? (
+        <HintBar
+          hint={hint}
+          onDismiss={() => {
+            onDismissHint?.();
+            ref.current?.focus();
+          }}
+          onOpenDetail={onOpenHintDetail}
+          onFocusInside={(v) => (barFocus.current = v)}
+        />
       ) : null}
       {picking ? <MentionPicker candidates={shown} active={safeActive} onSelect={choose} /> : null}
       {replyTo && (
@@ -103,7 +127,6 @@ export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, 
           />
         </View>
       )}
-      {hint ? <HintBar hint={hint} onDismiss={() => { onDismissHint?.(); ref.current?.focus(); }} onOpenDetail={onOpenHintDetail} /> : null}
       <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: space[1], paddingHorizontal: space[3], paddingVertical: space[1] }}>
         {onPickImage ? <IconButton icon={ImagePlus} label="사진 보내기" onPress={onPickImage} busy={photoBusy} disabled={photoBusy} /> : null}
         <TextInput
@@ -116,6 +139,7 @@ export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, 
           onSelectionChange={(e) => onSelectionChange?.(e.nativeEvent.selection.start)}
           selection={selection}
           onBlur={onBlur}
+          accessibilityHint={hint?.title}
           placeholder="메시지"
           placeholderTextColor={colors.textMuted}
           selectionColor={colors.primary}
@@ -125,6 +149,7 @@ export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, 
                 'aria-expanded': picking,
                 'aria-controls': picking ? MENTION_LIST_ID : undefined,
                 'aria-autocomplete': 'list',
+                'aria-describedby': hint ? HINT_TEXT_ID : undefined,
                 'aria-activedescendant': picking ? mentionOptionId(safeActive) : undefined,
               }
             : {})}
