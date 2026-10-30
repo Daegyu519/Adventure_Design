@@ -63,6 +63,13 @@ function RoomBody({ id, me }: { id: string; me: string }) {
   const [appActive, setAppActive] = useState(isActive(AppState.currentState));
   const lastRead = useRef<string | null>(null);
   const [announce, setAnnounce] = useState('');
+  const sayCount = useRef(0);
+  // 같은 문구가 연달아 와도 다시 읽히도록 번갈아 보이지 않는 글자를 붙인다.
+  const say = useCallback((t: string) => setAnnounce(t + (sayCount.current++ % 2 ? '\u200b' : '')), []);
+  const [activeId, setActiveId] = useState<number | null>(null); // 웹 roving tabindex: 탭 순서에 있는 메시지(기본은 가장 새 것)
+  const [failedQuotes, setFailedQuotes] = useState<Set<number>>(new Set());
+  const [quoteTick, setQuoteTick] = useState(0);
+  const jump = useRef<number | null>(null);
   const seen = useRef<number | null>(null);
   const unmounted = useRef(false);
   const inputRef = useRef<InputHandle>(null);
@@ -158,22 +165,34 @@ function RoomBody({ id, me }: { id: string; me: string }) {
       const r = x.reply_to;
       if (r === null || byId.has(r) || asked.current.has(r)) continue;
       asked.current.add(r);
-      void Promise.resolve(c.from('messages').select('*').eq('id', r).single()).then(
-        ({ data }) => data && !unmounted.current && setExtra((cur) => new Map(cur).set(r, data)),
-        () => {},
-      );
+      const fail = () => {
+        asked.current.delete(r); // 다시 불러오기로 다시 읽을 수 있게
+        if (!unmounted.current) setFailedQuotes((cur) => new Set(cur).add(r));
+      };
+      void Promise.resolve(c.from('messages').select('*').eq('id', r).single()).then(({ data, error: e }) => {
+        if (e || !data) return fail();
+        if (!unmounted.current) setExtra((cur) => new Map(cur).set(r, data));
+      }, fail);
     }
-  }, [messages, byId]);
+  }, [messages, byId, quoteTick]);
+  const retryQuote = useCallback((r: number) => {
+    setFailedQuotes((cur) => {
+      const n = new Set(cur);
+      n.delete(r);
+      return n;
+    });
+    setQuoteTick((t) => t + 1);
+  }, []);
 
   // 새 메시지 알림은 말풍선마다 읽지 않고 상대가 보낸 가장 새 것 한 줄만 정중하게(polite) 알린다.
   useEffect(() => {
     if (!messages.length) return;
     const top = messages[messages.length - 1];
     if (seen.current !== null && top.id > seen.current && top.sender_id !== me) {
-      setAnnounce(`${names.get(top.sender_id) ?? '상대'}: ${top.text || '사진'}`);
+      say(`${names.get(top.sender_id) ?? '상대'}: ${top.text || '사진'}`);
     }
     seen.current = top.id;
-  }, [messages, me, names]);
+  }, [messages, me, names, say]);
 
   const onSend = useCallback(async () => {
     const text = draft.trim();
@@ -200,22 +219,61 @@ function RoomBody({ id, me }: { id: string; me: string }) {
       setSendError(null);
       const had = reactionRows.find((r) => r.message_id === messageId && r.user_id === me)?.emoji;
       toggle(messageId, emoji).then(
-        () => setAnnounce(had === emoji ? `공감 취소: ${REACTION_LABELS[emoji]}` : `공감: ${REACTION_LABELS[emoji]}`),
+        () => say(had === emoji ? `공감 취소: ${REACTION_LABELS[emoji]}` : `공감: ${REACTION_LABELS[emoji]}`),
         () => setSendError('공감하지 못했어요. 다시 시도해 주세요.'),
       );
     },
-    [toggle, reactionRows, me],
+    [toggle, reactionRows, me, say],
   );
 
-  const goTo = useCallback(
-    (replyTo: number) => {
-      const index = data.findIndex((x) => x.id === replyTo);
-      if (index >= 0) listRef.current?.scrollToIndex({ index, viewPosition: 0.5, animated: true });
+  // 웹: 메시지 본문으로 포커스를 옮긴다(가상화된 목록이라 그려진 뒤에).
+  const focusItem = useCallback((id: number) => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    setTimeout(() => document.getElementById(`msg-body-${id}`)?.focus(), 60);
+  }, []);
+  const scrollTo = useCallback((index: number) => {
+    try {
+      listRef.current?.scrollToIndex({ index, viewPosition: 0.5, animated: true });
+    } catch {
+      // 아직 그려지지 않은 칸은 onScrollToIndexFailed가 이어서 처리한다
+    }
+  }, []);
+
+  // ↑(더 오래된)·↓: 활성 메시지를 옮기고 스크롤·포커스. 맨 위에서 ↑는 이전 메시지를 더 불러온다.
+  const navigate = useCallback(
+    (fromId: number, dir: -1 | 1) => {
+      const i = data.findIndex((x) => x.id === fromId);
+      const j = i - dir; // data는 새 것부터
+      if (i < 0 || j < 0) return;
+      if (j >= data.length) return void (hasMore && !olderError && void loadOlder());
+      setActiveId(data[j].id);
+      scrollTo(j);
+      focusItem(data[j].id);
     },
-    [data],
+    [data, hasMore, olderError, loadOlder, scrollTo, focusItem],
   );
 
-
+  // 인용 누르기: 불러온 범위 안이면 이동, 밖이면 더 불러오며 찾고, 끝까지 없으면 알린다.
+  const stepJump = useCallback(() => {
+    const target = jump.current;
+    if (target === null) return;
+    const index = data.findIndex((x) => x.id === target);
+    if (index >= 0) {
+      jump.current = null;
+      setActiveId(target);
+      scrollTo(index);
+      focusItem(target);
+      return say('원문으로 이동했어요');
+    }
+    if (hasMore && !olderError) return void loadOlder();
+    jump.current = null;
+    say(olderError ? '이전 메시지를 불러오지 못했어요' : '원래 메시지는 더 이전 대화에 있어요');
+  }, [data, hasMore, olderError, loadOlder, scrollTo, focusItem, say]);
+  useEffect(() => stepJump(), [stepJump]);
+  const goTo = useCallback((replyTo: number) => {
+    jump.current = replyTo;
+    stepJump();
+  }, [stepJump]);
 
   const quotedName = (x: Msg) => {
     const q = x.reply_to === null ? null : (byId.get(x.reply_to) ?? extra.get(x.reply_to));
@@ -289,6 +347,12 @@ function RoomBody({ id, me }: { id: string; me: string }) {
                 <Bubble
                   message={item}
                   mine={mine}
+                  speaker={mine ? '나' : (names.get(item.sender_id) ?? '상대')}
+                  unreadText={unreadCount(item, members) > 0 ? (group ? `안 읽은 사람 ${unreadCount(item, members)}명` : '상대가 안 읽음') : ''}
+                  active={item.id === (activeId ?? data[0]?.id)}
+                  onNavigate={(dir) => navigate(item.id, dir)}
+                  quoteFailed={item.reply_to !== null && failedQuotes.has(item.reply_to)}
+                  onQuoteRetry={() => item.reply_to !== null && retryQuote(item.reply_to)}
                   senderName={group && !mine && first ? names.get(item.sender_id) : undefined}
                   quoted={item.reply_to === null ? null : (byId.get(item.reply_to) ?? extra.get(item.reply_to) ?? null)}
                   quotedName={quotedName(item)}
@@ -308,8 +372,11 @@ function RoomBody({ id, me }: { id: string; me: string }) {
           onChangeText={setDraft}
           onSend={() => void onSend()}
           inputRef={inputRef}
-          replyTo={replyTarget ? { name: replyTarget.sender_id === me ? '나' : (names.get(replyTarget.sender_id) ?? '상대'), text: firstLine(replyTarget) } : null}
-          onCancelReply={() => setReplyTarget(null)}
+          replyTo={replyTarget ? { id: replyTarget.id, name: replyTarget.sender_id === me ? '나' : (names.get(replyTarget.sender_id) ?? '상대'), text: firstLine(replyTarget) } : null}
+          onCancelReply={() => {
+            setReplyTarget(null);
+            say('답장 취소됨');
+          }}
         />
         {sendError && (
           <AppText accessibilityRole="alert" variant="small" color="danger" style={{ paddingHorizontal: space[3], paddingBottom: space[1] }}>
@@ -318,6 +385,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
         )}
       </KeyboardAvoidingView>
       <MessageActions
+        senderName={menuFor ? (menuFor.sender_id === me ? '나' : names.get(menuFor.sender_id)) : undefined}
         visible={menuFor !== null}
         message={menuFor}
         mine={menuFor?.sender_id === me}
@@ -326,7 +394,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
         onReply={() => {
           if (menuFor) {
             setReplyTarget(menuFor);
-            setAnnounce(`${names.get(menuFor.sender_id) ?? '상대'}에게 답장`);
+            say(`${names.get(menuFor.sender_id) ?? '상대'}에게 답장`);
           }
           setMenuFor(null);
         }}

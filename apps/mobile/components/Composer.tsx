@@ -16,7 +16,7 @@ type Props = {
   value: string;
   onChangeText(t: string): void;
   onSend(): void;
-  replyTo: { name: string; text: string } | null;
+  replyTo: { id: number; name: string; text: string } | null;
   onCancelReply(): void;
   inputRef?: RefObject<InputHandle | null>;
 };
@@ -24,14 +24,14 @@ export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, 
   const { colors, radius, space, font } = useTheme();
   const own = useRef<InputHandle>(null);
   const ref = inputRef ?? own;
-  const hasReply = replyTo !== null;
+  const replyId = replyTo?.id ?? null;
   useEffect(() => {
-    // 시트가 닫히며 포커스를 돌려주는 것보다 나중에 입력창으로.
-    if (hasReply) {
+    // 시트가 닫히며 포커스를 돌려주는 것보다 나중에 입력창으로. 같은 사람의 다른 메시지로 바꿔도 다시 온다.
+    if (replyId !== null) {
       const id = setTimeout(() => ref.current?.focus(), 50);
       return () => clearTimeout(id);
     }
-  }, [hasReply, ref]);
+  }, [replyId, ref]);
   return (
     <View style={{ borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.background }}>
       {replyTo && (
@@ -52,7 +52,7 @@ export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, 
       <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: space[1], paddingHorizontal: space[3], paddingVertical: space[1] }}>
         <TextInput
           ref={ref}
-          accessibilityLabel="메시지 입력"
+          accessibilityLabel={replyTo ? `메시지 입력, ${replyTo.name}에게 답장 중` : '메시지 입력'}
           multiline
           maxLength={2000}
           value={value}
