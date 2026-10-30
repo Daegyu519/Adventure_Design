@@ -7,6 +7,8 @@ import type { Msg } from '../lib/messages';
 jest.mock('lucide-react-native/icons/arrow-left', () => () => null);
 jest.mock('lucide-react-native/icons/info', () => () => null);
 jest.mock('lucide-react-native/icons/send', () => () => null);
+jest.mock('lucide-react-native/icons/ellipsis', () => () => null);
+jest.mock('lucide-react-native/icons/x', () => () => null);
 jest.mock('react-native-safe-area-context', () => ({ SafeAreaView: ({ children }: { children: unknown }) => children }));
 const mockRouter = { push: jest.fn(), back: jest.fn(), replace: jest.fn(), canGoBack: () => true };
 let mockFocused = true;
@@ -40,6 +42,14 @@ jest.mock('../lib/useRoomMessages', () => ({
   useRoomMessages: () => ({ messages: mockMessages, hasMore: mockHasMore, error: false, olderError: mockOlderError, reload: mockReload, loadOlder: mockLoadOlder, send: (...a: unknown[]) => mockSend(...a) }),
 }));
 
+let mockReactionRows: { message_id: number; user_id: string; emoji: string; created_at: string }[] = [];
+const mockToggle = jest.fn();
+jest.mock('../lib/useReactions', () => ({ useReactions: () => ({ rows: mockReactionRows, toggle: (...a: unknown[]) => mockToggle(...a) }) }));
+let mockMembersLastRead: Record<string, string | null> = {};
+jest.mock('../lib/useMembers', () => ({
+  useMembers: (_id: string, initial: { user_id: string; last_read_at: string | null }[] = []) => initial.map((x) => ({ ...x, last_read_at: x.user_id in mockMembersLastRead ? mockMembersLastRead[x.user_id] : x.last_read_at })),
+}));
+
 const m = (id: number, sender: string, text: string, ts = '2026-10-27 01:32:17.123456+00'): Msg => ({ id, room_id: 'r1', sender_id: sender, text, image_path: null, reply_to: null, mentions: [], created_at: ts });
 const textOf = (n: TestNode): string => (typeof n === 'string' ? n : n.children.map(textOf).join(''));
 
@@ -64,6 +74,9 @@ beforeEach(() => {
   mockFetchRoom.mockReset().mockImplementation(okRoom);
   mockMarkRead.mockReset().mockResolvedValue(undefined);
   mockRouter.push.mockReset();
+  mockReactionRows = [];
+  mockToggle.mockReset().mockResolvedValue(undefined);
+  mockMembersLastRead = {};
 });
 
 test('그룹이면 남의 말풍선 위에 이름, 제목은 방 제목', async () => {
@@ -252,4 +265,138 @@ test('이전 메시지 불러오기 실패: 줄을 보이고 누르면 다시 �
   expect(alerts(root).length).toBeGreaterThan(0);
   await press('이전 메시지 다시 불러오기');
   expect(mockLoadOlder).toHaveBeenCalledTimes(1);
+});
+
+// ── T-09b: 답장 · 공감 · 읽음 수 ──
+const buttons = (root: { container: { queryAll: (f: (n: TestNode) => boolean) => TestNode[] } }, label: string) =>
+  root.container.queryAll((n) => (n as unknown as { props: { accessibilityRole?: string; accessibilityLabel?: string } }).props.accessibilityRole === 'button' && (n as unknown as { props: { accessibilityLabel?: string } }).props.accessibilityLabel === label);
+const click = (n: TestNode) => act(async () => (n as unknown as { props: { onClick: (e: unknown) => void } }).props.onClick({ stopPropagation() {}, nativeEvent: {} }));
+
+test('키보드로 닿는 "메시지 메뉴" 버튼이 모든 말풍선에 있고 공감 6개와 답장이 열린다', async () => {
+  const { root } = await setup();
+  expect(buttons(root, '메시지 메뉴')).toHaveLength(2);
+  expect(buttons(root, '공감: 좋아요')).toHaveLength(0);
+  await click(buttons(root, '메시지 메뉴')[1]); // 데이터는 최신순이라 [1]은 첫 메시지(민수)
+  for (const l of ['좋아요', '하트', '웃겨요', '놀라워요', '슬퍼요', '고마워요']) expect(buttons(root, `공감: ${l}`)).toHaveLength(1);
+  expect(buttons(root, '답장')).toHaveLength(1);
+});
+
+test('화면 읽기 프로그램의 "메시지 메뉴" 동작으로도 같은 메뉴가 열린다(길게 누르기만으로는 부족)', async () => {
+  const { root } = await setup();
+  const bubble = root.container.queryAll((n) => n.props.accessibilityActions?.[0]?.name === 'menu')[1];
+  await act(async () => bubble.props.onAccessibilityAction({ nativeEvent: { actionName: 'menu' } }));
+  expect(buttons(root, '답장')).toHaveLength(1);
+});
+
+test('메뉴에서 공감을 고르면 toggle(메시지 id, 이모지)를 부르고 메뉴가 닫힌다. 내 공감은 현재 값으로 넘어간다', async () => {
+  const { root } = await setup();
+  await click(buttons(root, '메시지 메뉴')[1]);
+  await click(buttons(root, '공감: 웃겨요')[0]);
+  expect(mockToggle).toHaveBeenCalledWith(1, '😂');
+  expect(buttons(root, '답장')).toHaveLength(0);
+});
+
+test('공감 칩: 개수와 내 공감이 이름에 있고 누르면 같은 이모지 토글', async () => {
+  mockReactionRows = [
+    { message_id: 1, user_id: 'u2', emoji: '👍', created_at: '' },
+    { message_id: 1, user_id: 'me', emoji: '👍', created_at: '' },
+  ];
+  const { root } = await setup();
+  const chip = buttons(root, '좋아요 2명, 나도 공감함');
+  expect(chip).toHaveLength(1);
+  await click(chip[0]);
+  expect(mockToggle).toHaveBeenCalledWith(1, '👍');
+});
+
+test('공감 실패는 alert 문구로 알린다(서버 글 없음)', async () => {
+  mockToggle.mockRejectedValue({ code: '42501', message: 'permission denied' });
+  const { root, texts } = await setup();
+  await click(buttons(root, '메시지 메뉴')[0]);
+  await click(buttons(root, '공감: 좋아요')[0]);
+  expect(texts()).toContain('공감하지 못했어요');
+  expect(texts()).not.toContain('permission denied');
+});
+
+test('답장: 막대에 "<이름>에게 답장 · 첫 줄", 보내면 reply_to와 함께 보내고 막대가 사라진다', async () => {
+  mockMessages = [m(1, 'u2', '첫 줄\n둘째 줄'), m(2, 'me', '반가워')];
+  mockSend.mockResolvedValue(m(3, 'me', 'ㅇㅋ'));
+  const { root, texts, type, press } = await setup();
+  await click(buttons(root, '메시지 메뉴')[1]);
+  await click(buttons(root, '답장')[0]);
+  expect(texts()).toContain('민수에게 답장 · 첫 줄');
+  expect(texts()).not.toContain('둘째 줄에게');
+  await type('ㅇㅋ');
+  await press('보내기');
+  expect(mockSend).toHaveBeenCalledWith({ text: 'ㅇㅋ', reply_to: 1 });
+  expect(buttons(root, '답장 취소')).toHaveLength(0);
+});
+
+test('답장 취소: 막대가 사라지고 일반 메시지로 보낸다', async () => {
+  mockSend.mockResolvedValue(m(3, 'me', 'x'));
+  const { root, type, press } = await setup();
+  await click(buttons(root, '메시지 메뉴')[1]);
+  await click(buttons(root, '답장')[0]);
+  await press('답장 취소');
+  await type('x');
+  await press('보내기');
+  expect(mockSend).toHaveBeenCalledWith({ text: 'x' });
+});
+
+test('보내기가 실패하면 답장 대상은 그대로 남는다', async () => {
+  mockSend.mockRejectedValue(Object.assign(new Error('x'), { status: 400 }));
+  const { root, type, press } = await setup();
+  await click(buttons(root, '메시지 메뉴')[1]);
+  await click(buttons(root, '답장')[0]);
+  await type('x');
+  await press('보내기');
+  expect(buttons(root, '답장 취소')).toHaveLength(1);
+});
+
+test('인용: 불러온 원문은 보낸 사람과 첫 줄로 말풍선 위에 보이고, 눌러서 이동할 수 있는 이름이 있다', async () => {
+  mockMessages = [m(1, 'u2', '원문입니다\n둘째'), { ...m(2, 'me', '답이야'), reply_to: 1 }];
+  const { root, texts } = await setup();
+  expect(texts()).toContain('원문입니다');
+  expect(buttons(root, '민수의 메시지로 이동: 원문입니다')).toHaveLength(1);
+});
+
+test('안 읽은 사람 수: 0보다 크면 숫자와 이름, 모두 읽으면 숫자 없음', async () => {
+  mockMessages = [m(2, 'me', '반가워')];
+  mockMembersLastRead = { u2: null };
+  const { root } = await setup();
+  const label = () => root.container.queryAll((n) => n.props.accessibilityLabel === '안 읽은 사람 1명');
+  expect(label().length).toBeGreaterThan(0);
+  mockMembersLastRead = { u2: '2026-10-27 01:32:17.123456+00' };
+  await act(async () => root.render(<Room />));
+  expect(label()).toHaveLength(0);
+});
+
+test('읽음 재시도 타이머: 언마운트 뒤에 실패해도 새 타이머를 남기지 않는다', async () => {
+  jest.useFakeTimers();
+  try {
+    const retryTimers = jest.spyOn(global, 'setTimeout');
+    let fail!: (e: unknown) => void;
+    mockMarkRead.mockReturnValue(new Promise((_, rej) => (fail = rej)));
+    const { root } = await setup();
+    await act(async () => root.render(<></>));
+    await act(async () => fail(new Error('x')));
+    expect(retryTimers).not.toHaveBeenCalledWith(expect.any(Function), 3000);
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
+test('읽음 재시도 타이머: 새 타이머 전에 이전 것을 지운다', async () => {
+  jest.useFakeTimers();
+  try {
+    const clear = jest.spyOn(global, 'clearTimeout');
+    mockMarkRead.mockRejectedValue(new Error('x'));
+    const { root } = await setup();
+    await act(async () => void jest.advanceTimersByTime(3000)); // 재시도 1 → 또 실패 → 새 타이머
+    mockMessages = [...mockMessages, m(3, 'u2', '새 글', '2026-10-27 01:40:00.000000+00')];
+    clear.mockClear();
+    await act(async () => root.render(<Room />)); // 새 메시지 → 읽음 다시 → 실패 → 타이머가 이미 있다
+    expect(clear).toHaveBeenCalled();
+  } finally {
+    jest.useRealTimers();
+  }
 });

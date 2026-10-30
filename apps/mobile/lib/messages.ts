@@ -1,3 +1,4 @@
+import type { Member } from './rooms';
 import type { Tables } from './types/db';
 
 export const PAGE_SIZE = 30;
@@ -34,4 +35,30 @@ export function formatStamp(ts: string, now: Date = new Date()): string {
   if (d.toDateString() !== now.toDateString()) return `${d.getMonth() + 1}월 ${d.getDate()}일`;
   const h = d.getHours();
   return `${h < 12 ? '오전' : '오후'} ${h % 12 || 12}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+export const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'] as const;
+export type Emoji = (typeof REACTIONS)[number];
+export const REACTION_LABELS: Record<Emoji, string> = { '👍': '좋아요', '❤️': '하트', '😂': '웃겨요', '😮': '놀라워요', '😢': '슬퍼요', '🙏': '고마워요' };
+export type ReactionSummary = { emoji: Emoji; count: number; mine: boolean };
+
+// REACTIONS 순서로 묶는다. 내 것이 있으면 mine.
+export function summarizeReactions(rows: Pick<Tables<'reactions'>, 'message_id' | 'user_id' | 'emoji'>[], messageId: number, me: string): ReactionSummary[] {
+  const mine = rows.filter((r) => r.message_id === messageId);
+  return REACTIONS.flatMap((emoji) => {
+    const of = mine.filter((r) => r.emoji === emoji);
+    return of.length ? [{ emoji, count: of.length, mine: of.some((r) => r.user_id === me) }] : [];
+  });
+}
+
+// upsert는 쓰지 않는다: DB는 reactions에 update(emoji)만 허용해서 upsert의 ON CONFLICT SET이 권한 오류가 난다.
+export function nextReactionOp(current: Emoji | null, tapped: Emoji): { op: 'insert'; emoji: Emoji } | { op: 'update'; emoji: Emoji } | { op: 'delete' } {
+  if (current === null) return { op: 'insert', emoji: tapped };
+  return current === tapped ? { op: 'delete' } : { op: 'update', emoji: tapped };
+}
+
+// 보낸 사람을 뺀 멤버 중 읽은 시각이 메시지보다 앞서거나 없는 사람 수.
+export function unreadCount(msg: Pick<Msg, 'sender_id' | 'created_at'>, members: Pick<Member, 'user_id' | 'last_read_at'>[]): number {
+  const at = tsMicros(msg.created_at);
+  return members.filter((m) => m.user_id !== msg.sender_id && (m.last_read_at === null || tsMicros(m.last_read_at) < at)).length;
 }

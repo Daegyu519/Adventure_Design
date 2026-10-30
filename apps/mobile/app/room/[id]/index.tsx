@@ -6,13 +6,16 @@ import { AppState, FlatList, KeyboardAvoidingView, Platform, View } from 'react-
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '../../../components/AppText';
-import { Bubble } from '../../../components/Bubble';
-import { Composer } from '../../../components/Composer';
+import { Bubble, firstLine } from '../../../components/Bubble';
+import { Composer, type InputHandle } from '../../../components/Composer';
+import { MessageActions } from '../../../components/MessageActions';
 import { Button } from '../../../components/Button';
 import { IconButton } from '../../../components/IconButton';
 import { dbErrorMessage, isUnreachable, NETWORK_MESSAGE } from '../../../lib/dbErrors';
-import { shouldMarkRead } from '../../../lib/messages';
+import { REACTION_LABELS, shouldMarkRead, summarizeReactions, unreadCount, type Emoji, type Msg } from '../../../lib/messages';
 import { fetchRoom, markRead, roomTitle, type Member } from '../../../lib/rooms';
+import { useMembers } from '../../../lib/useMembers';
+import { useReactions } from '../../../lib/useReactions';
 import { useRoomMessages, type SendError } from '../../../lib/useRoomMessages';
 import { useSession } from '../../../lib/session';
 import { supabase } from '../../../lib/supabase';
@@ -61,6 +64,14 @@ function RoomBody({ id, me }: { id: string; me: string }) {
   const lastRead = useRef<string | null>(null);
   const [announce, setAnnounce] = useState('');
   const seen = useRef<number | null>(null);
+  const unmounted = useRef(false);
+  const inputRef = useRef<InputHandle>(null);
+  const listRef = useRef<FlatList<Msg>>(null);
+  const retryFocus = useRef(false); // 포커스가 있던 "다시 불러오기" 줄이 사라지면 입력창으로 옮긴다(웹 키보드가 body로 떨어지지 않게)
+  const [menuFor, setMenuFor] = useState<Msg | null>(null);
+  const [replyTarget, setReplyTarget] = useState<Msg | null>(null);
+  const [extra, setExtra] = useState<Map<number, Msg>>(new Map()); // 불러온 범위 밖 원문(인용용). 목록에는 넣지 않는다
+  const asked = useRef(new Set<number>());
 
   useEffect(() => {
     let alive = true;
@@ -95,7 +106,10 @@ function RoomBody({ id, me }: { id: string; me: string }) {
     return () => sub.remove();
   }, []);
 
+  const members = useMembers(id, info?.members);
   const names = useMemo(() => new Map(info?.members.map((m) => [m.user_id, m.name])), [info]);
+  const { rows: reactionRows, toggle } = useReactions(id, useMemo(() => messages.map((x) => x.id), [messages]), me);
+  const byId = useMemo(() => new Map(messages.map((x) => [x.id, x])), [messages]);
   const group = info?.room.kind === 'group';
   const title = info ? roomTitle(info.room, info.members, me) : '대화방';
 
@@ -112,18 +126,44 @@ function RoomBody({ id, me }: { id: string; me: string }) {
       })
       .catch(() => {
         if (lastRead.current === at) lastRead.current = null;
+        if (unmounted.current) return;
         if (markAttempts.current < 3) {
           markAttempts.current += 1;
+          if (markTimer.current) clearTimeout(markTimer.current);
           markTimer.current = setTimeout(() => setMarkTick((t) => t + 1), 3000);
         }
       });
   }, [appActive, focused, newest, id, me, markTick]);
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    unmounted.current = false;
+    return () => {
+      unmounted.current = true;
       if (markTimer.current) clearTimeout(markTimer.current);
-    },
-    [],
-  );
+    };
+  }, []);
+
+  // 다시 불러오기 줄이 성공으로 사라졌는데 포커스가 body로 떨어졌으면 입력창으로(웹만: 네이티브는 키보드가 올라온다).
+  const retryRowShown = error || infoError !== null || olderError;
+  useEffect(() => {
+    if (retryRowShown || !retryFocus.current) return;
+    retryFocus.current = false;
+    if (Platform.OS === 'web' && (typeof document === 'undefined' || document.activeElement === document.body || !document.activeElement)) inputRef.current?.focus();
+  }, [retryRowShown]);
+
+  // 답장 원문이 불러온 범위 밖이면 한 번만 읽는다. 못 읽으면 인용은 "원래 메시지"로 남는다.
+  useEffect(() => {
+    if (!supabase) return;
+    const c = supabase;
+    for (const x of messages) {
+      const r = x.reply_to;
+      if (r === null || byId.has(r) || asked.current.has(r)) continue;
+      asked.current.add(r);
+      void Promise.resolve(c.from('messages').select('*').eq('id', r).single()).then(
+        ({ data }) => data && !unmounted.current && setExtra((cur) => new Map(cur).set(r, data)),
+        () => {},
+      );
+    }
+  }, [messages, byId]);
 
   // 새 메시지 알림은 말풍선마다 읽지 않고 상대가 보낸 가장 새 것 한 줄만 정중하게(polite) 알린다.
   useEffect(() => {
@@ -142,7 +182,8 @@ function RoomBody({ id, me }: { id: string; me: string }) {
     setSendError(null);
     setDraft(''); // 먼저 비운다. 실패하면 되돌린다.
     try {
-      await send({ text });
+      await send(replyTarget ? { text, reply_to: replyTarget.id } : { text });
+      setReplyTarget(null);
     } catch (e) {
       const err = e as SendError;
       setDraft((cur) => (cur ? `${text}\n${cur}` : text));
@@ -150,9 +191,36 @@ function RoomBody({ id, me }: { id: string; me: string }) {
     } finally {
       sending.current = false;
     }
-  }, [draft, send]);
+  }, [draft, send, replyTarget]);
 
   const data = useMemo(() => [...messages].reverse(), [messages]); // inverted: 새 것부터
+
+  const toggleReaction = useCallback(
+    (messageId: number, emoji: Emoji) => {
+      setSendError(null);
+      const had = reactionRows.find((r) => r.message_id === messageId && r.user_id === me)?.emoji;
+      toggle(messageId, emoji).then(
+        () => setAnnounce(had === emoji ? `공감 취소: ${REACTION_LABELS[emoji]}` : `공감: ${REACTION_LABELS[emoji]}`),
+        () => setSendError('공감하지 못했어요. 다시 시도해 주세요.'),
+      );
+    },
+    [toggle, reactionRows, me],
+  );
+
+  const goTo = useCallback(
+    (replyTo: number) => {
+      const index = data.findIndex((x) => x.id === replyTo);
+      if (index >= 0) listRef.current?.scrollToIndex({ index, viewPosition: 0.5, animated: true });
+    },
+    [data],
+  );
+
+
+
+  const quotedName = (x: Msg) => {
+    const q = x.reply_to === null ? null : (byId.get(x.reply_to) ?? extra.get(x.reply_to));
+    return q ? (q.sender_id === me ? '나' : names.get(q.sender_id)) : undefined;
+  };
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
@@ -169,18 +237,30 @@ function RoomBody({ id, me }: { id: string; me: string }) {
             <AppText accessibilityRole="alert" variant="small" color="danger">
               {infoError ?? NETWORK_MESSAGE}
             </AppText>
-            <Button label="다시 불러오기" kind="secondary" onPress={retry} />
+            <Button
+              label="다시 불러오기"
+              kind="secondary"
+              onPress={() => {
+                retryFocus.current = true;
+                retry();
+              }}
+            />
           </View>
         )}
         <View accessibilityLiveRegion="polite" aria-live="polite" style={SR_ONLY}>
           <AppText>{announce}</AppText>
         </View>
         <FlatList
+          ref={listRef}
           inverted
           data={data}
           keyExtractor={(m) => String(m.id)}
           onEndReached={() => hasMore && !olderError && void loadOlder()}
           onEndReachedThreshold={0.5}
+          onScrollToIndexFailed={(i) => {
+            listRef.current?.scrollToOffset({ offset: i.averageItemLength * i.index, animated: true });
+            setTimeout(() => !unmounted.current && listRef.current?.scrollToIndex({ index: i.index, viewPosition: 0.5, animated: true }), 300);
+          }}
           keyboardShouldPersistTaps="handled"
           ListFooterComponent={
             olderError ? (
@@ -188,7 +268,14 @@ function RoomBody({ id, me }: { id: string; me: string }) {
                 <AppText accessibilityRole="alert" variant="small" color="danger">
                   이전 메시지를 불러오지 못했어요
                 </AppText>
-                <Button label="이전 메시지 다시 불러오기" kind="secondary" onPress={() => void loadOlder()} />
+                <Button
+                  label="이전 메시지 다시 불러오기"
+                  kind="secondary"
+                  onPress={() => {
+                    retryFocus.current = true;
+                    void loadOlder();
+                  }}
+                />
               </View>
             ) : undefined
           }
@@ -199,18 +286,55 @@ function RoomBody({ id, me }: { id: string; me: string }) {
             const first = older?.sender_id !== item.sender_id;
             return (
               <View style={{ marginTop: older && !first ? space[0] : older ? space[2] : 0 }}>
-                <Bubble message={item} mine={mine} senderName={group && !mine && first ? names.get(item.sender_id) : undefined} />
+                <Bubble
+                  message={item}
+                  mine={mine}
+                  senderName={group && !mine && first ? names.get(item.sender_id) : undefined}
+                  quoted={item.reply_to === null ? null : (byId.get(item.reply_to) ?? extra.get(item.reply_to) ?? null)}
+                  quotedName={quotedName(item)}
+                  reactions={summarizeReactions(reactionRows, item.id, me)}
+                  unread={unreadCount(item, members)}
+                  onLongPress={() => setMenuFor(item)}
+                  onMore={() => setMenuFor(item)}
+                  onQuotePress={() => item.reply_to !== null && goTo(item.reply_to)}
+                  onReactionPress={(e) => toggleReaction(item.id, e)}
+                />
               </View>
             );
           }}
         />
-        <Composer value={draft} onChangeText={setDraft} onSend={() => void onSend()} />
+        <Composer
+          value={draft}
+          onChangeText={setDraft}
+          onSend={() => void onSend()}
+          inputRef={inputRef}
+          replyTo={replyTarget ? { name: names.get(replyTarget.sender_id) ?? '상대', text: firstLine(replyTarget) } : null}
+          onCancelReply={() => setReplyTarget(null)}
+        />
         {sendError && (
           <AppText accessibilityRole="alert" variant="small" color="danger" style={{ paddingHorizontal: space[3], paddingBottom: space[1] }}>
             {sendError}
           </AppText>
         )}
       </KeyboardAvoidingView>
+      <MessageActions
+        visible={menuFor !== null}
+        message={menuFor}
+        mine={menuFor?.sender_id === me}
+        myReaction={(reactionRows.find((r) => r.message_id === menuFor?.id && r.user_id === me)?.emoji as Emoji | undefined) ?? null}
+        onClose={() => setMenuFor(null)}
+        onReply={() => {
+          if (menuFor) {
+            setReplyTarget(menuFor);
+            setAnnounce(`${names.get(menuFor.sender_id) ?? '상대'}에게 답장`);
+          }
+          setMenuFor(null);
+        }}
+        onReact={(e) => {
+          if (menuFor) toggleReaction(menuFor.id, e);
+          setMenuFor(null);
+        }}
+      />
     </SafeAreaView>
   );
 }
