@@ -1,5 +1,5 @@
 # 모델 배치 설정. 모델 이름은 코드에 없고 여기에만 있다.
-# 키가 없는 공급자는 자동으로 건너뛰고, 마지막엔 mock으로 떨어진다.
+# 키가 없는 공급자는 자동으로 건너뛴다. 실제 모델이 모두 막히면 mock으로 떨어지지 않고 기권(NoResult)한다. mock은 force_mock(테스트·평가)에서만 쓴다.
 
 providers:
   nvidia:
@@ -23,7 +23,7 @@ providers:
   mock:
     rpm: 100000
 
-# 전문가. 추가·제거는 여기서만 한다. mock은 force_mock·폴백의 mock:auto가 쓸 mock_rules 이름(없으면 prompt 이름).
+# 전문가. 추가·제거는 여기서만 한다. mock은 force_mock(테스트·평가)가 쓸 mock_rules 이름(없으면 prompt 이름).
 # optional은 첫 모델 공급자를 쓸 수 없으면 빠진다. HyperCLOVA X는 생성(rewrite)에 쓰지 않는다(라이선스).
 experts:
   - {id: ctx_fast,  role: context,  model: nvidia:deepseek-ai/deepseek-v4.1-flash, prompt: context,  paths: [realtime]}

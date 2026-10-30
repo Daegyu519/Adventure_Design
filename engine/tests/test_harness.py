@@ -2,11 +2,10 @@ import asyncio
 import time
 
 import pytest
-import yaml
 
 from app.settings import DEFAULT_MODELS_PATH
 from harness import pii
-from harness.router import NoResult, Router, chains
+from harness.router import NoResult, Router
 from harness.schemas import ContextReading, Conversation, ToneReading, Turn
 from harness.store import ProfileStore
 from layers import aggregate, gate, guard

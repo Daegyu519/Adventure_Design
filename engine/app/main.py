@@ -99,9 +99,11 @@ class HealthResponse(BaseModel):
     failures: dict[str, dict[str, int]]   # 공급자 → {실패·건너뜀 종류: 횟수}(프로세스 시작 뒤). 원문 없음
 
 
-def provider_status(cfg: dict, env: Mapping[str, str]) -> dict[str, str]:
+def provider_status(cfg: dict, env: Mapping[str, str], force_mock: bool = False) -> dict[str, str]:
+    """mock은 force_mock(테스트·평가)일 때만 보인다. 운영에서 "up"으로 보이면 실제 모델이 산다고 오해한다."""
     providers = cfg.get("providers") or {}
-    return {name: "up" if available(name, p or {}, env) else "down" for name, p in providers.items()}
+    return {name: "up" if available(name, p or {}, env) else "down" for name, p in providers.items()
+            if force_mock or name != "mock"}
 
 
 def model_status(cfg: dict, env: Mapping[str, str]) -> dict[str, str]:
@@ -127,5 +129,5 @@ def startup_warnings(reg: Registry, env: Mapping[str, str]) -> None:
 @app.get("/health")
 def health(reg: Registry = Depends(get_registry)) -> HealthResponse:
     cfg = load_config()
-    return HealthResponse(ok=True, models=model_status(cfg, os.environ), providers=provider_status(cfg, os.environ),
+    return HealthResponse(ok=True, models=model_status(cfg, os.environ), providers=provider_status(cfg, os.environ, reg.router.force_mock),
                           failures=reg.router.failures)

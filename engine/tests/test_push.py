@@ -387,9 +387,9 @@ def test_slow_push_hits_overall_deadline(fake, monkeypatch, caplog):
 
 def test_settings_repr_hides_secrets():
     """Settings는 큐 인자라 repr가 로그·예외에 나올 수 있다: 비밀값은 찍히지 않는다."""
-    secrets = ("SECRET-HOOK", "SECRET-SRK", "postgres://u:SECRET-PW@h/db", "SECRET-EXPO", "SECRET-VAPID")
-    s = Settings(hook_secret=secrets[0], supabase_db_url=secrets[2],
-                 expo_access_token=secrets[3], vapid_private_key=secrets[4], vapid_subject="mailto:a@b.c",
+    secrets = ("SECRET-HOOK", "postgres://u:SECRET-PW@h/db", "SECRET-EXPO", "SECRET-VAPID")
+    s = Settings(hook_secret=secrets[0], supabase_db_url=secrets[1],
+                 expo_access_token=secrets[2], vapid_private_key=secrets[3], vapid_subject="mailto:a@b.c",
                  supabase_url="https://x.supabase.co")
     text = repr(s) + str(s)
     for v in secrets:
