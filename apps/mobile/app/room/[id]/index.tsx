@@ -308,7 +308,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
           onChangeText={setDraft}
           onSend={() => void onSend()}
           inputRef={inputRef}
-          replyTo={replyTarget ? { name: names.get(replyTarget.sender_id) ?? '상대', text: firstLine(replyTarget) } : null}
+          replyTo={replyTarget ? { name: replyTarget.sender_id === me ? '나' : (names.get(replyTarget.sender_id) ?? '상대'), text: firstLine(replyTarget) } : null}
           onCancelReply={() => setReplyTarget(null)}
         />
         {sendError && (
