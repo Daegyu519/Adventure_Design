@@ -166,6 +166,23 @@ test('default engine falls back to the mock and warns in dev when EXPO_PUBLIC_EN
   }
 });
 
+// 배포 빌드(__DEV__ false)는 URL이 비어도 조용히 mock으로 돌면 안 된다: 가짜 힌트·기록이 나가고 엔진은 요청을 못 받는다(S-C1).
+test('release build: an empty EXPO_PUBLIC_ENGINE_URL throws at engine creation instead of using the mock', () => {
+  const g = globalThis as { __DEV__?: boolean };
+  const dev = g.__DEV__;
+  const env = process.env;
+  g.__DEV__ = false;
+  process.env = { ...env, EXPO_PUBLIC_ENGINE_URL: '' };
+  try {
+    expect(() => createEngine({ baseUrl: '  ', getToken: async () => 'tok' })).toThrow(/EXPO_PUBLIC_ENGINE_URL/);
+    expect(createEngine({ baseUrl: 'http://e', getToken: async () => 'tok' }).isMock).toBe(false);
+    jest.isolateModules(() => expect(() => jest.requireActual('../engine')).toThrow(/EXPO_PUBLIC_ENGINE_URL/));
+  } finally {
+    g.__DEV__ = dev;
+    process.env = env;
+  }
+});
+
 test('mock: echoes seq, hints "안 돼요." and not "좋아요!"', async () => {
   const e = createEngine({ baseUrl: '', getToken: async () => null });
   expect(e.isMock).toBe(true);
