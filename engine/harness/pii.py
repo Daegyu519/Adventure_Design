@@ -29,12 +29,8 @@ TOKEN = re.compile(r"\[[^\[\]\d]+\d+\]")
 _ALL = re.compile("|".join(f"(?P<g{i}>{pat.pattern})" for i, (pat, _) in enumerate(RULES)))
 
 
-def mask(text: str, names: list[str] | None = None) -> str:
-    text = _ALL.sub(lambda m: RULES[int((m.lastgroup or "g0")[1:])][1] or m.group(0), text)
-    for n in names or []:
-        if n:
-            text = text.replace(n, "[이름]")
-    return text
+def mask(text: str) -> str:
+    return _ALL.sub(lambda m: RULES[int((m.lastgroup or "g0")[1:])][1] or m.group(0), text)
 
 
 class Masker:

@@ -17,6 +17,7 @@
 | P-01 | 단계 1 계획 두 개(엔진·앱) 작성, 교차 검토 반영 | 공통 | T-01 | `docs/superpowers/plans/2026-10-27-phase1-{engine,app}.md`, 교차 검토 16건 반영 확인: 계획 작성 에이전트 2 + 교차 검토 1 + 수정 1, 앱은 네이티브 개발 빌드 기준 | 완료 |
 | P-02 | 단계 0 최종 검토 후속 정리 | 공통 | P-01 | 계획 수정(공감 upsert, env, 안전망 문구, T-24 규칙), claim이 .env 연결, guard 오류 문구, radius.input, T-02 수동 단계. 확인: scripts/test_coord.sh ALL PASS(.env 심볼릭 링크 검사 포함), engine pytest 80 passed(guard 오류 문구 테스트 포함), design/check_contrast.py contrast OK, apps/mobile tsc --noEmit 0 | 완료 |
 | P-03 | 인수인계: AGENTS.md(흐름·상태·결정·구조도), GitHub 비공개 저장소 Daegyu519/Adventure_Design에 올림 | 공통 | - | 다른 에이전트가 AGENTS.md만 읽고 다음 작업을 잡을 수 있음. 확인: AGENTS.md의 경로·명령·작업 수를 worktree에서 직접 대조, `scripts/check` 통과(엔진 515 passed, 앱 jest 232 passed) | 완료 |
+| P-04 | 단계 1 끝 리뷰 반영(엔진): 본문 크기 제한, 오류 응답 정리, 모델 실패·폴백 로그, 푸시·털어놓기 조용한 실패, 죽은 코드 삭제 | 엔진 | - | 본문 64 KB 초과 413(파싱·인증 전), 422·500 고정 코드(입력 되돌려 주지 않음, CORS 유지), mock은 force_mock에서만(실제 모델이 다 막히면 기권)과 실패 로그·시작 경고·`/health` providers·failures, 푸시 DB 읽기 10초 제한·VAPID 없음 경고·Expo 티켓 오류 로그, 분류기 없으면 신고 소비 안 함, 트레이스 작업 1회, 거울 역할극 본인 이름 가림, 시작 때 레지스트리 검사, 죽은 코드 삭제, 마이그레이션 7개 문서. 확인: `uv run pytest -q -W error` 543 passed 1 skipped(FakeRepo 잠금), `scripts/check` 통과(엔진 + supabase 25 + 앱 jest 664), 새 테스트 test_limits·test_errors·test_observability·test_p04_fixes | 완료 |
 | T-02 | Supabase dev 프로젝트(클라우드, 서울) 생성, Supabase CLI 연결. pilot 프로젝트는 나중에 따로 만든다(T-29에서 전환) | DB | T-01 | `supabase link`로 dev 연결. 수동 단계: `supabase db push`로 _platform 포함 모든 마이그레이션 적용, Realtime "Allow public access" 끄기, push 전에 대시보드에서 `messages`·`reactions`·`room_members`의 Realtime을 켜지 않기(_platform이 켠다), DB 웹훅은 대시보드에서 설정(README "dev 웹훅 연결", T-10 land됨) | 대기 |
 | T-03a | 채팅 스키마: `profiles`, `rooms`, `room_members`, `messages`, `reactions`, `invites`, 함수(`is_member`, `create_group`, `create_invite`, `accept_invite`), RLS | DB | T-01 | PGlite RLS 테스트 통과. 확인: PGlite(node --test) 16 pass — RLS·초대·멤버 상한·메시지 제약. 동시성은 실제 Postgres에서 T-02 이후 재확인 | 완료 |
 | T-03b | `tone` 스키마(API 비공개), `tone_events`, `mirror_attempts`, `push_tokens`, Realtime·Storage(`chat-images`) platform 마이그레이션 | DB | T-03a | PGlite RLS 테스트 통과. 확인: PGlite 24 pass — tone 비공개, 본인 행 전용 표, 푸시 upsert·updated_at 트리거. _platform.sql(Storage·Realtime·typing 정책)은 T-02 이후 실제 프로젝트에서 재확인 | 완료 |
@@ -93,7 +94,7 @@
 
 | ID | 작업 | 영역 | 선행 | 완료 기준 | 상태 |
 |---|---|---|---|---|---|
-| T-29 | 엔진 배포: Dockerfile, 서버(학교 서버 또는 VM), 공개 HTTPS(Cloudflare Tunnel 등), pilot Supabase로 전환 | 배포 | T-24 | 컨테이너 실행, 외부 네트워크에서 `/health` 200, 웹훅 수신 | 대기 |
+| T-29 | 엔진 배포: Dockerfile, 서버(학교 서버 또는 VM), 공개 HTTPS(Cloudflare Tunnel 등), pilot Supabase로 전환 | 배포 | T-24 | 컨테이너 실행, 외부 네트워크에서 `/health` 200, 웹훅 수신, uvicorn 한 프로세스(`--workers 1`), `MIRROR_SECRET` 필수, `/health`에서 `nvidia:*` up 확인(한도·큐·잠금이 프로세스 메모리), 바깥(Cloudflare)에서도 요청 본문 64 KB 제한 | 대기 |
 | T-30 | 웹 빌드 배포(`npx expo export --platform web`, HTTPS, 웹 푸시 서비스 워커 포함), Android = EAS preview APK 배포, iOS 네이티브(TestFlight) = 선택(Apple 개발자 계정 필요) | 배포 | T-22, T-28a, T-28b | 참가자가 링크·APK로 접속, 아이폰은 홈 화면에 추가해서 실행, 배포 빌드에서 `engine.isMock === false` 확인 | 대기 |
 | T-31 | 파일럿: 동의서, 10~15쌍 + 팀 그룹방 모집, 1주 운영, 이벤트 집계(알림 수 변화, 고친 비율) | 공통 | T-29, T-30 | 집계표와 발표용 그래프 | 대기 |
 

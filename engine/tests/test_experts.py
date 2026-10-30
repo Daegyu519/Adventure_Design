@@ -243,7 +243,7 @@ def test_router_masks_before_third_party(tmp_path, provider):
 
 def test_safety_net_leaves_prompts_intact():
     for f in prompts.DIR.glob("*.md"):
-        system, user, _ = prompts.load(f.stem)
+        system, user = prompts.load(f.stem)
         assert pii.mask(system) == system and pii.mask(user) == user, f.name
 
 

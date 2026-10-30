@@ -143,7 +143,6 @@ class FeedbackResult(BaseModel):
 class Hint(BaseModel):
     title: str
     detail: str
-    action: str = "살펴보기"
 
 
 class DetailReport(BaseModel):
