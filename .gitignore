@@ -9,3 +9,6 @@ dist/
 web-build/
 .DS_Store
 .gstack/
+
+# Supabase CLI 임시 파일(db push 등이 만든다)
+supabase/.temp/
