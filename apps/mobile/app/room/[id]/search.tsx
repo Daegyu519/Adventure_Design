@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import ArrowLeft from 'lucide-react-native/icons/arrow-left';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -11,11 +11,14 @@ import { TextField } from '../../../components/TextField';
 import { NETWORK_MESSAGE } from '../../../lib/dbErrors';
 import { formatStamp } from '../../../lib/messages';
 import { fetchRoom } from '../../../lib/rooms';
-import { highlight, searchMessages } from '../../../lib/search';
+import { highlight, SEARCH_LIMIT, searchMessages } from '../../../lib/search';
 import { useSession } from '../../../lib/session';
 import { supabase } from '../../../lib/supabase';
 import { focusRing, useTheme } from '../../../lib/theme';
 import type { Tables } from '../../../lib/types/db';
+
+// 화면 읽기 프로그램에만 보이는 줄.
+const SR_ONLY = { position: 'absolute', width: 1, height: 1, overflow: 'hidden', opacity: 0 } as const;
 
 export default function RoomSearch() {
   const { colors, space } = useTheme();
@@ -29,6 +32,14 @@ export default function RoomSearch() {
   const [busy, setBusy] = useState(false);
   const [names, setNames] = useState<Map<string, string>>(new Map());
   const seq = useRef(0);
+  const [announce, setAnnounce] = useState('');
+  const flips = useRef(new Map<string, number>());
+  // 같은 문구를 또 말할 때마다 보이지 않는 글자를 붙였다 뗐다 해서 화면 읽기 프로그램이 다시 읽게 한다.
+  const say = useCallback((t: string) => {
+    const n = (flips.current.get(t) ?? 0) + 1;
+    flips.current.set(t, n);
+    setAnnounce(t + (n % 2 ? '' : '\u200b'));
+  }, []);
 
   useEffect(() => {
     if (!id || !supabase) return;
@@ -45,13 +56,18 @@ export default function RoomSearch() {
     const mine = ++seq.current;
     setBusy(true);
     setError(null);
+    say('검색 중');
     try {
       const rows = await searchMessages(id, query);
       if (mine !== seq.current) return;
       setTerm(query);
       setResults(rows);
+      say(rows.length ? `${rows.length}개 찾았어요${rows.length >= SEARCH_LIMIT ? `. 최근 ${SEARCH_LIMIT}개만 보여요` : ''}` : '찾는 말이 없어요');
     } catch {
-      if (mine === seq.current) setError(NETWORK_MESSAGE);
+      if (mine === seq.current) {
+        setResults(null); // 이전 결과가 오류 아래에 남지 않게
+        setError(NETWORK_MESSAGE);
+      }
     } finally {
       setBusy(false);
     }
@@ -62,7 +78,7 @@ export default function RoomSearch() {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
-      <View style={{ width: '100%', maxWidth: 560, alignSelf: 'center', flex: 1, padding: space[3], gap: space[3] }}>
+      <View {...({ role: "search" } as object)} style={{ width: '100%', maxWidth: 560, alignSelf: 'center', flex: 1, padding: space[3], gap: space[3] }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[1] }}>
           <IconButton icon={ArrowLeft} label="뒤로" onPress={goBack} />
           <AppText accessibilityRole="header" aria-level={1} variant="title">
@@ -75,6 +91,8 @@ export default function RoomSearch() {
           onChangeText={setQ}
           returnKeyType="search"
           onSubmitEditing={() => void submit()}
+          autoFocus
+          blurOnSubmit={false}
           autoCorrect={false}
           autoCapitalize="none"
         />
@@ -84,17 +102,26 @@ export default function RoomSearch() {
             {error}
           </AppText>
         )}
+        <View accessibilityLiveRegion="polite" aria-live="polite" style={SR_ONLY}>
+          <AppText>{announce}</AppText>
+        </View>
         {results && !error && (
-          <AppText accessibilityLiveRegion="polite" aria-live="polite" color="textMuted">
+          <AppText aria-hidden color="textMuted">
             {results.length ? `${results.length}개 찾았어요` : '찾는 말이 없어요'}
           </AppText>
         )}
+        {results && !error && results.length >= SEARCH_LIMIT && (
+          <AppText variant="small" color="textMuted">
+            최근 {SEARCH_LIMIT}개만 보여요
+          </AppText>
+        )}
         <ScrollView keyboardShouldPersistTaps="handled">
+          <View role="list" aria-label="검색 결과">
           {(results ?? []).map((item) => {
             const stamp = formatStamp(item.created_at);
             return (
+              <View key={item.id} role="listitem">
               <Pressable
-                key={item.id}
                 onPress={() => router.navigate({ pathname: '/room/[id]', params: { id: id!, at: String(item.id), k: String(Date.now()) } })}
                 accessibilityRole="button"
                 accessibilityLabel={`${who(item.sender_id)}, ${stamp}: ${item.text}`}
@@ -112,8 +139,10 @@ export default function RoomSearch() {
                   ))}
                 </AppText>
               </Pressable>
+              </View>
             );
           })}
+          </View>
         </ScrollView>
       </View>
     </SafeAreaView>

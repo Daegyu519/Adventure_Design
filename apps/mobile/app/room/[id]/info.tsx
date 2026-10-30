@@ -1,19 +1,23 @@
-import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
+import { useIsFocused, useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import ArrowLeft from 'lucide-react-native/icons/arrow-left';
 import { useCallback, useEffect, useRef, useState, type ComponentRef } from 'react';
-import { AccessibilityInfo, Platform, ScrollView, Share, Switch, View } from 'react-native';
+import { Platform, Pressable, ScrollView, Share, Switch, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '../../../components/AppText';
 import { Button } from '../../../components/Button';
 import { IconButton } from '../../../components/IconButton';
 import { dbErrorMessage, NETWORK_MESSAGE } from '../../../lib/dbErrors';
+import { focusNode } from '../../../lib/focus';
 import { createGroupInvite, GROUP_MAX } from '../../../lib/invite';
 import { fetchRoom, roomTitle, setMuted, type Member } from '../../../lib/rooms';
 import { useSession } from '../../../lib/session';
 import { supabase } from '../../../lib/supabase';
 import { useTheme } from '../../../lib/theme';
 import type { Tables } from '../../../lib/types/db';
+
+// 화면 읽기 프로그램에만 보이는 줄.
+const SR_ONLY = { position: 'absolute', width: 1, height: 1, overflow: 'hidden', opacity: 0 } as const;
 
 const loadMessage = (e: unknown) => ((e as { code?: string })?.code ? dbErrorMessage(e as { message: string }, '방 정보를 불러오지 못했어요. 다시 시도해 주세요.') : NETWORK_MESSAGE);
 
@@ -34,10 +38,29 @@ export default function RoomInfo() {
   const [busy, setBusy] = useState(false);
   const titleRef = useRef<ComponentRef<typeof View>>(null);
   const refocus = useRef(false);
+  const codeRef = useRef<ComponentRef<typeof View>>(null);
+  const searchBtnRef = useRef<ComponentRef<typeof View>>(null);
+  const focused = useIsFocused();
+  const wasBlurred = useRef(false);
+  const [announce, setAnnounce] = useState('');
+  const sayCount = useRef(0);
+  // 같은 문구가 연달아 와도 다시 읽히도록 번갈아 보이지 않는 글자를 붙인다(대화방과 같은 방식).
+  const say = useCallback((t: string) => setAnnounce(t + (sayCount.current++ % 2 ? '\u200b' : '')), []);
+
+  // 들어오면 제목으로, 검색 화면에서 돌아오면 "대화 검색" 버튼으로 포커스(body로 떨어지지 않게).
+  useEffect(() => {
+    if (!focused) wasBlurred.current = true;
+    else if (wasBlurred.current) {
+      wasBlurred.current = false;
+      focusNode(searchBtnRef, '[role=button]');
+    }
+  }, [focused]);
+  useEffect(() => focusNode(titleRef), []);
 
   useEffect(() => {
     if (!id) return;
     let alive = true;
+    say('방 정보를 불러오는 중');
     fetchRoom(id)
       .then((r) => {
         if (!alive) return;
@@ -52,6 +75,7 @@ export default function RoomInfo() {
     return () => {
       alive = false;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- say는 안정적이다
   }, [id, me, tick]);
 
   const toggleMute = useCallback(
@@ -62,7 +86,7 @@ export default function RoomInfo() {
       setMutedState(next);
       try {
         await setMuted(id, me, next);
-        AccessibilityInfo.announceForAccessibility(next ? '이 방 알림을 껐어요' : '이 방 알림을 켰어요');
+        say(next ? '이 방 알림을 껐어요' : '이 방 알림을 켰어요');
       } catch {
         setMutedState(!next);
         setMuteError(true);
@@ -70,7 +94,7 @@ export default function RoomInfo() {
         muting.current = false;
       }
     },
-    [id, me],
+    [id, me, say],
   );
 
   const makeInvite = async () => {
@@ -82,7 +106,7 @@ export default function RoomInfo() {
     setBusy(false);
     if (res.ok) {
       setCode(res.code);
-      AccessibilityInfo.announceForAccessibility('초대 코드를 만들었어요. 72시간 안에 쓸 수 있어요');
+      say('초대 코드를 만들었어요. 72시간 안에 쓸 수 있어요');
     } else setInviteError(res.message);
   };
 
@@ -103,6 +127,11 @@ export default function RoomInfo() {
     }
   };
 
+  // 코드가 그려진 뒤 포커스를 코드 블록으로(누른 버튼은 그대로 있지만 읽는 위치를 코드로 옮긴다).
+  useEffect(() => {
+    if (code) focusNode(codeRef);
+  }, [code]);
+
   const goBack = () => (router.canGoBack() ? router.back() : router.replace('/'));
   const group = data?.room.kind === 'group';
   const title = data && me ? roomTitle(data.room, data.members, me) : '방 정보';
@@ -110,6 +139,9 @@ export default function RoomInfo() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: space[3], paddingBottom: space[6] }}>
+        <View accessibilityLiveRegion="polite" aria-live="polite" style={SR_ONLY}>
+          <AppText>{announce}</AppText>
+        </View>
         <View style={{ width: '100%', maxWidth: 560, alignSelf: 'center', gap: space[5] }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[1] }}>
             <IconButton icon={ArrowLeft} label="뒤로" onPress={goBack} />
@@ -142,23 +174,33 @@ export default function RoomInfo() {
             <>
               <View style={{ gap: space[0] }}>
                 <AppText color="textMuted">관계: {data.room.relation}</AppText>
-                {group && <AppText color="textMuted">{`${data.members.length}/${GROUP_MAX}명`}</AppText>}
+                {group && (
+                  <AppText color="textMuted" accessibilityLabel={`멤버 ${data.members.length}명, 최대 ${GROUP_MAX}명`}>{`${data.members.length}/${GROUP_MAX}명`}</AppText>
+                )}
               </View>
 
               <View style={{ gap: space[1] }}>
                 <AppText accessibilityRole="header" aria-level={2} weight="600">
                   멤버
                 </AppText>
-                {data.members.map((m) => (
-                  <View key={m.user_id} style={{ minHeight: 44, justifyContent: 'center', borderBottomWidth: 1, borderBottomColor: colors.border }}>
-                    <AppText>{m.user_id === me ? `${m.name} (나)` : m.name}</AppText>
-                  </View>
-                ))}
+                <View role="list" aria-label="멤버">
+                  {data.members.map((m) => {
+                    const name = m.name || '이름 없음';
+                    return (
+                      <View key={m.user_id} role="listitem" style={{ minHeight: 44, justifyContent: 'center', borderBottomWidth: 1, borderBottomColor: colors.border }}>
+                        <AppText>{m.user_id === me ? `${name} (나)` : name}</AppText>
+                      </View>
+                    );
+                  })}
+                </View>
               </View>
 
               <View style={{ gap: space[1] }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[3] }}>
-                  <AppText style={{ flex: 1 }}>이 방 알림 끄기</AppText>
+                <View testID="mute-row" style={{ flexDirection: 'row', alignItems: 'center', gap: space[3], minHeight: 44 }}>
+                  {/* 글자 쪽도 눌러서 켜고 끌 수 있게 눌리는 영역을 넓힌다(스위치만 접근성 대상) */}
+                  <Pressable testID="mute-label" accessible={false} onPress={() => void toggleMute(!muted)} style={{ flex: 1, minHeight: 44, justifyContent: 'center' }}>
+                    <AppText>이 방 알림 끄기</AppText>
+                  </Pressable>
                   <Switch
                     accessibilityRole="switch"
                     accessibilityLabel="이 방 알림 끄기"
@@ -177,7 +219,9 @@ export default function RoomInfo() {
                 )}
               </View>
 
-              <Button label="대화 검색" kind="secondary" onPress={() => router.push(`/room/${id}/search` as Href)} />
+              <View ref={searchBtnRef}>
+                <Button label="대화 검색" kind="secondary" onPress={() => router.push(`/room/${id}/search` as Href)} />
+              </View>
 
               {group && (
                 <View style={{ gap: space[2] }}>
@@ -188,7 +232,7 @@ export default function RoomInfo() {
                     </AppText>
                   )}
                   {code && (
-                    <View accessible role="group" accessibilityLabel={`초대 코드 ${[...code].join(' ')}`} style={{ gap: space[2], padding: space[3], borderRadius: radius.card, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, alignItems: 'center' }}>
+                    <View ref={codeRef} accessible role="group" accessibilityLabel={`초대 코드 ${[...code].join(' ')}, 72시간 안에 쓸 수 있어요`} {...({ tabIndex: -1 } as object)} style={{ gap: space[2], padding: space[3], borderRadius: radius.card, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, alignItems: 'center' }}>
                       <AppText variant="small" color="textMuted">
                         초대 코드 (72시간 안에 쓸 수 있어요)
                       </AppText>
@@ -197,7 +241,7 @@ export default function RoomInfo() {
                       </AppText>
                     </View>
                   )}
-                  {code && <Button label="보내기" onPress={() => void sendCode()} />}
+                  {code && <Button label="초대 코드 보내기" onPress={() => void sendCode()} />}
                   {notice && (
                     <AppText accessibilityRole="alert" accessibilityLiveRegion="polite" variant="small" color="textMuted">
                       {notice}

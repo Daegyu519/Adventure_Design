@@ -7,7 +7,10 @@ import RoomInfo from '../app/room/[id]/info';
 jest.mock('lucide-react-native/icons/arrow-left', () => () => null);
 jest.mock('react-native-safe-area-context', () => ({ SafeAreaView: ({ children }: { children: unknown }) => children }));
 const mockRouter = { push: jest.fn(), back: jest.fn(), replace: jest.fn(), canGoBack: () => true };
-jest.mock('expo-router', () => ({ useRouter: () => mockRouter, useLocalSearchParams: () => ({ id: 'r1' }) }));
+let mockFocused = true;
+jest.mock('expo-router', () => ({ useRouter: () => mockRouter, useLocalSearchParams: () => ({ id: 'r1' }), useIsFocused: () => mockFocused }));
+const mockFocus = jest.fn();
+jest.mock('../lib/focus', () => ({ focusNode: (...a: unknown[]) => mockFocus(...a) }));
 jest.mock('../lib/session', () => ({ useSession: () => ({ userId: 'me' }) }));
 const mockRpc = jest.fn();
 const mockUpdate = jest.fn();
@@ -37,6 +40,8 @@ async function setup(kind: 'group' | 'direct' = 'group') {
 }
 
 beforeEach(() => {
+  mockFocused = true;
+  mockFocus.mockReset();
   mockRouter.push.mockReset();
   mockRpc.mockReset();
   mockUpdate.mockReset().mockImplementation(() => eqChain({ error: null }));
@@ -81,7 +86,7 @@ test('그룹 초대 코드: rpc(create_invite, {room, relation}) → 코드와 �
   await press('초대 코드 만들기');
   expect(mockRpc).toHaveBeenCalledWith('create_invite', { room: 'r1', relation: '팀원' });
   expect(texts()).toContain('AB3X9K7Q');
-  await press('보내기');
+  await press('초대 코드 보내기');
   expect(Share.share).toHaveBeenCalled();
 });
 
@@ -96,4 +101,72 @@ test('대화 검색 → /room/r1/search', async () => {
   const { press } = await setup();
   await press('대화 검색');
   expect(mockRouter.push).toHaveBeenCalledWith('/room/r1/search');
+});
+
+const live = (find: (p: (n: TestInstance) => boolean) => TestInstance[]) => find((n) => n.props['aria-live'] === 'polite' && n.props.style?.position === 'absolute')[0];
+
+test('멤버는 list/listitem, 이름이 비면 "이름 없음"', async () => {
+  mockFetchRoom.mockImplementation(() => room('group').then((r) => ({ ...r, members: [...r.members, { user_id: 'u3', name: '', last_read_at: null, muted: false }] })));
+  const root = createRoot();
+  await act(async () => root.render(<RoomInfo />));
+  const q = (role: string) => root.container.queryAll((n) => n.props.role === role);
+  expect(q('list')).toHaveLength(1);
+  expect(q('listitem')).toHaveLength(3);
+  expect(textOf(root.container as unknown as TestNode)).toContain('이름 없음');
+});
+
+test('인원 수에 읽히는 이름이 있다', async () => {
+  const { find } = await setup();
+  expect(find((n) => n.props.accessibilityLabel === '멤버 2명, 최대 8명').length).toBeGreaterThan(0);
+});
+
+test('알림 행: 44pt 높이이고 글자를 눌러도 켜진다', async () => {
+  const { find, sw } = await setup();
+  const row = find((n) => n.props.testID === 'mute-row')[0];
+  expect(row.props.style.minHeight).toBeGreaterThanOrEqual(44);
+  const label = find((n) => n.props.testID === 'mute-label')[0];
+  await act(async () => label.props.onClick({ stopPropagation() {}, nativeEvent: {} }));
+  expect(mockUpdate).toHaveBeenCalledWith('room_members');
+  expect(sw()).toBeTruthy();
+});
+
+test('안내는 처음부터 있는 polite 영역에 나온다(알림 켬, 초대)', async () => {
+  const { find, press, sw, root } = await setup();
+  expect(live(find)).toBeTruthy();
+  await act(async () => (sw().props.onChange as (e: unknown) => void)({ nativeEvent: { value: true }, target: { value: true } }));
+  expect(textOf(live(find) as unknown as TestNode)).toContain('이 방 알림을 껐어요');
+  expect(AccessibilityInfo.announceForAccessibility).not.toHaveBeenCalled();
+  mockRpc.mockResolvedValue({ data: 'AB3X9K7Q', error: null, status: 200 });
+  await press('초대 코드 만들기');
+  expect(textOf(live(find) as unknown as TestNode)).toContain('초대 코드를 만들었어요');
+  expect(AccessibilityInfo.announceForAccessibility).not.toHaveBeenCalled();
+  void root;
+});
+
+test('불러오는 동안 "불러오는 중"을 알린다', async () => {
+  mockFetchRoom.mockImplementation(() => new Promise(() => {}));
+  const root = createRoot();
+  await act(async () => root.render(<RoomInfo />));
+  const l = root.container.queryAll((n) => n.props['aria-live'] === 'polite')[0];
+  expect(textOf(l as unknown as TestNode)).toContain('불러오는 중');
+});
+
+test('초대 코드를 만들면 코드 그룹으로 포커스', async () => {
+  mockRpc.mockResolvedValue({ data: 'AB3X9K7Q', error: null, status: 200 });
+  const { press, find } = await setup();
+  mockFocus.mockReset();
+  await press('초대 코드 만들기');
+  expect(mockFocus).toHaveBeenCalled();
+  expect(find((n) => String(n.props.accessibilityLabel).startsWith('초대 코드 A B 3') && String(n.props.accessibilityLabel).includes('72시간 안에 쓸 수 있어요')).length).toBeGreaterThan(0);
+});
+
+test('들어오면 제목으로 포커스, 검색에서 돌아오면 "대화 검색" 버튼으로', async () => {
+  const { root } = await setup();
+  expect(mockFocus).toHaveBeenCalledTimes(1);
+  mockFocused = false;
+  await act(async () => root.render(<RoomInfo />));
+  mockFocused = true;
+  mockFocus.mockReset();
+  await act(async () => root.render(<RoomInfo />));
+  expect(mockFocus).toHaveBeenCalledTimes(1);
 });

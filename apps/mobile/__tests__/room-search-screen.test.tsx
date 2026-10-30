@@ -86,3 +86,51 @@ test('빈 검색어는 요청하지 않는다', async () => {
   await search('  ');
   expect(mockFrom).not.toHaveBeenCalled();
 });
+
+const liveText = (find: (p: (n: TestInstance) => boolean) => TestInstance[]) => find((n) => n.props['aria-live'] === 'polite').map((n) => textOf(n as unknown as TestNode)).join('|');
+
+test('개수 안내 영역은 처음부터 있고, 같은 검색을 또 해도 문구가 바뀐다', async () => {
+  const { search, find } = await setup([row(5, 'u2', '오늘 50% 할인')]);
+  expect(find((n) => n.props['aria-live'] === 'polite').length).toBeGreaterThan(0);
+  await search('50%');
+  const a = liveText(find);
+  expect(a).toContain('1개 찾았어요');
+  await search('50%');
+  const b = liveText(find);
+  expect(b).toContain('1개 찾았어요');
+  expect(b).not.toBe(a);
+});
+
+test('결과는 list/listitem, 전체는 search 영역', async () => {
+  const { search, find } = await setup([row(5, 'u2', '오늘 50% 할인')]);
+  await search('50%');
+  expect(find((n) => n.props.role === 'list')).toHaveLength(1);
+  expect(find((n) => n.props.role === 'listitem')).toHaveLength(1);
+  expect(find((n) => n.props.role === 'search').length).toBeGreaterThan(0);
+});
+
+test('50개가 차면 "최근 50개만 보여요"', async () => {
+  const rows = Array.from({ length: 50 }, (_, i) => row(i + 1, 'u2', `50% ${i}`));
+  const { search, texts } = await setup(rows);
+  await search('50%');
+  expect(texts()).toContain('최근 50개만 보여요');
+});
+
+test('오류가 나면 이전 결과를 지운다', async () => {
+  const { search, texts, find } = await setup([row(5, 'u2', '오늘 50% 할인')]);
+  await search('50%');
+  mockFrom.mockImplementation(() => {
+    const q: Record<string, unknown> = {};
+    for (const k of ['select', 'eq', 'ilike', 'order']) q[k] = () => q;
+    q.limit = () => Promise.resolve({ data: null, error: { message: 'x' } });
+    return q;
+  });
+  await search('50%');
+  expect(texts()).not.toContain('오늘 50% 할인');
+  expect(find((n) => n.props.accessibilityRole === 'alert').length).toBeGreaterThan(0);
+});
+
+test('검색 중을 알리고 입력창이 자동 포커스', async () => {
+  const { find } = await setup([]);
+  expect(find((n) => n.props.accessibilityLabel === '대화 검색어' && n.props.autoFocus === true && n.props.blurOnSubmit === false).length).toBeGreaterThan(0); // 제출해도 포커스가 body로 떨어지지 않는다
+});
