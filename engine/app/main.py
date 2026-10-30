@@ -33,6 +33,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     load_config()  # 파일이 없거나 깨졌으면 요청이 아니라 시작할 때 실패한다
     get_limits()  # limits 값이 틀렸어도 시작할 때 실패한다
     startup_warnings(get_registry(), os.environ)  # 전문가·프롬프트가 틀렸으면 시작할 때 실패(E7), 쓸 수 없는 모델은 경고
+    cfg = Settings.from_env()
+    if cfg.hook_secret and not (cfg.vapid_private_key and cfg.vapid_subject):
+        log.warning("web push disabled: vapid not configured")   # 웹 알림이 조용히 안 나가는 걸 시작할 때 알린다
     get_mirror_key()  # MIRROR_SECRET가 짧으면 시작할 때 실패한다(없으면 경고 한 번)
     dsn = Settings.from_env().supabase_db_url
     repo = await PgRepo.connect(dsn) if dsn else None  # 풀은 min_size=0: DB가 죽어 있어도 시작한다

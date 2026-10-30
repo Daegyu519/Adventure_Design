@@ -65,7 +65,7 @@ def submit(queue: JobQueue, repo: Repo, trace_id: UUID, path: Literal["realtime"
     큐 인자는 완성된 행(id·수치·분류뿐)이다. 로그에는 종류만 남긴다."""
     try:
         row = build_trace(trace_id, path, user_id, room_id, status, round((time.monotonic() - t0) * 1000), outcome)
-        if not queue.enqueue("trace", record, repo, row):
+        if not queue.enqueue("trace", record, repo, row, max_attempts=1):   # 재시도하면 느린 DB에서 푸시·기준선 작업을 밀어낸다
             log.warning("trace enqueue rejected")
     except Exception as e:  # noqa: BLE001 - 행을 못 만들어도 응답은 나간다. 예외 메시지에 문장이 섞일 수 있어 종류만 남긴다
         log.warning("trace failed: %s", type(e).__name__)
