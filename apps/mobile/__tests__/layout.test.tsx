@@ -19,6 +19,9 @@ jest.mock('expo-router', () => {
   return { Stack };
 });
 
+const mockPushTaps = jest.fn();
+jest.mock('../lib/push', () => ({ usePushTaps: () => mockPushTaps() }));
+
 let mockConsented: boolean | null = null;
 jest.mock('../lib/consent', () => ({ useConsented: () => mockConsented }));
 
@@ -144,4 +147,21 @@ test('layout: the blank loading view and the stack take the chosen theme backgro
   const { root } = await mount();
   const dark = root.container.queryAll((n) => n.props.style?.flex === 1 && n.props.style?.backgroundColor === tokens.dark.background);
   expect(dark).toHaveLength(1);
+});
+
+test('layout: notification taps are not listened to before sign-in', async () => {
+  mockConsented = true;
+  const fake = fakeSupabase();
+  await mount();
+  await fake.session(null);
+  expect(mockPushTaps).not.toHaveBeenCalled();
+});
+
+test('layout: notification taps are listened to once in the app', async () => {
+  mockConsented = true;
+  const fake = fakeSupabase();
+  await mount();
+  await fake.session(SESSION);
+  await fake.profile(ROW);
+  expect(mockPushTaps).toHaveBeenCalled();
 });

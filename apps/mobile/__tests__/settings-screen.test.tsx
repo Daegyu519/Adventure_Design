@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { act } from 'react';
+import { AccessibilityInfo } from 'react-native';
 import { createRoot } from 'test-renderer';
 
 import Settings from '../app/(tabs)/settings';
@@ -25,6 +26,17 @@ jest.mock('../lib/session', () => ({
   useSession: () => ({ userId: 'u1', email: 'jieun@cnu.ac.kr', profile: mockProfile, refreshProfile: mockRefresh }),
 }));
 
+const mockEnable = jest.fn();
+const mockDisable = jest.fn();
+let mockPushOn = false;
+jest.mock('../lib/push', () => ({
+  enablePush: (id: string) => mockEnable(id),
+  disablePush: (id: string) => mockDisable(id),
+  pushEnabled: async () => mockPushOn,
+}));
+let mockIos = 'not-ios';
+jest.mock('../lib/iosWeb', () => ({ currentIosWebState: () => mockIos }));
+
 const NOTE = '힌트를 끄면 입력 중인 문장을 AI에 보내지 않아요.';
 
 async function setup() {
@@ -44,8 +56,10 @@ async function setup() {
     act(async () =>
       find((p) => p.accessibilityRole === role && p.accessibilityLabel === label)[0].props.onClick({ stopPropagation() {}, nativeEvent: {} }),
     );
+  const pushSwitch = () => find((p) => p.accessibilityLabel === '새 메시지 알림' && p.accessibilityRole === 'switch')[0];
+  const flipPush = (to: boolean) => act(async () => (pushSwitch().props.onChange as (e: unknown) => void)({ nativeEvent: { value: to }, target: { value: to } }));
   const chip = (label: string) => find((p) => p.accessibilityRole === 'radio' && p.accessibilityLabel === label)[0];
-  return { root, find, texts, hintSwitch, flip, press, chip };
+  return { root, find, texts, hintSwitch, flip, press, chip, pushSwitch, flipPush };
 }
 
 beforeEach(async () => {
@@ -56,12 +70,17 @@ beforeEach(async () => {
   mockRefresh.mockReset().mockResolvedValue(undefined);
   mockSignOut.mockReset().mockResolvedValue({ error: null });
   await AsyncStorage.clear();
+  mockPushOn = false;
+  mockIos = 'not-ios';
+  mockEnable.mockReset().mockResolvedValue('enabled');
+  mockDisable.mockReset().mockResolvedValue(undefined);
 });
+afterEach(() => jest.restoreAllMocks());
 
 test('settings: the three sections are headed 힌트 · 화면 · 계정', async () => {
   const { find } = await setup();
   const headers = find((p) => p.accessibilityRole === 'header').map((n) => JSON.stringify(n.children));
-  for (const h of ['힌트', '화면', '계정']) expect(headers.some((j) => j.includes(h))).toBe(true);
+  for (const h of ['힌트', '알림', '화면', '계정']) expect(headers.some((j) => j.includes(h))).toBe(true);
 });
 
 test('settings hint: the switch shows profile.tone_hint_on; on → no explanation line', async () => {
@@ -187,5 +206,80 @@ test('settings a11y: 화면 제목은 aria-level 1, 구역 제목은 2', async (
   const { find } = await setup();
   const levels = find((p) => p.accessibilityRole === 'header').map((n) => n.props['aria-level']);
   expect(levels).toContain(1);
-  expect(levels.filter((l) => l === 2).length).toBe(3);
+  expect(levels.filter((l) => l === 2).length).toBe(4);
+});
+
+describe('settings push', () => {
+  beforeEach(() => (AccessibilityInfo.announceForAccessibility as jest.Mock).mockClear?.()); // 이전 시험의 호출 기록이 남지 않게
+  test('nothing is requested on screen open; the switch starts off', async () => {
+    const { pushSwitch } = await setup();
+    expect(mockEnable).not.toHaveBeenCalled();
+    expect(pushSwitch().props.value).toBe(false);
+  });
+
+  test('switch reflects an already-registered device', async () => {
+    mockPushOn = true;
+    const { pushSwitch } = await setup();
+    expect(pushSwitch().props.value).toBe(true);
+  });
+
+  test('turning on registers for my user, turns on and announces once', async () => {
+    const say = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {});
+    const { flipPush, pushSwitch } = await setup();
+    await flipPush(true);
+    expect(mockEnable).toHaveBeenCalledWith('u1');
+    expect(pushSwitch().props.value).toBe(true);
+    expect(say).toHaveBeenCalledTimes(1);
+    expect(say).toHaveBeenCalledWith('알림을 켰어요');
+  });
+
+  test.each([
+    ['denied', '설정에서 알림을 허용해 주세요'],
+    ['unsupported', '이 기기에서는 알림을 받을 수 없어요'],
+    ['needs-install', '홈 화면에 추가'],
+    ['error', '알림을 켜지 못했어요'],
+  ])('%s → stays off, shows a hedged alert line (announced once on iOS)', async (result, text) => {
+    mockEnable.mockResolvedValue(result);
+    const say = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {});
+    const { flipPush, pushSwitch, texts, find } = await setup();
+    await flipPush(true);
+    expect(pushSwitch().props.value).toBe(false);
+    expect(texts()).toContain(text);
+    expect(find((p) => p.accessibilityRole === 'alert').length).toBeGreaterThan(0);
+    expect(say).toHaveBeenCalledTimes(1);
+  });
+
+  test('turning off releases this device and announces', async () => {
+    mockPushOn = true;
+    const say = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {});
+    const { flipPush, pushSwitch } = await setup();
+    await flipPush(false);
+    expect(mockDisable).toHaveBeenCalledWith('u1');
+    expect(pushSwitch().props.value).toBe(false);
+    expect(say).toHaveBeenCalledWith('알림을 껐어요');
+  });
+
+  test('a failed release keeps the switch on and says so', async () => {
+    mockPushOn = true;
+    mockDisable.mockRejectedValue(new Error('net'));
+    const { flipPush, pushSwitch, texts } = await setup();
+    await flipPush(false);
+    expect(pushSwitch().props.value).toBe(true);
+    expect(texts()).toContain('알림을 끄지 못했어요');
+  });
+
+  test('iPhone Safari not installed → hedged home-screen hint, no delivery promise', async () => {
+    mockIos = 'needs-install';
+    const { texts } = await setup();
+    expect(texts()).toContain('홈 화면에 추가');
+    expect(texts()).toContain('않을 수도');
+  });
+
+  test('no iOS hint elsewhere; no supabase → switch disabled', async () => {
+    const a = await setup();
+    expect(a.texts()).not.toContain('홈 화면에 추가');
+    mockSupabase = null;
+    const b = await setup();
+    expect(b.pushSwitch().props.disabled).toBe(true);
+  });
 });

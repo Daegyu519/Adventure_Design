@@ -1,15 +1,26 @@
 // 아이콘은 하나씩 불러온다(묶음 import는 웹 번들이 커진다).
-import { useState, type ReactNode } from 'react';
-import { Pressable, ScrollView, Switch, View } from 'react-native';
+import { useEffect, useState, type ReactNode } from 'react';
+import { Platform, Pressable, ScrollView, Switch, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '../../components/AppText';
 import { Button } from '../../components/Button';
 import { ChipRow } from '../../components/ChipRow';
 import { signOutAndClear } from '../../lib/account';
+import { useAnnounce } from '../../lib/announce';
+import { currentIosWebState } from '../../lib/iosWeb';
+import { disablePush, enablePush, pushEnabled, type PushResult } from '../../lib/push';
 import { useSession } from '../../lib/session';
 import { supabase } from '../../lib/supabase';
 import { useTheme, useThemePref, type ThemePref } from '../../lib/theme';
+
+const PUSH_MESSAGES: Record<Exclude<PushResult, 'enabled'>, string> = {
+  denied: '브라우저(또는 휴대폰) 설정에서 알림을 허용해 주세요',
+  unsupported: '이 기기에서는 알림을 받을 수 없어요',
+  'needs-install': "Safari 공유 버튼 → '홈 화면에 추가'로 연 뒤 다시 눌러 주세요",
+  error: '알림을 켜지 못했어요. 연결을 확인하고 다시 해 주세요.',
+};
+const PUSH_OFF_ERROR = '알림을 끄지 못했어요. 연결을 확인하고 다시 해 주세요.';
 
 const THEME_PREFS: readonly ThemePref[] = ['system', 'light', 'dark'];
 const THEME_LABELS: Record<ThemePref, string> = { system: '시스템', light: '밝게', dark: '어둡게' };
@@ -49,6 +60,19 @@ export default function Settings() {
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState(false);
 
+  const { say, region } = useAnnounce();
+  const [pushOn, setPushOn] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushMsg, setPushMsg] = useState<string | null>(null);
+  // 화면을 열 때는 기억해 둔 상태만 읽는다. 권한 요청은 스위치를 누를 때만(브라우저가 시작 때의 요청을 막는다).
+  useEffect(() => {
+    let alive = true;
+    pushEnabled().then((on) => alive && setPushOn(on), () => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   const connected = supabase !== null && userId !== null;
   const hintOn = pending ?? profile?.tone_hint_on ?? true; // 서버 기본값은 켜짐
 
@@ -68,6 +92,36 @@ export default function Settings() {
     }
   }
 
+  async function setPush(next: boolean) {
+    if (!userId || pushBusy) return;
+    setPushBusy(true);
+    setPushMsg(null);
+    // 보이는 alert 글자는 웹·안드로이드가 읽으니 say는 iOS에서만(두 번 읽히지 않게). 성공 안내는 어디서나 say.
+    const fail = (m: string) => {
+      setPushMsg(m);
+      if (Platform.OS === 'ios') say(m);
+    };
+    try {
+      if (next) {
+        const r = await enablePush(userId);
+        if (r === 'enabled') {
+          setPushOn(true);
+          say('알림을 켰어요');
+        } else fail(PUSH_MESSAGES[r]);
+      } else {
+        try {
+          await disablePush(userId);
+          setPushOn(false);
+          say('알림을 껐어요');
+        } catch {
+          fail(PUSH_OFF_ERROR);
+        }
+      }
+    } finally {
+      setPushBusy(false);
+    }
+  }
+
   async function logout() {
     setSigningOut(true);
     setSignOutError(false);
@@ -83,6 +137,7 @@ export default function Settings() {
         <AppText accessibilityRole="header" aria-level={1} variant="title">
           설정
         </AppText>
+        {region}
 
         <Section title="힌트">
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[3] }}>
@@ -115,6 +170,35 @@ export default function Settings() {
           {hintError && (
             <AppText variant="small" color="danger" accessibilityRole="alert" accessibilityLiveRegion="polite">
               바꾸지 못했어요. 연결을 확인하고 다시 해 주세요.
+            </AppText>
+          )}
+        </Section>
+
+        <Section title="알림">
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[3] }}>
+            <Pressable accessible={false} disabled={!connected} onPress={() => setPush(!pushOn)} style={{ flex: 1, minHeight: 44, justifyContent: 'center' }}>
+              <AppText>새 메시지 알림</AppText>
+            </Pressable>
+            <Switch
+              accessibilityRole="switch"
+              accessibilityLabel="새 메시지 알림"
+              value={pushOn}
+              onValueChange={setPush}
+              disabled={!connected}
+              hitSlop={space[1]}
+              trackColor={{ false: colors.textMuted, true: colors.primary }}
+              thumbColor={colors.background}
+              {...{ activeThumbColor: colors.background }}
+            />
+          </View>
+          {currentIosWebState() === 'needs-install' && (
+            <AppText variant="small" color="textMuted">
+              {"아이폰에서는 Safari 공유 버튼 → '홈 화면에 추가'로 연 뒤에 알림을 켤 수 있어요. 기기와 iOS 버전에 따라 알림이 오지 않을 수도 있어요."}
+            </AppText>
+          )}
+          {pushMsg && (
+            <AppText variant="small" color="danger" accessibilityRole="alert" accessibilityLiveRegion="polite">
+              {pushMsg}
             </AppText>
           )}
         </Section>

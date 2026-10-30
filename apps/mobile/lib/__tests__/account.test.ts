@@ -9,10 +9,16 @@ jest.mock('../supabase', () => ({
   },
 }));
 
+const mockDisablePush = jest.fn();
+jest.mock('../push', () => ({ disablePush: (id: string) => mockDisablePush(id) }));
+
 const signOut = jest.fn();
+const getSession = jest.fn();
 beforeEach(async () => {
   signOut.mockReset().mockResolvedValue({ error: null });
-  mockSupabase = { auth: { signOut } };
+  mockDisablePush.mockReset().mockResolvedValue(undefined);
+  getSession.mockReset().mockResolvedValue({ data: { session: { user: { id: 'u1' } } } });
+  mockSupabase = { auth: { signOut, getSession } };
   await AsyncStorage.clear();
   await AsyncStorage.multiSet([
     ['consent', '1'],
@@ -57,4 +63,27 @@ test('sign-out clears cached signed photo URLs', async () => {
   const spy = jest.spyOn(images, 'clearSignedUrls');
   await signOutAndClear();
   expect(spy).toHaveBeenCalled();
+});
+
+test('releases this device push token BEFORE the session is gone', async () => {
+  const order: string[] = [];
+  mockDisablePush.mockImplementation(async () => void order.push('release'));
+  signOut.mockImplementation(async () => (order.push('signOut'), { error: null }));
+  await signOutAndClear();
+  expect(mockDisablePush).toHaveBeenCalledWith('u1');
+  expect(order).toEqual(['release', 'signOut']);
+});
+
+test('a failing push release does not block sign-out', async () => {
+  mockDisablePush.mockRejectedValue(new Error('net'));
+  await expect(signOutAndClear()).resolves.toBe(true);
+});
+
+test('a hanging push release is abandoned after a few seconds', async () => {
+  jest.useFakeTimers();
+  mockDisablePush.mockReturnValue(new Promise(() => {}));
+  const p = signOutAndClear();
+  await jest.advanceTimersByTimeAsync(5000);
+  await expect(p).resolves.toBe(true);
+  jest.useRealTimers();
 });
