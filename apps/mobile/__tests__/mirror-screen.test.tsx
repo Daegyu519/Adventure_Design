@@ -207,9 +207,10 @@ test('a11y-6: 역할극 결과 상자는 이름 있는 group이라 포커스가 
   expect(root.container.queryAll((n) => n.props.role === 'group' && n.props.accessibilityLabel === '역할극 결과')).not.toHaveLength(0);
 });
 
-test('a11y-M4: 진행 문구는 "오늘 카드 N장 중 M장 풀었어요"로 읽힌다', async () => {
-  const { root } = await setup();
-  expect(root.container.queryAll((n) => n.props.accessibilityLabel === '오늘 카드 3장 중 0장 풀었어요')).not.toHaveLength(0);
+test('a11y-M4: 진행 문구는 눈에 보이는 글 그대로 읽힌다(이름을 따로 붙이지 않는다)', async () => {
+  const { root, text } = await setup();
+  expect(text()).toContain('오늘 푼 카드 0 / 3');
+  expect(root.container.queryAll((n) => typeof n.props.accessibilityLabel === 'string' && n.props.accessibilityLabel.includes('장 풀었어요'))).toHaveLength(0);
 });
 
 test('a11y-M6: 비활성 보내기·확인하기 아래에 왜 못 누르는지 글로 보인다', async () => {
@@ -230,4 +231,19 @@ test('code-M2: 422(카드가 바뀜)이면 안내와 "카드 새로 받기"가 �
   await click(btn('카드 새로 받기'));
   expect(today).toHaveBeenCalledTimes(2);
   expect(byLabel('카드 새로 받기')).toHaveLength(0); // 새 카드로 바뀌어 폼이 새로 열렸다
+});
+
+test('fix2-3: 카드를 새로 받는 동안은 푼 개수를 그대로 두고, 새 카드가 오면 0으로 돌린다', async () => {
+  let release!: (v: unknown) => void;
+  answer.mockResolvedValueOnce({ readings: READINGS, gap: 0 }).mockRejectedValueOnce(new EngineError(422, 'bad_card'));
+  const { radio, btn, text } = await setup();
+  await click(radio(1, '3'));
+  await click(btn('확인하기', 1)); // 예측 카드 끝
+  await click(radio(0, '3'));
+  await click(btn('확인하기')); // 422
+  today.mockReturnValueOnce(new Promise((r) => (release = r)));
+  await click(btn('카드 새로 받기'));
+  expect(text()).toContain('오늘 푼 카드 1 / 3');
+  await act(async () => release({ cards: CARDS }));
+  expect(text()).toContain('오늘 푼 카드 0 / 3');
 });

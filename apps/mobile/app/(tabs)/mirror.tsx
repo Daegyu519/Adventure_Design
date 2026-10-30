@@ -40,6 +40,7 @@ export default function Mirror() {
       .then((r) => {
         if (!alive) return;
         setCards(r.cards);
+        setDone(new Set()); // 새 카드가 올 때 비운다(받는 동안은 푼 개수를 그대로 둔다)
         setFailed(false);
       })
       .catch(() => alive && setFailed(true))
@@ -53,11 +54,7 @@ export default function Mirror() {
     setLoading(true);
     setAttempt((n) => n + 1);
   };
-  // 낡은 카드(422) → 새로 받는다. 이전 카드는 새 카드가 올 때까지 그대로 보여 준다.
-  const refresh = () => {
-    setDone(new Set());
-    retry();
-  };
+  // 낡은 카드(422) → 같은 길로 새로 받는다. 이전 카드와 푼 개수는 새 카드가 올 때까지 그대로 둔다.
 
   const finished = cards != null && done.size >= cards.length;
   return (
@@ -77,11 +74,11 @@ export default function Mirror() {
             !failed && <ActivityIndicator accessibilityLabel="불러오는 중" accessibilityLiveRegion="polite" color={colors.primary} />
           ) : (
             <>
-              <AppText variant="small" color="textMuted" accessibilityLabel={`오늘 카드 ${cards.length}장 중 ${done.size}장 풀었어요`}>{`오늘 푼 카드 ${done.size} / ${cards.length}`}</AppText>
+              <AppText variant="small" color="textMuted">{`오늘 푼 카드 ${done.size} / ${cards.length}`}</AppText>
               <CardList key={attempt} focusOnMount={attempt > 0}>
                 {cards.map((c) => {
                   const Body = CARD[c.kind];
-                  return <Body key={c.card_id} card={c} onRefresh={refresh} onDone={() => setDone((d) => new Set(d).add(c.card_id))} />;
+                  return <Body key={c.card_id} card={c} onRefresh={retry} onDone={() => setDone((d) => new Set(d).add(c.card_id))} />;
                 })}
               </CardList>
               {/* 마무리는 늘 있는 polite 자리에 글만 채운다. 포커스를 가져오거나 alert로 마지막 카드 결과를 덮지 않는다. */}
