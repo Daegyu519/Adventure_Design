@@ -1,5 +1,5 @@
 import { act } from 'react';
-import { AccessibilityInfo, Share } from 'react-native';
+import { AccessibilityInfo, Platform, Share } from 'react-native';
 import { createRoot, type TestInstance, type TestNode } from 'test-renderer';
 
 import RoomInfo from '../app/room/[id]/info';
@@ -42,10 +42,14 @@ async function setup(kind: 'group' | 'direct' = 'group') {
 beforeEach(() => {
   mockFocused = true;
   mockFocus.mockReset();
+  Platform.OS = 'web'; // 안내 영역은 웹·안드로이드 방식. iOS는 아래 한 테스트에서만
   mockRouter.push.mockReset();
   mockRpc.mockReset();
   mockUpdate.mockReset().mockImplementation(() => eqChain({ error: null }));
   jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {});
+});
+afterEach(() => {
+  Platform.OS = 'ios';
 });
 
 test('그룹: 이름 · 관계 · n/8명 · 멤버(나 표시)', async () => {
@@ -81,6 +85,7 @@ test('알림 끄기 실패하면 되돌리고 알린다', async () => {
 
 test('그룹 초대 코드: rpc(create_invite, {room, relation}) → 코드와 보내기', async () => {
   mockRpc.mockResolvedValue({ data: 'AB3X9K7Q', error: null, status: 200 });
+  Platform.OS = 'ios'; // 네이티브 공유 창
   jest.spyOn(Share, 'share').mockResolvedValue({ action: 'sharedAction', activityType: undefined });
   const { press, texts } = await setup();
   await press('초대 코드 만들기');
@@ -135,11 +140,9 @@ test('안내는 처음부터 있는 polite 영역에 나온다(알림 켬, 초�
   expect(live(find)).toBeTruthy();
   await act(async () => (sw().props.onChange as (e: unknown) => void)({ nativeEvent: { value: true }, target: { value: true } }));
   expect(textOf(live(find) as unknown as TestNode)).toContain('이 방 알림을 껐어요');
-  expect(AccessibilityInfo.announceForAccessibility).not.toHaveBeenCalled();
   mockRpc.mockResolvedValue({ data: 'AB3X9K7Q', error: null, status: 200 });
   await press('초대 코드 만들기');
   expect(textOf(live(find) as unknown as TestNode)).toContain('초대 코드를 만들었어요');
-  expect(AccessibilityInfo.announceForAccessibility).not.toHaveBeenCalled();
   void root;
 });
 
@@ -169,4 +172,24 @@ test('들어오면 제목으로 포커스, 검색에서 돌아오면 "대화 검
   mockFocus.mockReset();
   await act(async () => root.render(<RoomInfo />));
   expect(mockFocus).toHaveBeenCalledTimes(1);
+});
+
+test('iOS: 알림을 끄면 announceForAccessibility로 알린다', async () => {
+  Platform.OS = 'ios';
+  const spy = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {});
+  spy.mockClear();
+  const { sw } = await setup();
+  spy.mockClear(); // "불러오는 중"은 제외
+  await act(async () => (sw().props.onChange as (e: unknown) => void)({ nativeEvent: { value: true }, target: { value: true } }));
+  expect(spy).toHaveBeenCalledTimes(1);
+  expect(spy).toHaveBeenCalledWith('이 방 알림을 껐어요');
+});
+
+test('알림 글자는 탭 순서와 접근성 트리에서 뺀다(스위치만 남는다)', async () => {
+  const { find } = await setup();
+  const p = find((n) => n.props.testID === 'mute-label')[0].props;
+  expect(p.tabIndex).toBe(-1);
+  expect(p['aria-hidden']).toBe(true);
+  expect(p.accessibilityElementsHidden).toBe(true);
+  expect(p.importantForAccessibility).toBe('no-hide-descendants');
 });

@@ -1,4 +1,5 @@
 import { act } from 'react';
+import { AccessibilityInfo, Platform } from 'react-native';
 import { createRoot, type TestInstance, type TestNode } from 'test-renderer';
 
 import RoomSearch from '../app/room/[id]/search';
@@ -38,6 +39,7 @@ async function setup(rows: unknown[]) {
 }
 
 beforeEach(() => {
+  Platform.OS = 'web';
   Object.keys(calls).forEach((k) => delete calls[k]);
   mockRouter.navigate.mockReset();
   mockFrom.mockReset();
@@ -133,4 +135,18 @@ test('오류가 나면 이전 결과를 지운다', async () => {
 test('검색 중을 알리고 입력창이 자동 포커스', async () => {
   const { find } = await setup([]);
   expect(find((n) => n.props.accessibilityLabel === '대화 검색어' && n.props.autoFocus === true && n.props.blurOnSubmit === false).length).toBeGreaterThan(0); // 제출해도 포커스가 body로 떨어지지 않는다
+});
+
+afterEach(() => {
+  Platform.OS = 'ios';
+});
+
+test('iOS: 결과 개수를 announceForAccessibility로 알린다', async () => {
+  Platform.OS = 'ios';
+  const spy = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {});
+  spy.mockClear();
+  const { search } = await setup([row(5, 'u2', '오늘 50% 할인')]);
+  await search('50%');
+  expect(spy).toHaveBeenCalledWith('검색 중');
+  expect(spy).toHaveBeenCalledWith('1개 찾았어요');
 });

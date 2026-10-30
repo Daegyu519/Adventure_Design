@@ -1,6 +1,6 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import ArrowLeft from 'lucide-react-native/icons/arrow-left';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -8,6 +8,7 @@ import { AppText } from '../../../components/AppText';
 import { Button } from '../../../components/Button';
 import { IconButton } from '../../../components/IconButton';
 import { TextField } from '../../../components/TextField';
+import { useAnnounce } from '../../../lib/announce';
 import { NETWORK_MESSAGE } from '../../../lib/dbErrors';
 import { formatStamp } from '../../../lib/messages';
 import { fetchRoom } from '../../../lib/rooms';
@@ -16,9 +17,6 @@ import { useSession } from '../../../lib/session';
 import { supabase } from '../../../lib/supabase';
 import { focusRing, useTheme } from '../../../lib/theme';
 import type { Tables } from '../../../lib/types/db';
-
-// 화면 읽기 프로그램에만 보이는 줄.
-const SR_ONLY = { position: 'absolute', width: 1, height: 1, overflow: 'hidden', opacity: 0 } as const;
 
 export default function RoomSearch() {
   const { colors, space } = useTheme();
@@ -32,14 +30,7 @@ export default function RoomSearch() {
   const [busy, setBusy] = useState(false);
   const [names, setNames] = useState<Map<string, string>>(new Map());
   const seq = useRef(0);
-  const [announce, setAnnounce] = useState('');
-  const flips = useRef(new Map<string, number>());
-  // 같은 문구를 또 말할 때마다 보이지 않는 글자를 붙였다 뗐다 해서 화면 읽기 프로그램이 다시 읽게 한다.
-  const say = useCallback((t: string) => {
-    const n = (flips.current.get(t) ?? 0) + 1;
-    flips.current.set(t, n);
-    setAnnounce(t + (n % 2 ? '' : '\u200b'));
-  }, []);
+  const { say, region } = useAnnounce();
 
   useEffect(() => {
     if (!id || !supabase) return;
@@ -102,9 +93,7 @@ export default function RoomSearch() {
             {error}
           </AppText>
         )}
-        <View accessibilityLiveRegion="polite" aria-live="polite" style={SR_ONLY}>
-          <AppText>{announce}</AppText>
-        </View>
+        {region}
         {results && !error && (
           <AppText aria-hidden color="textMuted">
             {results.length ? `${results.length}개 찾았어요` : '찾는 말이 없어요'}

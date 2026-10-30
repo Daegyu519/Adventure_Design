@@ -8,6 +8,7 @@ import { AppText } from '../../../components/AppText';
 import { Button } from '../../../components/Button';
 import { IconButton } from '../../../components/IconButton';
 import { dbErrorMessage, NETWORK_MESSAGE } from '../../../lib/dbErrors';
+import { useAnnounce } from '../../../lib/announce';
 import { focusNode } from '../../../lib/focus';
 import { createGroupInvite, GROUP_MAX } from '../../../lib/invite';
 import { fetchRoom, roomTitle, setMuted, type Member } from '../../../lib/rooms';
@@ -15,9 +16,6 @@ import { useSession } from '../../../lib/session';
 import { supabase } from '../../../lib/supabase';
 import { useTheme } from '../../../lib/theme';
 import type { Tables } from '../../../lib/types/db';
-
-// 화면 읽기 프로그램에만 보이는 줄.
-const SR_ONLY = { position: 'absolute', width: 1, height: 1, overflow: 'hidden', opacity: 0 } as const;
 
 const loadMessage = (e: unknown) => ((e as { code?: string })?.code ? dbErrorMessage(e as { message: string }, '방 정보를 불러오지 못했어요. 다시 시도해 주세요.') : NETWORK_MESSAGE);
 
@@ -42,10 +40,7 @@ export default function RoomInfo() {
   const searchBtnRef = useRef<ComponentRef<typeof View>>(null);
   const focused = useIsFocused();
   const wasBlurred = useRef(false);
-  const [announce, setAnnounce] = useState('');
-  const sayCount = useRef(0);
-  // 같은 문구가 연달아 와도 다시 읽히도록 번갈아 보이지 않는 글자를 붙인다(대화방과 같은 방식).
-  const say = useCallback((t: string) => setAnnounce(t + (sayCount.current++ % 2 ? '\u200b' : '')), []);
+  const { say, region } = useAnnounce();
 
   // 들어오면 제목으로, 검색 화면에서 돌아오면 "대화 검색" 버튼으로 포커스(body로 떨어지지 않게).
   useEffect(() => {
@@ -139,9 +134,7 @@ export default function RoomInfo() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: space[3], paddingBottom: space[6] }}>
-        <View accessibilityLiveRegion="polite" aria-live="polite" style={SR_ONLY}>
-          <AppText>{announce}</AppText>
-        </View>
+        {region}
         <View style={{ width: '100%', maxWidth: 560, alignSelf: 'center', gap: space[5] }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[1] }}>
             <IconButton icon={ArrowLeft} label="뒤로" onPress={goBack} />
@@ -198,7 +191,14 @@ export default function RoomInfo() {
               <View style={{ gap: space[1] }}>
                 <View testID="mute-row" style={{ flexDirection: 'row', alignItems: 'center', gap: space[3], minHeight: 44 }}>
                   {/* 글자 쪽도 눌러서 켜고 끌 수 있게 눌리는 영역을 넓힌다(스위치만 접근성 대상) */}
-                  <Pressable testID="mute-label" accessible={false} onPress={() => void toggleMute(!muted)} style={{ flex: 1, minHeight: 44, justifyContent: 'center' }}>
+                  <Pressable
+                    testID="mute-label"
+                    accessible={false}
+                    tabIndex={-1}
+                    aria-hidden
+                    accessibilityElementsHidden
+                    importantForAccessibility="no-hide-descendants"
+                    onPress={() => void toggleMute(!muted)} style={{ flex: 1, minHeight: 44, justifyContent: 'center' }}>
                     <AppText>이 방 알림 끄기</AppText>
                   </Pressable>
                   <Switch
