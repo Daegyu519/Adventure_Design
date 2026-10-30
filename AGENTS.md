@@ -50,7 +50,7 @@
 
 | 작업 | 브랜치 | 상태 |
 |---|---|---|
-| (없음) | | |
+| T-25 털어놓기 시트 | t25-vent-ui | 진행 중 |
 
 Claude가 다음으로 T-15(입력 중 힌트)와 T-25(털어놓기 시트)를 잡는다 — 잡으면 브랜치를 바로 올리고 이 표에 적는다. 그 둘은 `components/Composer.tsx`·`MessageActions.tsx`·`app/room/[id]/index.tsx`를 고치므로 다른 사람은 대화방 파일을 피한다. 보류(paused): 없음.
 
