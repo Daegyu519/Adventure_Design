@@ -1,5 +1,5 @@
 import { EngineError } from '../engine';
-import { changedWords, gapLabel, mirrorErrorCopy, relationIf } from '../mirror';
+import { changedWords, gapLabel, isStaleCard, mirrorErrorCopy, relationIf } from '../mirror';
 
 jest.mock('../supabase', () => ({ supabase: null }));
 
@@ -37,6 +37,8 @@ test('mirrorErrorCopy: fixed Korean copy by status, never the error message', ()
   expect(mirrorErrorCopy(new EngineError(429, 'SERVER SECRET'))).toBe('요청이 많아요. 잠시 뒤 다시 해 주세요.');
   expect(mirrorErrorCopy(new EngineError(503, 'SERVER SECRET'))).toBe('연결이 불안정할 수도 있어요. 잠시 뒤 다시 해 주세요.');
   expect(mirrorErrorCopy(new EngineError(0, 'timeout'))).toBe('연결이 불안정할 수도 있어요. 잠시 뒤 다시 해 주세요.');
-  expect(mirrorErrorCopy(new EngineError(422, 'bad_card'))).toBe('지금은 이 카드에 답하지 못했어요. 잠시 뒤 다시 해 주세요.');
+  expect(mirrorErrorCopy(new EngineError(422, 'bad_card'))).toBe('카드가 바뀌었을 수도 있어요. 새로 받아 주세요.');
+  expect(isStaleCard(new EngineError(422))).toBe(true);
+  expect(isStaleCard(new EngineError(429))).toBe(false);
   expect(mirrorErrorCopy(new Error('x'))).toBe('지금은 이 카드에 답하지 못했어요. 잠시 뒤 다시 해 주세요.');
 });

@@ -7,22 +7,22 @@ import { Button } from '../Button';
 import { DiffText } from '../DiffText';
 import { Readings } from '../Readings';
 import { TextField } from '../TextField';
-import { CardShell, ErrorLine, FocusBox, useAnswer, type CardProps } from './parts';
+import { CardShell, DisabledHint, ErrorLine, FocusBox, useAnswer, type CardProps } from './parts';
 
 // 답장 쓰기 → 속마음·읽힘 → 그대로 / A / 직접 고치기. 그대로나 A를 고르면 카드가 끝난다.
-export function RoleplayCard({ card, onDone }: CardProps) {
+export function RoleplayCard({ card, onDone, onRefresh }: CardProps) {
   const { colors, radius, space } = useTheme();
   const [reply, setReply] = useState('');
   const [editing, setEditing] = useState(false); // 직접 고치기로 돌아온 폼이면 입력창에 포커스
   const [choice, setChoice] = useState<'keep' | 'a' | null>(null);
-  const { busy, error, res, send, reset } = useAnswer(card);
+  const { busy, error, stale, res, send, reset } = useAnswer(card);
   const text = reply.trim();
   const option = res?.options?.[0];
 
   if (res) {
     return (
       <CardShell card={card}>
-        <FocusBox key={choice ?? 'result'}>
+        <FocusBox key={choice ?? 'result'} label={choice ? undefined : '역할극 결과'}>
           {choice ? (
             <>
               <AppText accessibilityRole="alert" weight="600" color="mirror">
@@ -82,8 +82,9 @@ export function RoleplayCard({ card, onDone }: CardProps) {
   return (
     <CardShell card={card}>
       <TextField label="답장" hint="이 말을 받았다고 생각하고 답장을 써 보세요" value={reply} onChangeText={setReply} maxLength={500} multiline autoFocus={editing} editable={!busy} />
-      <ErrorLine error={error} />
+      <ErrorLine error={error} stale={stale} onRefresh={onRefresh} />
       <Button label="보내기" disabled={text.length === 0} loading={busy} onPress={() => send({ reply: text })} />
+      <DisabledHint show={text.length === 0}>답장을 먼저 적어 주세요</DisabledHint>
     </CardShell>
   );
 }

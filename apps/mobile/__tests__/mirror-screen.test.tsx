@@ -1,5 +1,5 @@
 import { act } from 'react';
-import { StyleSheet } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import { createRoot, type TestInstance, type TestNode } from 'test-renderer';
 
 import Mirror from '../app/(tabs)/mirror';
@@ -73,7 +73,7 @@ test('예측 맞히기: 칸을 고르고 확인하면 차이만 보이고 폼 �
 test('되돌려 받기: score를 보내고 reveal과 "내 느낌" 차이를 보여 준다', async () => {
   answer.mockResolvedValue({ readings: READINGS, reveal: '지난주에 당신이 보낸 문장이에요', gap: 4 });
   const { radio, btn, text } = await setup();
-  await click(radio(0, '5'));
+  await click(radio(0, '5, 매우'));
   await click(btn('확인하기'));
   expect(answer).toHaveBeenCalledWith({ card_id: 'c-recv', score: 5 });
   expect(text()).toContain('지난주에 당신이 보낸 문장이에요');
@@ -136,4 +136,98 @@ test('카드를 불러오지 못하면 안내와 다시 시도가 뜨고, 다시
   await click(btn('다시 시도'));
   expect(today).toHaveBeenCalledTimes(2);
   expect(text()).toContain('역할극');
+});
+
+// ---- fix round 1 ----
+const focused: Record<string, unknown>[] = [];
+beforeAll(() => {
+  jest.replaceProperty(Platform, 'OS', 'web'); // FocusBox는 웹에서 ref.focus()를 부른다
+  (View as unknown as { prototype: { focus: unknown } }).prototype.focus = function (this: { props: Record<string, unknown> }) {
+    focused.push(this.props);
+  };
+});
+beforeEach(() => (focused.length = 0));
+
+async function finishAll(h: Awaited<ReturnType<typeof setup>>) {
+  const input = h.root.container.queryAll((n) => n.props.accessibilityLabel === '답장' && n.props.onChangeText)[0];
+  await act(async () => input.props.onChangeText('네'));
+  await click(h.btn('보내기'));
+  await click(h.btn('그대로'));
+  await click(h.radio(0, '3'));
+  await click(h.btn('확인하기'));
+  await click(h.radio(0, '3'));
+}
+
+test('a11y-1: 마지막 카드를 끝내도 포커스·알림은 그 카드 결과에 남고, 마무리 문구는 포커스도 alert도 아니다', async () => {
+  answer.mockResolvedValue({ readings: READINGS, gap: 1, inner_voice: '괜찮아요', options: [] });
+  const h = await setup();
+  await finishAll(h);
+  const before = focused.length;
+  await click(h.btn('확인하기')); // 세 번째 카드
+  expect(focused.length - before).toBe(1); // 결과 상자 하나만 포커스를 받는다
+  const finish = h.root.container.queryAll((n) => typeof n.props.children === 'string' && n.props.children.includes('오늘 카드는 여기까지예요'));
+  expect(finish.length).toBeGreaterThan(0);
+  expect(h.root.container.queryAll((n) => n.props.accessibilityRole === 'alert' && textOf(n).includes('오늘 카드는 여기까지예요'))).toHaveLength(0);
+  expect(h.root.container.queryAll((n) => n.props.accessibilityLiveRegion === 'polite' && textOf(n).includes('오늘 카드는 여기까지예요'))).not.toHaveLength(0);
+  expect(h.root.container.queryAll((n) => n.props.accessibilityRole === 'alert' && textOf(n).includes('예측과 한 칸 차이'))).not.toHaveLength(0);
+});
+
+test('a11y-2: 다시 시도를 누르는 동안에도 실패 안내와 버튼이 그대로 남고, 카드가 나오면 포커스가 카드 묶음으로 간다', async () => {
+  let release!: (v: unknown) => void;
+  today.mockReset().mockRejectedValueOnce(new EngineError(0)).mockReturnValueOnce(new Promise((r) => (release = r)));
+  const { btn, text, byLabel } = await setup();
+  const first = btn('다시 시도');
+  await click(first);
+  expect(text()).toContain('지금은 카드를 불러오지 못했어요');
+  expect(byLabel('다시 시도').filter((n) => n.props.accessibilityRole === 'button')).toHaveLength(1);
+  expect(btn('다시 시도').props.accessibilityState.busy).toBe(true);
+  focused.length = 0;
+  await act(async () => release({ cards: CARDS }));
+  expect(text()).toContain('역할극');
+  expect(focused.some((p) => p.accessibilityLabel === '오늘의 카드')).toBe(true);
+});
+
+test('a11y-M7: 처음 불러오는 동안 스피너는 polite로 알리고, 실패 블록 바깥에는 live region이 없다', async () => {
+  today.mockReset().mockReturnValue(new Promise(() => {}));
+  const { root } = await setup();
+  expect(root.container.queryAll((n) => n.props.accessibilityLabel === '불러오는 중' && n.props.accessibilityLiveRegion === 'polite')).not.toHaveLength(0);
+  today.mockReset().mockRejectedValue(new EngineError(0));
+  const failed = await setup();
+  expect(failed.root.container.queryAll((n) => n.props.accessibilityLiveRegion != null && textOf(n).includes('카드를 불러오지 못했어요') && n.props.accessibilityRole !== 'alert')).toHaveLength(0);
+});
+
+test('a11y-6: 역할극 결과 상자는 이름 있는 group이라 포커스가 오면 "역할극 결과"를 읽는다', async () => {
+  answer.mockResolvedValue({ readings: READINGS, inner_voice: '서운할 수도 있어요', options: [] });
+  const { root, btn } = await setup();
+  const input = root.container.queryAll((n) => n.props.accessibilityLabel === '답장' && n.props.onChangeText)[0];
+  await act(async () => input.props.onChangeText('네'));
+  focused.length = 0;
+  await click(btn('보내기'));
+  expect(focused.map((p) => p.accessibilityLabel)).toContain('역할극 결과');
+  expect(root.container.queryAll((n) => n.props.role === 'group' && n.props.accessibilityLabel === '역할극 결과')).not.toHaveLength(0);
+});
+
+test('a11y-M4: 진행 문구는 "오늘 카드 N장 중 M장 풀었어요"로 읽힌다', async () => {
+  const { root } = await setup();
+  expect(root.container.queryAll((n) => n.props.accessibilityLabel === '오늘 카드 3장 중 0장 풀었어요')).not.toHaveLength(0);
+});
+
+test('a11y-M6: 비활성 보내기·확인하기 아래에 왜 못 누르는지 글로 보인다', async () => {
+  const { text } = await setup();
+  expect(text()).toContain('답장을 먼저 적어 주세요');
+  expect(text()).toContain('칸을 먼저 고르세요');
+});
+
+test('code-M2: 422(카드가 바뀜)이면 안내와 "카드 새로 받기"가 뜨고, 누르면 카드를 다시 받는다. 429에는 이 버튼이 없다', async () => {
+  answer.mockRejectedValueOnce(new EngineError(429)).mockRejectedValueOnce(new EngineError(422, 'bad_card'));
+  const { radio, btn, text, byLabel } = await setup();
+  await click(radio(1, '4'));
+  await click(btn('확인하기', 1));
+  expect(byLabel('카드 새로 받기')).toHaveLength(0);
+  await click(btn('확인하기', 1));
+  expect(text()).toContain('카드가 바뀌었을 수도 있어요. 새로 받아 주세요.');
+  expect(today).toHaveBeenCalledTimes(1);
+  await click(btn('카드 새로 받기'));
+  expect(today).toHaveBeenCalledTimes(2);
+  expect(byLabel('카드 새로 받기')).toHaveLength(0); // 새 카드로 바뀌어 폼이 새로 열렸다
 });

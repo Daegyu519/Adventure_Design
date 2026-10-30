@@ -1,3 +1,4 @@
+import Check from 'lucide-react-native/icons/check';
 import { Pressable, View } from 'react-native';
 
 import { focusRing, useTheme } from '../lib/theme';
@@ -12,7 +13,8 @@ type Props = {
   disabled?: boolean;
 };
 
-// MASTER 거울 카드: 1~5칸(각 44 이상, radio), 양끝 설명, 고른 칸은 mirror 바탕. 칸은 숫자 글자가 있어 색만으로 전하지 않는다.
+// MASTER 거울 카드: 1~5칸(각 44 이상, radio), 양끝 설명, 고른 칸은 mirror 바탕.
+// 선택은 색만으로 전하지 않는다(1.4.1): 굵은 테두리(2) + 체크 아이콘. 양끝 칸의 이름에는 눈에 보이는 숫자와 끝 설명을 함께 넣어 화면 읽기 프로그램이 1·5의 뜻을 알게 한다.
 export function ScaleRow({ value, onChange, lowLabel, highLabel, accessibilityLabel, disabled = false }: Props) {
   const { colors, radius, space } = useTheme();
   const pick = (n: number) => !disabled && onChange(n);
@@ -26,7 +28,7 @@ export function ScaleRow({ value, onChange, lowLabel, highLabel, accessibilityLa
               key={n}
               onPress={() => pick(n)}
               accessibilityRole="radio"
-              accessibilityLabel={String(n)}
+              accessibilityLabel={n === 1 ? `1, ${lowLabel}` : n === 5 ? `5, ${highLabel}` : String(n)}
               accessibilityState={{ checked, disabled }}
               aria-checked={checked}
               // react-native-web의 Pressable은 radio에서 Space를 누름으로 바꿔 주지 않는다(ChipRow와 같은 처리, WCAG 2.1.1).
@@ -43,8 +45,8 @@ export function ScaleRow({ value, onChange, lowLabel, highLabel, accessibilityLa
                 minHeight: 48,
                 minWidth: 44,
                 borderRadius: radius.card - 4,
-                borderWidth: 1,
-                borderColor: checked ? colors.mirror : colors.border,
+                borderWidth: checked ? 2 : 1,
+                borderColor: checked ? colors.text : colors.border,
                 backgroundColor: checked ? colors.mirror : colors.background,
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -52,9 +54,12 @@ export function ScaleRow({ value, onChange, lowLabel, highLabel, accessibilityLa
                 ...focusRing(colors.mirror),
               })}
             >
-              <AppText weight="600" color={checked ? 'onMirror' : 'text'}>
-                {String(n)}
-              </AppText>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+                {checked && <Check color={colors.onMirror} size={14} aria-hidden />}
+                <AppText weight="600" color={checked ? 'onMirror' : 'text'}>
+                  {String(n)}
+                </AppText>
+              </View>
             </Pressable>
           );
         })}
