@@ -14,7 +14,6 @@ from app.auth import TokenVerifier, get_verifier
 from app.context import load_context
 from app.db import Repo
 from app.main import app
-from app.openapi_dump import merged
 from tests.jwks import ISSUER, make_signer
 
 SNAPSHOT = Path(__file__).resolve().parents[2] / "apps" / "mobile" / "lib" / "types" / "engine.openapi.json"
@@ -248,28 +247,7 @@ def test_first_hint_after_startup_has_no_jwks_fetch(client, fake, monkeypatch):
 
 
 def test_openapi_snapshot_current():
-    """앱 타입(engine.openapi.json)이 엔진과 같다. 엔진에 아직 없는 /v1 경로만 seed에서 남는다."""
+    """앱 타입(engine.openapi.json)이 엔진 OpenAPI와 같다(바꿨다면 npm run gen:engine:pull)."""
     if not SNAPSHOT.exists():
         pytest.skip("앱 OpenAPI 스냅숏 없음")
-    snap = json.loads(SNAPSHOT.read_text(encoding="utf-8"))
-    assert snap == merged(json.loads(json.dumps(app.openapi())), snap)
-
-
-def test_openapi_merge_keeps_only_unserved_seed_paths():
-    ref = lambda name: {"$ref": f"#/components/schemas/{name}"}  # noqa: E731
-    engine = {"openapi": "3.1.0", "info": {"title": "engine"},
-              "paths": {"/v1/hint": {"post": ref("HintIn")}, "/health": {"get": {}}},
-              "components": {"schemas": {"HintIn": {"engine": True}}}}
-    detail = {"post": {**ref("DetailIn"), "security": [{"HTTPBearer": []}]}}
-    seed = {"openapi": "3.1.0", "info": {"title": "seed"},
-            "paths": {"/v1/hint": {"post": ref("OldHint"), "security": [{"Unused": []}]}, "/v1/detail": detail},
-            "components": {"schemas": {"HintIn": {"engine": False}, "OldHint": {}, "Stale": {},
-                                       "DetailIn": {"properties": {"intent": ref("Intent")}}, "Intent": {}},
-                           "securitySchemes": {"HTTPBearer": {"type": "http"}, "Unused": {}}}}
-    out = merged(engine, seed)
-    assert out["info"] == {"title": "engine"}
-    assert out["paths"] == {"/v1/hint": {"post": ref("HintIn")}, "/health": {"get": {}}, "/v1/detail": detail}
-    assert out["components"]["securitySchemes"] == {"HTTPBearer": {"type": "http"}}   # 옮긴 경로가 쓰는 것만
-    assert set(out["components"]["schemas"]) == {"HintIn", "DetailIn", "Intent"}   # 쓰이지 않는 seed 스키마는 버린다
-    assert out["components"]["schemas"]["HintIn"] == {"engine": True}                 # 엔진 것이 이긴다
-    assert merged(engine, {})["paths"] == engine["paths"]
+    assert json.loads(SNAPSHOT.read_text(encoding="utf-8")) == json.loads(json.dumps(app.openapi()))

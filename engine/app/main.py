@@ -5,7 +5,7 @@ from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from typing import Literal
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,10 +13,12 @@ from pydantic import BaseModel
 
 from app.auth import get_verifier
 from app.db import PgRepo
+from app.deps import get_registry
 from app.limits import BodyLimit
 from app.routes import detail, feedback, hint, hooks, mirror, stats
 from app.ratelimit import get_limits
 from app.settings import Settings, load_config
+from experts.registry import Registry
 from harness.providers import available
 from harness.router import chains
 from jobs.feedback import QUEUE_MAXSIZE
@@ -30,6 +32,7 @@ log = logging.getLogger(__name__)
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     load_config()  # 파일이 없거나 깨졌으면 요청이 아니라 시작할 때 실패한다
     get_limits()  # limits 값이 틀렸어도 시작할 때 실패한다
+    startup_warnings(get_registry(), os.environ)  # 전문가·프롬프트가 틀렸으면 시작할 때 실패(E7), 쓸 수 없는 모델은 경고
     get_mirror_key()  # MIRROR_SECRET가 짧으면 시작할 때 실패한다(없으면 경고 한 번)
     dsn = Settings.from_env().supabase_db_url
     repo = await PgRepo.connect(dsn) if dsn else None  # 풀은 min_size=0: DB가 죽어 있어도 시작한다
@@ -89,6 +92,13 @@ app.include_router(mirror.router)
 class HealthResponse(BaseModel):
     ok: bool
     models: dict[str, Literal["up", "down"]]
+    providers: dict[str, Literal["up", "down"]]
+    failures: dict[str, dict[str, int]]   # 공급자 → {실패·건너뜀 종류: 횟수}(프로세스 시작 뒤). 원문 없음
+
+
+def provider_status(cfg: dict, env: Mapping[str, str]) -> dict[str, str]:
+    providers = cfg.get("providers") or {}
+    return {name: "up" if available(name, p or {}, env) else "down" for name, p in providers.items()}
 
 
 def model_status(cfg: dict, env: Mapping[str, str]) -> dict[str, str]:
@@ -102,6 +112,17 @@ def model_status(cfg: dict, env: Mapping[str, str]) -> dict[str, str]:
     return status
 
 
+def startup_warnings(reg: Registry, env: Mapping[str, str]) -> None:
+    """force_mock이 아닌데 쓸 수 없는 실제 모델은 시작할 때 한 번씩 알린다(키가 빠져 mock으로 도는 걸 조용히 두지 않는다)."""
+    if reg.router.force_mock:
+        return
+    for ref, state in model_status(reg.cfg, env).items():
+        if state == "down" and not ref.startswith("mock:"):
+            log.warning("model unavailable at startup: %s", ref)
+
+
 @app.get("/health")
-def health() -> HealthResponse:
-    return HealthResponse(ok=True, models=model_status(load_config(), os.environ))
+def health(reg: Registry = Depends(get_registry)) -> HealthResponse:
+    cfg = load_config()
+    return HealthResponse(ok=True, models=model_status(cfg, os.environ), providers=provider_status(cfg, os.environ),
+                          failures=reg.router.failures)

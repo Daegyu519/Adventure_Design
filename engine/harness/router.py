@@ -1,5 +1,6 @@
 """전문가 ID로 모델을 골라 부르는 하네스의 중심.
 - 전문가의 사슬(모델 + fallback) 순서대로 부르고, 키 없음·한도·시간 초과·JSON 깨짐이면 다음 모델로 넘어간다.
+- 실제 모델이 모두 실패하면 mock으로 떨어지지 않고 NoResult(기권)다. mock은 force_mock(테스트·평가)에서만 쓴다.
 - 같은 모델이 연속으로 실패하면 잠시 건너뛴다(차단기).
 - 같은 입력은 캐시에서 돌려준다(상한을 넘으면 통째로 비운다). 넣을 때와 꺼낼 때 깊은 복사를 해서
   한 요청이 결과를 고쳐도(이름 복원 등) 다른 요청에 새지 않는다.
@@ -11,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 import time
 from collections import deque
 from dataclasses import dataclass, field
@@ -23,6 +25,7 @@ from pydantic import BaseModel, ValidationError
 from . import pii
 from .providers import MockProvider, OpenAICompatProvider, ProviderError, TokenBucket, extract_json
 
+log = logging.getLogger(__name__)
 T = TypeVar("T", bound=BaseModel)
 
 
@@ -79,6 +82,7 @@ class Router:
     cache: dict = field(default_factory=dict)
     traces: deque = field(default_factory=lambda: deque(maxlen=1000))
     chains: dict[str, list[str]] = field(init=False)
+    failures: dict = field(default_factory=dict)   # 공급자 → {종류: 횟수}. /health가 보여 준다(원문 없음, 고정 어휘)
 
     CACHE_MAX = 2048   # ponytail: 전체 비우기, LRU 필요하면 교체
 
@@ -92,9 +96,6 @@ class Router:
         for name, p in cfg["providers"].items():
             r.providers[name] = MockProvider() if name == "mock" else OpenAICompatProvider(name, p)
         return r
-
-    def timeout(self, path: str) -> float:
-        return self.config["paths"][path]["deadline_ms"] / 1000
 
     def _bucket(self, provider: str, model: str) -> TokenBucket:
         key = f"{provider}:{model}"
@@ -114,13 +115,15 @@ class Router:
         errors = []
         for entry in self.chains[expert_id]:
             provider_name, model = entry.split(":", 1)
-            if self.force_mock and provider_name != "mock":
+            if (provider_name == "mock") != self.force_mock:   # mock은 force_mock(테스트·평가)에서만, 그때는 mock만. 실제 모델이 다 막히면 폴백 없이 NoResult(기권)
                 continue
             provider = self.providers[provider_name]
             breaker = self.breakers.setdefault(entry, Breaker())
             if not provider.available or not breaker.ok():
+                self._note(entry, "unavailable" if not provider.available else "breaker_open")
                 continue
             if not self._bucket(provider_name, model).try_acquire():
+                self._note(entry, "rate_limited")
                 errors.append(f"{entry}: 한도 대기")
                 continue
             remaining = deadline - time.monotonic()
@@ -145,8 +148,16 @@ class Router:
             except (ProviderError, asyncio.TimeoutError, ValueError, ValidationError) as e:
                 breaker.record(False)
                 self._trace(expert_id, entry, t0, False, type(e).__name__)
+                status = getattr(e, "status", None)   # 메시지엔 문장이 섞일 수 있어 타입(과 HTTP 분류)만
+                self._note(entry, type(e).__name__ + (f" {status // 100}xx" if status else ""))
                 errors.append(f"{entry}: {type(e).__name__}")
         raise NoResult(f"{expert_id} 실패 → " + "; ".join(errors))
+
+    def _note(self, entry: str, kind: str) -> None:
+        """실패·건너뜀 한 건: 경고 한 줄(항목 이름 + 고정 종류)과 공급자별 횟수."""
+        log.warning("model not used: %s (%s)", entry, kind)
+        counts = self.failures.setdefault(entry.split(":", 1)[0], {})
+        counts[kind] = counts.get(kind, 0) + 1
 
     def _trace(self, expert_id: str, entry: str, t0: float, ok: bool, err: str = "") -> None:
         self.traces.append({"expert": expert_id, "model": entry, "ms": round((time.monotonic() - t0) * 1000),

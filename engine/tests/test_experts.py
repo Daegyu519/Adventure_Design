@@ -277,8 +277,8 @@ def test_bad_provider_response_falls_back(tmp_path, body):
            "experts": [{"id": "x", "role": "context", "model": "nvidia:x", "prompt": "context", "paths": ["detail"]}]}
     r = Router.from_file(_write(tmp_path, cfg), force_mock=False)
     r.providers["nvidia"] = p
-    _, model = asyncio.run(r.call("x", "s", "u", {"turns": []}, ContextReading, time.monotonic() + 1))
-    assert model == "mock:context"                       # 폴백이 돌고
+    with pytest.raises(NoResult):                        # 실제 모델이 실패하면 mock으로 떨어지지 않고 기권
+        asyncio.run(r.call("x", "s", "u", {"turns": []}, ContextReading, time.monotonic() + 1))
     assert r.traces[0]["model"] == "nvidia:x" and r.traces[0]["ok"] is False
     assert r.breakers["nvidia:x"].fails == 1              # 차단기도 실패를 센다
 
