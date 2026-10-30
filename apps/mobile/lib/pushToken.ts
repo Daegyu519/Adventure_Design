@@ -16,13 +16,14 @@ async function dropRow(userId: string, token: string): Promise<void> {
 }
 
 // 서버 RPC가 같은 토큰을 가진 다른 사용자의 행을 정리하고 내 행을 만든다(공유 기기에서 이전 사용자의 알림이 새지 않게).
-// 토큰이 바뀐 경우(로테이션) 이전에 기억한 토큰의 내 행은 먼저 지운다(실패해도 계속). 성공했을 때만 기억한다.
+// 토큰이 바뀐 경우(로테이션) 이전에 기억한 토큰의 내 행은 새 토큰을 등록한 뒤에 지운다(실패해도 계속):
+// 등록이 실패하면 이전 행이 남아 알림이 끊기지 않는다. 성공했을 때만 기억한다.
 export async function saveToken(userId: string, token: string, platform: 'android' | 'web'): Promise<void> {
   if (!supabase) throw new Error('no supabase');
   const prev = await storedToken();
-  if (prev && prev !== token) await dropRow(userId, prev).catch(() => {});
   const { error } = await supabase.rpc('register_push_token', { p_token: token, p_platform: platform });
   if (error) throw new Error('register_push_token failed');
+  if (prev && prev !== token) await dropRow(userId, prev).catch(() => {});
   await AsyncStorage.setItem(TOKEN_KEY, token);
 }
 

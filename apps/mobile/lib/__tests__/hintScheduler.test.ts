@@ -167,6 +167,11 @@ test.each([
   ['network/timeout (0)', new EngineError(0)],
   ['429 without Retry-After', new EngineError(429)],
   ['429 with Retry-After 0', Object.assign(new EngineError(429), { retryAfterMs: 0 })],
+  // 그 밖의 실패도(로그인 만료·권한·요청 모양·서버 오류) 쉬지 않으면 글자마다 실패 요청이 나간다(S-I3)
+  ['401', new EngineError(401)],
+  ['403', new EngineError(403)],
+  ['422', new EngineError(422)],
+  ['500', new EngineError(500)],
 ])('%s backs off 5s by default', async (_n, err) => {
   const s = mk();
   await failThenType(s, err);
@@ -193,4 +198,13 @@ test('a caller abort does not start a back-off', async () => {
   calls[0].reject(new EngineError(0));
   await jest.advanceTimersByTimeAsync(500);
   expect(request).toHaveBeenCalledTimes(2);
+});
+
+test('a non-OK status warns in dev with the status only (tone_events has no hint_error kind)', async () => {
+  const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+  const s = mk();
+  await failThenType(s, new EngineError(500, 'SERVER SECRET'));
+  expect(warn).toHaveBeenCalledWith('[hint] engine error 500');
+  expect(JSON.stringify(warn.mock.calls)).not.toContain('SECRET');
+  warn.mockRestore();
 });

@@ -7,10 +7,19 @@ import { GROUP_MAX, INVITE_CODE_LENGTH, inviteErrorMessage, normalizeInviteCode,
 const SQL = fs.readFileSync(path.join(__dirname, '../../../../supabase/migrations/20261027000001_chat.sql'), 'utf8');
 
 test('normalizeInviteCode uppercases and strips spaces/hyphens', () => expect(normalizeInviteCode(' ab3-x9k7q ')).toBe('AB3X9K7Q'));
+// 공유 문구("초대 코드: ABCD1234")를 통째로 붙여 넣어도 코드만 꺼낸다. 메신저가 바꾼 긴 대시·보이지 않는 글자도 지운다(AM-5).
+test.each([
+  ['초대 코드: ABCD1234', 'ABCD1234'],
+  ['초대 코드: abcd1234\n', 'ABCD1234'],
+  ['방에 들어와요 — 초대 코드: Q1W2E3R4 (72시간)', 'Q1W2E3R4'],
+  ['AB–CD—1234', 'ABCD1234'],
+  ['ABCD\u200b1234\ufeff', 'ABCD1234'],
+])('normalizeInviteCode pulls the code out of pasted text: %j', (input, out) => expect(normalizeInviteCode(input)).toBe(out));
 test('normalizeInviteCode rejects wrong length or non-alnum', () => {
   expect(normalizeInviteCode('AB3X9K7')).toBeNull(); // 7자
   expect(normalizeInviteCode('AB3X9K7QZ')).toBeNull(); // 9자
   expect(normalizeInviteCode('가나다라마바사아')).toBeNull(); // 8자지만 영숫자 아님
+  expect(normalizeInviteCode('초대 코드: ABCD12345')).toBeNull(); // 붙은 9자는 코드가 아니다
 });
 test('inviteErrorMessage maps each invite error code', () => {
   expect(inviteErrorMessage({ message: 'invite_expired' })).toBe('기간이 지난 코드예요. 새 코드를 받아 주세요');

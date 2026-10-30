@@ -10,10 +10,11 @@ const hasPushApi = () =>
 // 서비스 워커가 준비되지 않으면 영원히 기다리지 않는다.
 const READY_MS = 10_000;
 function swReady(): Promise<ServiceWorkerRegistration> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
   return Promise.race([
     navigator.serviceWorker.ready,
-    new Promise<never>((_, rej) => setTimeout(() => rej(new Error('sw timeout')), READY_MS)),
-  ]);
+    new Promise<never>((_, rej) => (timer = setTimeout(() => rej(new Error('sw timeout')), READY_MS))),
+  ]).finally(() => clearTimeout(timer)); // 준비되면 경주 타이머를 남기지 않는다
 }
 
 // 스위치는 브라우저 상태를 따른다: 기억한 토큰 + 허용됨 + 살아 있는 구독이 모두 있어야 켜짐.

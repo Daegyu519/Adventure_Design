@@ -9,10 +9,14 @@ export type Relation = (typeof RELATIONS)[number];
 export const GROUP_MAX = 8; // room_members_cap 트리거의 그룹 상한
 export const INVITE_CODE_LENGTH = 8; // create_invite가 만드는 코드 길이(A-Z0-9)
 
-// 붙여 넣은 코드의 공백·하이픈을 지우고 대문자로 바꾼 뒤 DB 규칙(영문 대문자·숫자 8자)일 때만 돌려준다.
+// 붙여 넣은 글에서 코드(영문 대문자·숫자 8자)를 꺼낸다. 보이지 않는 글자를 지우고 대문자로 바꾼 뒤,
+// 공백·대시(- – —)를 지운 전체가 8자면 그것, 아니면 공유 문구("초대 코드: ABCD1234")에서 따로 떨어진 마지막 8자.
 export function normalizeInviteCode(s: string): string | null {
-  const t = s.replace(/[\s-]+/g, '').toUpperCase();
-  return new RegExp(`^[A-Z0-9]{${INVITE_CODE_LENGTH}}$`).test(t) ? t : null;
+  const t = s.replace(/[\u200B-\u200D\u2060\uFEFF]/g, '').toUpperCase();
+  const whole = t.replace(/[\s\-\u2013\u2014]+/g, '');
+  if (new RegExp(`^[A-Z0-9]{${INVITE_CODE_LENGTH}}$`).test(whole)) return whole;
+  const runs = [...t.matchAll(new RegExp(`(?:^|[^A-Z0-9])([A-Z0-9]{${INVITE_CODE_LENGTH}})(?=[^A-Z0-9]|$)`, 'g'))];
+  return runs.at(-1)?.[1] ?? null;
 }
 
 export const inviteErrorMessage = (err: { message: string } | null): string => dbErrorMessage(err, '코드를 확인해 주세요');
