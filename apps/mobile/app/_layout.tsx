@@ -7,6 +7,7 @@ import { View } from 'react-native';
 
 import { useConsented } from '../lib/consent';
 import { gate } from '../lib/gate';
+import { usePushTaps } from '../lib/push';
 import { SessionProvider, useSession } from '../lib/session';
 import { supabase } from '../lib/supabase';
 import { ThemeProvider, useTheme } from '../lib/theme';
@@ -38,6 +39,12 @@ export default function RootLayout() {
   );
 }
 
+// 알림을 누르면 그 대화방으로. 앱 화면(Stack 안 보호 구간)이 열린 뒤에만 듣는다.
+function PushTaps() {
+  usePushTaps();
+  return null;
+}
+
 function Gated() {
   const { colors, scheme } = useTheme();
   const [loaded, error] = useFonts(fonts);
@@ -59,6 +66,7 @@ function Gated() {
   return (
     <>
       <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+      {g === 'app' && <PushTaps />}
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}>
         <Stack.Protected guard={g === 'consent'}>
           <Stack.Screen name="consent" />

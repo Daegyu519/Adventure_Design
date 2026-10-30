@@ -293,3 +293,25 @@ test('no column stores raw complaint text', async () => {
     'sender_pattern_reporters.relation', 'sender_pattern_reporters.trigger', 'sender_patterns.feeling',
     'sender_patterns.relation', 'sender_patterns.trigger'])
 })
+
+test('register_push_token: a device handed to B leaves A, only the exact token moves', async () => {
+  const { db, a, b } = await abc()
+  const reg = (u, token, platform = 'android') => as(db, u, 'select public.register_push_token($1, $2)', [token, platform])
+  const sub = JSON.stringify({ endpoint: 'https://fcm.googleapis.com/w/1', keys: { p256dh: 'k', auth: 'a' } })
+  await reg(a, 'ExponentPushToken[shared]')
+  await reg(a, 'ExponentPushToken[a-other]')
+  await reg(a, sub, 'web')
+  await reg(b, 'ExponentPushToken[b-own]')
+  await reg(b, 'ExponentPushToken[shared]')
+  await reg(b, sub, 'web')
+  const rows = (await as(db, 'service', 'select user_id, token from public.push_tokens order by token')).rows
+  assert.deepEqual(rows.filter((r) => r.token === 'ExponentPushToken[shared]').map((r) => r.user_id), [b])
+  assert.deepEqual(rows.filter((r) => r.token === sub).map((r) => r.user_id), [b])
+  assert.ok(rows.some((r) => r.user_id === a && r.token === 'ExponentPushToken[a-other]')) // B cannot touch A's other tokens
+  assert.ok(rows.some((r) => r.user_id === b && r.token === 'ExponentPushToken[b-own]'))
+  await reg(b, 'ExponentPushToken[shared]') // idempotent
+  assert.equal(await count(db, 'service', "select * from public.push_tokens where token = 'ExponentPushToken[shared]'"), 1)
+  await assert.rejects(reg(b, 'not json', 'web'), /check constraint|invalid input syntax/)
+  await assert.rejects(reg(b, 'tok', 'sms'), /check constraint/)
+  await assert.rejects(as(db, 'anon', "select public.register_push_token('t', 'android')"), /permission denied/)
+})
