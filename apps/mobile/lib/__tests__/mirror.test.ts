@@ -42,3 +42,11 @@ test('mirrorErrorCopy: fixed Korean copy by status, never the error message', ()
   expect(isStaleCard(new EngineError(429))).toBe(false);
   expect(mirrorErrorCopy(new Error('x'))).toBe('지금은 이 카드에 답하지 못했어요. 잠시 뒤 다시 해 주세요.');
 });
+
+// T-22: 살펴보기 시트도 같은 어절 비교(changedWords)를 쓴다.
+const changed = (o: string, c: string) => changedWords(o, c).filter((s) => s.changed).map((s) => s.text);
+test('changedWords spec example (살펴보기): only changed 어절', () =>
+  expect(changed('안 돼요. 다들 맞춰서 하는 중이에요.', '지금은 어려워요. 다들 맞춰서 하는 중이라서요.')).toEqual(['지금은', '어려워요.', '중이라서요.']));
+test('changedWords: punctuation attached to a word counts as a change', () => expect(changed('중이에요.', '중이에요')).toEqual(['중이에요']));
+test('changedWords: repeated words are matched once', () => expect(changed('네 네 알겠어요', '네 알겠어요')).toEqual([]));
+test('changedWords: empty original → every word changed', () => expect(changed('', '고마워요 정말')).toEqual(['고마워요', '정말']));
