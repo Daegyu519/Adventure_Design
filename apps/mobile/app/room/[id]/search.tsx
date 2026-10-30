@@ -111,7 +111,8 @@ export default function RoomSearch() {
             return (
               <View key={item.id} role="listitem">
               <Pressable
-                onPress={() => router.navigate({ pathname: '/room/[id]', params: { id: id!, at: String(item.id), k: String(Date.now()) } })}
+                // 아래에 있는 그 방으로 돌아간다(방 정보·검색을 걷고 at·k만 바꾼다). navigate는 방을 맨 위로 옮겨서 뒤로 가기가 검색으로 간다.
+                onPress={() => router.dismissTo({ pathname: '/room/[id]', params: { id: id!, at: String(item.id), k: String(Date.now()) } })}
                 accessibilityRole="button"
                 accessibilityLabel={`${who(item.sender_id)}, ${stamp}: ${item.text}`}
                 accessibilityHint="누르면 대화방에서 이 메시지로 이동"

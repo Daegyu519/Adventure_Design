@@ -59,7 +59,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
   const { colors, space } = useTheme();
   const router = useRouter();
   const focused = useIsFocused();
-  const { messages, hasMore, error, olderError, reload, loadOlder, send } = useRoomMessages(id, me);
+  const { messages, hasMore, error, olderError, reload, loadOlder, send } = useRoomMessages(id, me); // error: 첫 페이지 실패 또는 Realtime 끊김
   const [info, setInfo] = useState<{ room: Tables<'rooms'>; members: Member[] } | null>(null);
   const [infoError, setInfoError] = useState<string | null>(null);
   const [infoTick, setInfoTick] = useState(0);
@@ -106,14 +106,19 @@ function RoomBody({ id, me }: { id: string; me: string }) {
     };
   }, [id, me, infoTick]);
 
-  // 불러오기 실패 줄의 다시 불러오기, 그리고 앞으로 돌아오거나 포커스를 얻을 때 자동 다시 시도.
+  const { members, error: membersDown, reload: reloadMembers } = useMembers(id, info?.members);
+  const { rows: reactionRows, toggle, error: reactionsDown, reload: reloadReactions } = useReactions(id, useMemo(() => messages.map((x) => x.id), [messages]), me);
+  const failed = error || infoError !== null || membersDown || reactionsDown; // 다시 불러오기 줄(Realtime 끊김 포함)
+  // 불러오기 실패 줄의 다시 불러오기(끊긴 채널도 새로 연다), 그리고 앞으로 돌아오거나 포커스를 얻을 때 자동 다시 시도.
   const retry = useCallback(() => {
     setInfoTick((t) => t + 1);
-    void reload();
-  }, [reload]);
+    reload();
+    reloadMembers();
+    reloadReactions();
+  }, [reload, reloadMembers, reloadReactions]);
   useEffect(() => {
-    failedRef.current = infoError !== null || error;
-  }, [infoError, error]);
+    failedRef.current = failed;
+  }, [failed]);
   useEffect(() => {
     if (failedRef.current && focused && appActive) retry();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 실패 상태가 바뀔 때가 아니라 focused/appActive가 바뀔 때만
@@ -124,9 +129,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
     return () => sub.remove();
   }, []);
 
-  const members = useMembers(id, info?.members);
   const names = useMemo(() => new Map(info?.members.map((m) => [m.user_id, m.name])), [info]);
-  const { rows: reactionRows, toggle } = useReactions(id, useMemo(() => messages.map((x) => x.id), [messages]), me);
   const byId = useMemo(() => new Map(messages.map((x) => [x.id, x])), [messages]);
   const group = info?.room.kind === 'group';
   const nameRecord = useMemo(() => Object.fromEntries(names), [names]);
@@ -180,7 +183,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
   }, []);
 
   // 다시 불러오기 줄이 성공으로 사라졌는데 포커스가 body로 떨어졌으면 입력창으로(웹만: 네이티브는 키보드가 올라온다).
-  const retryRowShown = error || infoError !== null || olderError;
+  const retryRowShown = failed || olderError;
   useEffect(() => {
     if (retryRowShown || !retryFocus.current) return;
     retryFocus.current = false;
@@ -368,7 +371,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
         <IconButton icon={Info} label="방 정보" onPress={() => router.push(`/room/${id}/info` as Href)} />
       </View>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        {(error || infoError) && (
+        {failed && (
           <View style={{ padding: space[3], gap: space[1], alignItems: 'flex-start' }}>
             <AppText accessibilityRole="alert" variant="small" color="danger">
               {infoError ?? NETWORK_MESSAGE}

@@ -54,10 +54,10 @@ const mockRetryPhoto = jest.fn();
 
 let mockReactionRows: { message_id: number; user_id: string; emoji: string; created_at: string }[] = [];
 const mockToggle = jest.fn();
-jest.mock('../lib/useReactions', () => ({ useReactions: () => ({ rows: mockReactionRows, toggle: (...a: unknown[]) => mockToggle(...a) }) }));
+jest.mock('../lib/useReactions', () => ({ useReactions: () => ({ rows: mockReactionRows, toggle: (...a: unknown[]) => mockToggle(...a), error: false, reload: jest.fn() }) }));
 let mockMembersLastRead: Record<string, string | null> = {};
 jest.mock('../lib/useMembers', () => ({
-  useMembers: (_id: string, initial: { user_id: string; last_read_at: string | null }[] = []) => initial.map((x) => ({ ...x, last_read_at: x.user_id in mockMembersLastRead ? mockMembersLastRead[x.user_id] : x.last_read_at })),
+  useMembers: (_id: string, initial: { user_id: string; last_read_at: string | null }[] = []) => ({ members: initial.map((x) => ({ ...x, last_read_at: x.user_id in mockMembersLastRead ? mockMembersLastRead[x.user_id] : x.last_read_at })), error: false, reload: jest.fn() }),
 }));
 
 const mockFeedback = jest.fn();
