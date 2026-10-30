@@ -76,7 +76,9 @@ async def mirror_answer(body: MirrorAnswerIn, user: UUID = Depends(current_user)
         if kind == "roleplay":
             convo = Conversation(pair_id="mirror", relation=relation,
                                  turns=[Turn(speaker="them", text=text, label=persona)])
-            out = await pipeline.detail(reg, body.reply, convo, ProfileStore(), str(user), [], None, t0, path="mirror")
+            me = await repo.profile_name(user)   # 답장은 본인이 쓴 글이라 본인 이름도 가린다(규칙 16)
+            out = await pipeline.detail(reg, body.reply, convo, ProfileStore(), str(user), [me] if me else [], None, t0,
+                                        path="mirror")
             if out.report is None:
                 return None
             top = max(out.readings, key=out.readings.__getitem__)

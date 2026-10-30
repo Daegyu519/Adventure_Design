@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from datetime import datetime, time, timedelta, timezone
 from uuid import UUID
 
@@ -11,6 +12,13 @@ import pipeline
 from app.db import GROUP_MIN_MEMBERS, KST, FeedbackWrite, Repo, week_start
 from experts.registry import Registry
 from harness.schemas import FeedbackPattern
+
+log = logging.getLogger(__name__)
+
+
+class ClassificationUnavailable(Exception):
+    """L4 전문가가 모두 실패·시간 초과. 신고를 소비하지 않고 올려서 큐의 버림 로그(max_attempts=1)에 남긴다."""
+
 
 WEEKLY_CAP = 5     # 한 (보낸 사람, 관계)에 일주일(KST ISO 주) 동안 반영하는 신고 수(악용 방지)
 DB_SLACK_S = 10.0  # L4 deadline 위에 DB 읽기·쓰기 몫. 작업 전체가 이보다 오래 워커를 붙들지 않는다
@@ -45,7 +53,10 @@ async def run(repo: Repo, reg: Registry, room_id: UUID, reporter_id: UUID, messa
         #   (보낸 사람, 관계) advisory lock 뒤에 센다.
         if not await at_weekly_cap(repo, msg.sender_id, room.relation, now):
             result = await pipeline.feedback(reg, complaint, about, room.relation)
-            patterns = result.patterns if result is not None and result.usable else []   # FeedbackResult가 이미 거름
+            if result is None:   # 모델이 안 돌았다: usable False 행으로 신고를 소비하지 않는다(주간 상한·재신고 막힘 방지)
+                log.warning("feedback classification unavailable")
+                raise ClassificationUnavailable
+            patterns = result.patterns if result.usable else []   # FeedbackResult가 이미 거름
         # 호출자의 요청일 뿐이다: 보낸 사람·관계·그룹 규칙은 apply_feedback이 SQL에서 다시 판정한다
         to_sender = room.kind == "group" and room.member_count >= GROUP_MIN_MEMBERS
         await repo.apply_feedback(FeedbackWrite(room_id, reporter_id, message_id, bool(patterns), patterns,

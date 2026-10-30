@@ -14,7 +14,11 @@ from . import mock_rules
 
 
 class ProviderError(Exception):
-    """재시도 대신 다음 모델로 넘어가야 하는 오류."""
+    """재시도 대신 다음 모델로 넘어가야 하는 오류. status는 HTTP 오류일 때만(로그엔 4xx·5xx 같은 분류만 남긴다)."""
+
+    def __init__(self, msg: str = "", status: int | None = None) -> None:
+        super().__init__(msg)
+        self.status = status
 
 
 class RateLimited(ProviderError):
@@ -82,7 +86,7 @@ class OpenAICompatProvider:
         if r.status_code == 429:
             raise RateLimited(f"{self.name}:{model} 한도 초과")
         if r.status_code >= 400:
-            raise ProviderError(f"{self.name}:{model} HTTP {r.status_code}")
+            raise ProviderError(f"{self.name}:{model} HTTP {r.status_code}", r.status_code)
         try:
             content = r.json()["choices"][0]["message"].get("content") or ""
             if not isinstance(content, str):

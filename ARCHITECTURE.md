@@ -213,9 +213,9 @@ sequenceDiagram
 | POST | `/v1/mirror/answer` | `{card_id, reply?, score?, predicted?}` | `{readings, inner_voice?, reveal?, options?, gap?}` |
 | GET | `/v1/stats/me` | 없음 | `{hints, details, fixed, fix_rate, predict_gap_trend, hints_by_week}` |
 | POST | `/hooks/message` | Supabase 웹훅 페이로드 `{type, table, schema, record, old_record}` + `X-Hook-Secret` 헤더 | 202 |
-| GET | `/health` | 없음 | `{ok, models: {id: "up"\|"down"}}` |
+| GET | `/health` | 없음 | `{ok, models: {id: "up"\|"down"}, providers: {공급자: "up"\|"down"}, failures: {공급자: {종류: 횟수}}}` (`failures`는 프로세스 시작 뒤 모델 호출이 실패·건너뛴 횟수. 종류는 예외 타입, `unavailable`(키 없음), `breaker_open`, `rate_limited`뿐이고 원문은 없다) |
 
-- 오류: 401(토큰), 403(방 멤버 아님 / 받은 메시지 아님), 422(형식), 503(엔진·모델 일시 불가: `engine_unavailable`, 그리고 공개키를 받지 못해 토큰을 검증할 수 없는 `auth_unavailable`. 앱이 다시 시도한다); 429(`rate_limited`, `Retry-After` 초: 사용자 1명이 1분에 보낼 수 있는 /v1/* 요청 수를 넘음. 인증 뒤·방 멤버 확인 앞에서 세고, 401은 세지 않는다. 값은 `models.yaml`의 `limits:`(hint 90, 나머지 default 20), 프로세스 안 메모리 슬라이딩 윈도우라 프로세스를 늘리면 Redis로 옮긴다).
+- 오류: 401(토큰), 403(방 멤버 아님 / 받은 메시지 아님), 413(`too_large`: `/v1/*`·`/hooks/*` 본문이 64 KB 초과. JSON 파싱·인증보다 먼저, Content-Length가 없는 스트림은 읽는 중에 끊는다), 422(형식: 본문은 항상 `{"detail":"invalid_request"}`이고 입력값은 되돌려 주지 않는다), 503(엔진·모델 일시 불가: `engine_unavailable`(예기치 못한 오류도 로그에는 타입만 남기고 이 코드, CORS 헤더 유지), DB 주소가 없어 DB가 필요한 요청만 `db_unavailable`, 그리고 공개키를 받지 못해 토큰을 검증할 수 없는 `auth_unavailable`. 앱이 다시 시도한다); 429(`rate_limited`, `Retry-After` 초: 사용자 1명이 1분에 보낼 수 있는 /v1/* 요청 수를 넘음. 인증 뒤·방 멤버 확인 앞에서 세고, 401은 세지 않는다. 값은 `models.yaml`의 `limits:`(hint 90, 나머지 default 20), 프로세스 안 메모리 슬라이딩 윈도우라 프로세스를 늘리면 Redis로 옮긴다).
 - 토큰은 서명·`exp`·`aud`(authenticated)·`iss`와 `role=authenticated`를 모두 통과해야 한다. 익명 로그인(`is_anonymous`)과 `anon`·`service_role` 토큰은 401이다. 알고리즘은 ES256·RS256만 받는다.
 - 방 멤버 확인은 `room_members`로 한다. `room_id`를 받는 모든 `/v1/*`는 방을 읽기 전에 `ensure_member`를 거친다(`test_every_room_route_checks_membership_before_reading`이 라우트를 모두 돈다).
 - CORS: 허용 origin은 `CORS_ORIGINS`(쉼표로 나눔, 기본 `http://localhost:8081`), 메서드 GET·POST·OPTIONS, 헤더 Authorization·Content-Type. 쿠키를 쓰지 않아 credentials는 켜지 않는다.
@@ -348,6 +348,7 @@ aggregate:
 ```
 
 - 전문가의 사슬 = `[model, *fallback[model]]`. `mock:auto`는 `mock:<전문가의 mock>`(없으면 prompt 이름)으로 바뀐다.
+- **mock은 폴백이 아니다**(2026-10-30 사용자 결정, P-04): `mock:` 항목은 `force_mock`(테스트·평가·키 없는 로컬 시연)일 때만 쓰이고, 그때는 mock 항목만 쓴다. `force_mock`이 아닐 때 사슬의 실제 모델이 모두 실패·건너뛰기면 그 전문가는 결과 없음(`NoResult`)이고 규칙 3대로 기권한다(힌트 없음, 상세·거울은 503, 털어놓기는 신고를 소비하지 않음). 무엇이 왜 막혔는지는 로그(항목 이름 + 예외 타입/`unavailable`/`breaker_open`/`rate_limited`, HTTP 4xx·5xx 분류만. 문장·메시지 없음), 시작 때 쓸 수 없는 항목마다 경고 한 줄, `/health`의 `providers`·`failures`로 본다.
 
 모델 ID는 2026-10 기준 build.nvidia.com 무료 엔드포인트다. 목록이 자주 바뀌므로 설정에서만 바꾼다.
 
@@ -407,7 +408,7 @@ risk = sigmoid( w0 + w1·prior + w2·Σk(αk·negk)/Σk(αk) + w3·violation + w
 | 위치 | 변수 |
 |---|---|
 | 앱 (`apps/mobile/.env`) | `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`, `EXPO_PUBLIC_ENGINE_URL`, `EXPO_PUBLIC_VAPID_PUBLIC_KEY` |
-| 엔진 (루트 `.env`) | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_DB_URL`, `HOOK_SECRET`, `NVIDIA_API_KEY`, `GEMINI_API_KEY`(합성 문장 평가만), `GITHUB_TOKEN`, `LOCAL_API_KEY`, `USE_LOCAL_MODEL`(`1`이면 로컬 모델 사용), `MODELS_PATH`(선택, 기본 `engine/config/models.yaml`), `EXPO_ACCESS_TOKEN`(선택), `FORCE_MOCK`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `CORS_ORIGINS`(선택, 쉼표로 나눔, 비우면 `http://localhost:8081`), `MIRROR_SECRET`(선택, 거울 `card_id` 서명 키, 32바이트 이상. 없으면 프로세스마다 임의 키) |
+| 엔진 (루트 `.env`) | `SUPABASE_URL`, `SUPABASE_DB_URL`, `HOOK_SECRET`, `NVIDIA_API_KEY`, `GEMINI_API_KEY`(합성 문장 평가만), `GITHUB_TOKEN`, `LOCAL_API_KEY`, `USE_LOCAL_MODEL`(`1`이면 로컬 모델 사용), `MODELS_PATH`(선택, 기본 `engine/config/models.yaml`), `EXPO_ACCESS_TOKEN`(선택), `FORCE_MOCK`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `CORS_ORIGINS`(선택, 쉼표로 나눔, 비우면 `http://localhost:8081`), `MIRROR_SECRET`(선택, 거울 `card_id` 서명 키, 32바이트 이상. 없으면 프로세스마다 임의 키) |
 | 협업 스크립트 | `TONE_ACCOUNT`(`a`·`b`, 셸에서 설정) |
 | 개발 도구 | SUPABASE_PROJECT_REF (npm run gen:db 전용, 번들에 안 들어감) |
 
@@ -416,7 +417,8 @@ risk = sigmoid( w0 + w1·prior + w2·Σk(αk·negk)/Σk(αk) + w3·violation + w
 - 웹 푸시 공개키는 앱이 `EXPO_PUBLIC_VAPID_PUBLIC_KEY`로 받아 구독에 쓴다. 개인키(`VAPID_PRIVATE_KEY`)와 `VAPID_SUBJECT`는 엔진에만 둔다.
 - dev Supabase는 클라우드 프로젝트(서울 리전)다. 로컬 Supabase(Docker)는 쓰지 않는다. 8GB 맥의 메모리는 로컬 SEED 말투 전문가에 쓴다. DB 테스트는 PGlite로 한다(`supabase/tests`). pilot 프로젝트는 나중에 따로 만든다.
 - dev 웹훅은 `cloudflared` 임시 터널로 로컬 엔진에 닿게 한다. pilot은 T-29의 배포 서버로 보낸다.
-- 키가 없으면 `FORCE_MOCK`으로 엔진·평가·앱을 모두 돌린다.
+- 키가 없으면 `FORCE_MOCK`으로 엔진·평가·앱을 모두 돌린다. `FORCE_MOCK` 없이 키가 없으면 엔진은 뜨지만 그 모델은 쓰이지 않고(시작 경고, `/health` down) 결과 없음으로 기권한다.
+- **엔진은 프로세스 하나(`uvicorn --workers 1`)로 돌린다.** 사용자별 요청 한도, 작업 큐와 멱등 키, 주간 상한 확인, JWKS 캐시가 프로세스 메모리에 있다. `MIRROR_SECRET`은 배포에서 필수(없으면 프로세스마다 임의 키라 재시작·여러 프로세스에서 거울 카드 서명이 깨진다). 배포 뒤 `/health`에서 `nvidia:*`가 up인지 확인한다. 프로세스를 늘리려면 한도·큐·잠금을 Redis/DB로 옮긴다.
 - 아이폰 참가자는 기본으로 웹 빌드를 Safari '홈 화면에 추가'로 쓰고 웹 푸시를 받는다. 웹 푸시는 iOS 16.4 이상, 홈 화면에 추가한 경우만 동작한다. iOS 네이티브(APNs·TestFlight)는 Apple 개발자 계정이 있을 때만 추가한다.
 
 ---

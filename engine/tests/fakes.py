@@ -146,6 +146,9 @@ class FakeRepo:
     async def member_names(self, room_id: UUID) -> dict[UUID, str]:
         return {u: self.users[u] for u in self.members.get(room_id, {})}
 
+    async def profile_name(self, user_id: UUID) -> str | None:
+        return self.users.get(user_id)
+
     async def sender_patterns(self, sender_id: UUID, relation: str, now: datetime) -> dict[str, dict]:
         rows: dict[str, list[tuple[datetime, SenderPat]]] = {}
         for (s, r, t, a), p in self.sender_pats.items():
@@ -290,7 +293,7 @@ class FakeQueue:
     """JobQueue 대역: 넣기만 하고, 테스트가 `run_all()`로 직접 돌린다. 인자는 로그가 아니라 `.jobs`에만 있다."""
 
     def __init__(self, accepting: bool = True) -> None:
-        self.accepting = accepting  # False면 가득 찬 큐처럼 거절한다(호출하는 쪽의 503 경로 테스트용)
+        self.accepting = accepting  # False면 가득 찬 큐처럼 거절한다(enqueue가 False를 돌려주는 경로 테스트용)
         self.jobs: list[tuple[str, Callable[..., Awaitable[None]], tuple]] = []
         self.keys: list[str] = []  # 받은 멱등 키(JobQueue처럼 같은 키는 한 번만 받는다)
         self.max_attempts: list[int | None] = []  # 받은 작업마다 enqueue(max_attempts=)

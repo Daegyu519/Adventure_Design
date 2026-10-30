@@ -28,6 +28,7 @@ class _Job:
     args: tuple[Any, ...] = field(repr=False)
     attempt: int = 1
     max_attempts: int | None = None  # None이면 큐 기본값
+    key: str | None = None  # 멱등 키(종류와 id뿐). 버릴 때 로그에 남긴다
 
 
 class JobQueue:
@@ -60,7 +61,7 @@ class JobQueue:
         if key is not None and key in self._keys:
             return True
         try:
-            self._q.put_nowait(_Job(name, fn, args, max_attempts=max_attempts))
+            self._q.put_nowait(_Job(name, fn, args, max_attempts=max_attempts, key=key))
         except asyncio.QueueFull:
             return False  # 받지 않았으니 키도 남기지 않는다
         if key is not None:
@@ -107,7 +108,7 @@ class JobQueue:
                 self._retry_later(job, self._backoff_s * 2 ** (job.attempt - 1))
                 job.attempt += 1
                 return  # task_done은 다시 넣을 때 한다: 백오프 동안에도 join이 끝나지 않는다
-            log.warning("job %s dropped after %d attempts: %s", job.name, job.attempt, type(e).__name__)
+            log.warning("job %s dropped after %d attempts: %s (key=%s)", job.name, job.attempt, type(e).__name__, job.key)
         self._open -= 1
         self._q.task_done()
 

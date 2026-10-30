@@ -227,7 +227,7 @@ def test_oversized_card_id_rejected_by_schema(client, login, fake):
     me, _, _ = _room(fake)
     login(me)
     r = _answer(client, "a" * 513, predicted=3)
-    assert r.status_code == 422 and r.json()["detail"][0]["type"] == "string_too_long"
+    assert r.status_code == 422 and r.json() == {"detail": "invalid_request"}
 
 
 @pytest.mark.parametrize("path,body", [("/v1/mirror/today", None), ("/v1/mirror/answer", {"card_id": "x", "score": 3})])

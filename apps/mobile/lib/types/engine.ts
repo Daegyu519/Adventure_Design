@@ -189,12 +189,22 @@ export interface components {
         };
         /** HealthResponse */
         HealthResponse: {
+            /** Failures */
+            failures: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
             /** Models */
             models: {
                 [key: string]: "up" | "down";
             };
             /** Ok */
             ok: boolean;
+            /** Providers */
+            providers: {
+                [key: string]: "up" | "down";
+            };
         };
         /** HintBody */
         HintBody: {

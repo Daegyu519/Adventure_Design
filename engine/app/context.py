@@ -9,7 +9,7 @@ from uuid import UUID
 
 from fastapi import HTTPException
 
-from app.db import Msg, Repo, Room
+from app.db import Msg, Repo
 from harness.schemas import Conversation, Turn
 from harness.store import ProfileStore
 
@@ -22,7 +22,6 @@ class RoomContext:
     convo: Conversation
     store: ProfileStore
     names: list[str]
-    room: Room
 
 
 async def _none() -> None:
@@ -64,4 +63,4 @@ async def load_context(repo: Repo, room_id: UUID, user_id: UUID, reply_to: int |
                          reply_to=labels.turn(target, "답장 대상 · ") if target else None)
     store = ProfileStore(pair_patterns={pair: patterns}, global_patterns=global_patterns,
                          baselines={str(user_id): base} if base else {})
-    return RoomContext(convo=convo, store=store, names=list(members.values()), room=room)
+    return RoomContext(convo=convo, store=store, names=list(members.values()))
