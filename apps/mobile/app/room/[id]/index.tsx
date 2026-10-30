@@ -18,6 +18,8 @@ import { IconButton } from '../../../components/IconButton';
 import { pickAndSendImage } from '../../../lib/images';
 import { activeMentionQuery, extractMentions, insertMention, mentionCandidates } from '../../../lib/mentions';
 import { useAnnounce } from '../../../lib/announce';
+import { retryFocus as focusUntilHeld } from '../../../lib/focus';
+import { useReducedMotion } from '../../../lib/motion';
 import { dbErrorMessage, isUnreachable, NETWORK_MESSAGE } from '../../../lib/dbErrors';
 import { REACTION_LABELS, shouldMarkRead, summarizeReactions, unreadCount, type Emoji, type Msg } from '../../../lib/messages';
 import { fetchRoom, markRead, roomTitle, type Member } from '../../../lib/rooms';
@@ -141,12 +143,11 @@ function RoomBody({ id, me }: { id: string; me: string }) {
     toneInput(t); // 멘션 고르기도 같은 길로 들어온다
   }, [typing, toneInput]);
   // 시트를 닫으면 포커스는 입력창으로(힌트 막대의 버튼은 글이 바뀌면 사라질 수 있어 body로 떨어지지 않게). 시트가 돌려주는 포커스보다 나중에.
+  const reducedMotion = useReducedMotion();
   const closeDetail = useCallback(() => {
     setDetailText(null);
-    setTimeout(() => {
-      if (!unmounted.current) inputRef.current?.focus();
-    }, 50);
-  }, []);
+    focusUntilHeld(() => (unmounted.current ? null : inputRef.current), { delay: reducedMotion ? 0 : 30 });
+  }, [reducedMotion]);
   const title = info ? roomTitle(info.room, info.members, me) : '대화방';
 
   // 읽음: 앞에 보이고 포커스가 있을 때만, 방에서 가장 새 메시지의 서버 시각으로(앞으로만).
@@ -460,7 +461,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
           say={say}
           hint={toneHint}
           onDismissHint={toneDismiss}
-          onOpenHintDetail={() => setDetailText(draft.trim())}
+          onOpenHintDetail={() => draft.trim() !== '' && setDetailText(draft.trim())}
           onSelectMention={(name) => {
             const r = insertMention(draft, cursor, name);
             changeDraft(r.text);
@@ -526,11 +527,14 @@ function RoomBody({ id, me }: { id: string; me: string }) {
         visible={detailText !== null}
         roomId={id}
         text={detailText ?? ''}
+        hintTitle={toneHint?.title ?? null}
         replyTo={replyTarget?.id ?? null}
         say={say}
         onClose={closeDetail}
         onApply={({ text, choice, topReading, traceId }) => {
-          changeDraft(text); // 입력창 글만 바꾼다(보내지 않는다). 힌트도 새 글로 다시 확인
+          changeDraft(text);
+          setCursor(text.length); // 낡은 커서로 멘션 후보가 뜨지 않게 끝으로
+          // 입력창 글만 바꾼다(보내지 않는다). 힌트도 새 글로 다시 확인
           if (choice) logToneEvent({ room_id: id, kind: 'option_chosen', choice, top_reading: topReading, signals: { trace_id: traceId } }); // 글은 기록하지 않는다
           closeDetail();
           say('입력창에 적용했어요');
@@ -538,6 +542,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
         onSendAsIs={({ topReading, traceId }) => {
           logToneEvent({ room_id: id, kind: 'option_chosen', choice: 'original', top_reading: topReading, ...(traceId ? { signals: { trace_id: traceId } } : {}) });
           closeDetail();
+          say('보냈어요');
           void onSend(); // 평소 보내기 그대로(sent_with_hint는 toneSent가 기록)
         }}
       />

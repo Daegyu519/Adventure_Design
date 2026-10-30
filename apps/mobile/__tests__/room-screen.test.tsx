@@ -68,6 +68,8 @@ let mockHint: { title: string; detail: string } | null = null;
 const mockToneInput = jest.fn();
 const mockToneSent = jest.fn();
 jest.mock('../lib/useToneHint', () => ({ useToneHint: () => ({ hint: mockHint, input: (...a: unknown[]) => mockToneInput(...a), dismiss: jest.fn(), sent: () => mockToneSent() }) }));
+const mockFocusUntil = jest.fn();
+jest.mock('../lib/focus', () => ({ ...jest.requireActual('../lib/focus'), retryFocus: (...a: unknown[]) => mockFocusUntil(...a) }));
 const mockLogTone = jest.fn();
 jest.mock('../lib/toneEvents', () => ({ logToneEvent: (...a: unknown[]) => mockLogTone(...a) }));
 
@@ -96,6 +98,7 @@ beforeEach(() => {
   mockToneInput.mockReset();
   mockToneSent.mockReset();
   mockLogTone.mockReset();
+  mockFocusUntil.mockReset();
   mockPickImage.mockReset();
   mockRetryPhoto.mockReset();
   mockTyping.label = null;
@@ -1001,3 +1004,40 @@ test('살펴보기: 모르는 label이면 적용만 하고 option_chosen은 기�
   expect(input().props.value).toBe('새 글');
   expect(mockLogTone).not.toHaveBeenCalled();
 });
+
+test('살펴보기: 적용·그대로 보내기 뒤에는 입력창에 포커스를 되돌린다(Modal 복원이 끝날 때까지 재시도)', async () => {
+  const a = await openDetail();
+  await click(applyBtn(a.root));
+  expect(mockFocusUntil).toHaveBeenCalledTimes(1);
+  mockFocusUntil.mockReset();
+  await a.press('살펴보기');
+  await click(buttons(a.root, '그대로 보낼게요')[0]);
+  expect(mockFocusUntil).toHaveBeenCalledTimes(1);
+  expect(a.texts()).toContain('보냈어요'); // 안내
+});
+
+test('살펴보기: 적용하면 커서가 새 글 끝으로 간다(낡은 커서로 멘션 후보가 뜨지 않는다)', async () => {
+  mockHint = { title: 't', detail: 'd' };
+  mockDetail.mockResolvedValue({ ...DETAIL_RES, options: [{ label: '조금만 바꾼 문장', text: '@민수에게 말할게요.', keep: [], change: [] }] });
+  const { root, type, input, press } = await setup();
+  await type('@민');
+  await act(async () => input().props.onSelectionChange({ nativeEvent: { selection: { start: 2, end: 2 } } }));
+  await press('살펴보기');
+  await click(applyBtn(root));
+  expect(input().props.value).toBe('@민수에게 말할게요.');
+  expect(buttons(root, '민수 언급')).toHaveLength(0);
+});
+
+test('살펴보기: 공백뿐인 글이면 시트를 열지 않고 요청도 하지 않는다', async () => {
+  mockHint = { title: 't', detail: 'd' };
+  const { root, type, press } = await setup();
+  await type('   ');
+  await press('살펴보기');
+  expect(mockDetail).not.toHaveBeenCalled();
+  expect(buttons(root, '그대로 보낼게요')).toHaveLength(0);
+});
+
+test('살펴보기: 힌트 제목을 시트에 넘긴다', async () => {
+  const { texts } = await openDetail();
+  expect(texts()).toContain('차갑게 느껴질 수도 있어요');
+  });
