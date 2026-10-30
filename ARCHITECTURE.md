@@ -215,7 +215,7 @@ sequenceDiagram
 | POST | `/hooks/message` | Supabase 웹훅 페이로드 `{type, table, schema, record, old_record}` + `X-Hook-Secret` 헤더 | 202 |
 | GET | `/health` | 없음 | `{ok, models: {id: "up"\|"down"}}` |
 
-- 오류: 401(토큰), 403(방 멤버 아님 / 받은 메시지 아님), 422(형식), 503(엔진·모델 일시 불가: `engine_unavailable`, 그리고 공개키를 받지 못해 토큰을 검증할 수 없는 `auth_unavailable`. 앱이 다시 시도한다); 429는 단계 1에서 미구현.
+- 오류: 401(토큰), 403(방 멤버 아님 / 받은 메시지 아님), 422(형식), 503(엔진·모델 일시 불가: `engine_unavailable`, 그리고 공개키를 받지 못해 토큰을 검증할 수 없는 `auth_unavailable`. 앱이 다시 시도한다); 429(`rate_limited`, `Retry-After` 초: 사용자 1명이 1분에 보낼 수 있는 /v1/* 요청 수를 넘음. 인증 뒤·방 멤버 확인 앞에서 세고, 401은 세지 않는다. 값은 `models.yaml`의 `limits:`(hint 90, 나머지 default 20), 프로세스 안 메모리 슬라이딩 윈도우라 프로세스를 늘리면 Redis로 옮긴다).
 - 토큰은 서명·`exp`·`aud`(authenticated)·`iss`와 `role=authenticated`를 모두 통과해야 한다. 익명 로그인(`is_anonymous`)과 `anon`·`service_role` 토큰은 401이다. 알고리즘은 ES256·RS256만 받는다.
 - 방 멤버 확인은 `room_members`로 한다. `room_id`를 받는 모든 `/v1/*`는 방을 읽기 전에 `ensure_member`를 거친다(`test_every_room_route_checks_membership_before_reading`이 라우트를 모두 돈다).
 - CORS: 허용 origin은 `CORS_ORIGINS`(쉼표로 나눔, 기본 `http://localhost:8081`), 메서드 GET·POST·OPTIONS, 헤더 Authorization·Content-Type. 쿠키를 쓰지 않아 credentials는 켜지 않는다.
@@ -407,7 +407,7 @@ risk = sigmoid( w0 + w1·prior + w2·Σk(αk·negk)/Σk(αk) + w3·violation + w
 | 위치 | 변수 |
 |---|---|
 | 앱 (`apps/mobile/.env`) | `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`, `EXPO_PUBLIC_ENGINE_URL`, `EXPO_PUBLIC_VAPID_PUBLIC_KEY` |
-| 엔진 (루트 `.env`) | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_DB_URL`, `HOOK_SECRET`, `NVIDIA_API_KEY`, `GEMINI_API_KEY`(합성 문장 평가만), `GITHUB_TOKEN`, `LOCAL_API_KEY`, `USE_LOCAL_MODEL`(`1`이면 로컬 모델 사용), `MODELS_PATH`(선택, 기본 `engine/config/models.yaml`), `EXPO_ACCESS_TOKEN`(선택), `FORCE_MOCK`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `CORS_ORIGINS`(선택, 쉼표로 나눔, 비우면 `http://localhost:8081`) |
+| 엔진 (루트 `.env`) | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_DB_URL`, `HOOK_SECRET`, `NVIDIA_API_KEY`, `GEMINI_API_KEY`(합성 문장 평가만), `GITHUB_TOKEN`, `LOCAL_API_KEY`, `USE_LOCAL_MODEL`(`1`이면 로컬 모델 사용), `MODELS_PATH`(선택, 기본 `engine/config/models.yaml`), `EXPO_ACCESS_TOKEN`(선택), `FORCE_MOCK`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `CORS_ORIGINS`(선택, 쉼표로 나눔, 비우면 `http://localhost:8081`), `MIRROR_SECRET`(선택, 거울 `card_id` 서명 키, 32바이트 이상. 없으면 프로세스마다 임의 키) |
 | 협업 스크립트 | `TONE_ACCOUNT`(`a`·`b`, 셸에서 설정) |
 | 개발 도구 | SUPABASE_PROJECT_REF (npm run gen:db 전용, 번들에 안 들어감) |
 

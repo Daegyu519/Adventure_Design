@@ -1,6 +1,9 @@
 import os
+from functools import lru_cache
 from dataclasses import dataclass, field
 from pathlib import Path
+
+import yaml
 
 DEFAULT_MODELS_PATH = Path(__file__).resolve().parent.parent / "config" / "models.yaml"
 DEFAULT_CORS_ORIGINS = ("http://localhost:8081",)  # Expo 웹 개발 서버
@@ -16,6 +19,7 @@ class Settings:
     expo_access_token: str = field(default="", repr=False)  # 선택: Expo Push 보안 사용 시
     vapid_private_key: str = field(default="", repr=False)  # `npx web-push generate-vapid-keys`의 Private Key. 공개키는 앱만 안다(엔진은 읽지 않음)
     vapid_subject: str = ""      # mailto:<연락 이메일>
+    mirror_secret: str = field(default="", repr=False)  # 거울 card_id 서명 키. 비면 프로세스마다 임의 키(mirror.get_mirror_key)
     force_mock: bool = False
     models_path: Path = DEFAULT_MODELS_PATH
     cors_origins: tuple[str, ...] = DEFAULT_CORS_ORIGINS
@@ -31,8 +35,15 @@ class Settings:
             expo_access_token=os.environ.get("EXPO_ACCESS_TOKEN", ""),
             vapid_private_key=os.environ.get("VAPID_PRIVATE_KEY", ""),
             vapid_subject=os.environ.get("VAPID_SUBJECT", ""),
+            mirror_secret=os.environ.get("MIRROR_SECRET", ""),
             force_mock=os.environ.get("FORCE_MOCK", "").lower() in {"1", "true"},
             models_path=Path(os.environ.get("MODELS_PATH") or DEFAULT_MODELS_PATH),
             cors_origins=tuple(o for o in (x.strip() for x in os.environ.get("CORS_ORIGINS", "").split(",")) if o)
             or DEFAULT_CORS_ORIGINS,
         )
+
+
+@lru_cache
+def load_config() -> dict:
+    """models.yaml 전체(공급자·전문가·경로·집계·한도). 한 번 읽어 둔다."""
+    return yaml.safe_load(Settings.from_env().models_path.read_text(encoding="utf-8")) or {}

@@ -10,13 +10,14 @@ from fastapi import APIRouter, Depends
 from app.auth import current_user
 from app.contracts import StatsOut, WeekCount, WeekGap
 from app.db import KST, Repo, week_start
+from app.ratelimit import RATE_LIMITED, limited
 from app.deps import get_repo
 
 WEEKS = 5   # 이번 주를 포함한 최근 5주(앱의 WEEKS_SHOWN과 같다)
 router = APIRouter()
 
 
-@router.get("/v1/stats/me")
+@router.get("/v1/stats/me", dependencies=[Depends(limited("default"))], responses=RATE_LIMITED)
 async def stats_me(user: UUID = Depends(current_user), repo: Repo = Depends(get_repo)) -> StatsOut:
     first = week_start(datetime.now(timezone.utc)) - timedelta(weeks=WEEKS - 1)
     since = datetime.combine(first, time.min, tzinfo=KST)

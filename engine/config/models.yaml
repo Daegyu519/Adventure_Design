@@ -48,3 +48,7 @@ aggregate:
   max_disagreement: 0.35
   min_confidence: 0.4
   global_min_obs: 5     # 신호별 서로 다른 신고자 수
+
+limits:            # 사용자 1명이 1분에 보낼 수 있는 요청 수(/v1/*). 넘으면 429 rate_limited
+  hint: 90         # 입력 중 0.5초 디바운스 기준 여유
+  default: 20      # detail, feedback, mirror, stats

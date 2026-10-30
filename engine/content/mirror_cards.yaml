@@ -1,0 +1,44 @@
+# 거울 세션 상황 카드(ARCHITECTURE 3-5, T-35). 모든 문구는 지어낸 합성 문장이다(실제 대화 아님).
+# 문구는 엔진이 읽을 때 guard 검사를 거친다(tests/test_mirror.py가 파일을 검사한다). 다른 메신저 이름은 쓰지 않는다.
+# personas: 지어낸 인물. 보낸 문장 카드의 인물은 방 관계가 같은 첫 인물이다.
+# inner_voice: 가장 많이 읽힌 뜻 → 받았을 때 속마음 한 줄. 문장에 대한 느낌만 쓴다(사람 평가 금지).
+# cards: topic별 5장. sample_reply는 보낸 문장이 모자랄 때 되돌려 받기·예측 문장으로 쓴다(서로 겹치지 않게).
+
+personas:
+  - {name: 민지, relation: 팀원}
+  - {name: 준호, relation: 팀원}
+  - {name: 서연, relation: 선후배}
+  - {name: 태오, relation: 선후배}
+
+inner_voice:
+  차갑게: "받는 쪽에선 '말이 좀 딱딱하네' 싶을 수도 있어요"
+  성의없게: "받는 쪽에선 '짧게 넘기는 말이네' 싶을 수도 있어요"
+  화나게: "받는 쪽에선 '말끝이 날카롭네' 싶을 수도 있어요"
+  무난하게: "받는 쪽에선 '알겠다' 하고 편하게 넘길 수도 있어요"
+  따뜻하게: "받는 쪽에선 '신경 써 준 말이네' 싶어 마음이 놓일 수도 있어요"
+
+cards:
+  # 일정 조율
+  - {id: sched-01, topic: 일정 조율, persona: 민지, relation: 팀원, situation: "조별 회의 시간을 정해야 한다", message: "이번 주 회의 목요일 저녁 7시 괜찮으세요?", sample_reply: "그때는 안 돼요."}
+  - {id: sched-02, topic: 일정 조율, persona: 준호, relation: 팀원, situation: "중간 점검 회의 날짜가 다른 일정과 겹쳤다", message: "수요일 회의를 금요일로 옮겨도 될까요?", sample_reply: "네."}
+  - {id: sched-03, topic: 일정 조율, persona: 서연, relation: 선후배, situation: "선배와 발표 연습 시간을 맞춰야 한다", message: "내일 점심 먹고 발표 연습 한 번 할까?", sample_reply: "저 내일 수업이에요."}
+  - {id: sched-04, topic: 일정 조율, persona: 태오, relation: 선후배, situation: "후배가 자료 설명을 듣고 싶어 한다", message: "선배, 이번 주에 자료 설명 잠깐 들을 수 있을까요?", sample_reply: "이번 주는 좀."}
+  - {id: sched-05, topic: 일정 조율, persona: 민지, relation: 팀원, situation: "오늘 회의가 갑자기 취소됐다", message: "오늘 회의 취소됐는데 내일 오전은 어때요?", sample_reply: "오전은 어려워요."}
+  # 역할 요청
+  - {id: role-01, topic: 역할 요청, persona: 준호, relation: 팀원, situation: "발표 맡을 사람을 아직 정하지 못했다", message: "발표는 누가 할까요? 혹시 맡아 주실 수 있어요?", sample_reply: "저는 발표 말고 자료할게요."}
+  - {id: role-02, topic: 역할 요청, persona: 민지, relation: 팀원, situation: "보고서를 마지막으로 정리할 사람이 필요하다", message: "보고서 마지막 정리 맡아 주실 수 있을까요?", sample_reply: "제가 왜요?"}
+  - {id: role-03, topic: 역할 요청, persona: 서연, relation: 선후배, situation: "선배가 설문 응답 정리를 부탁한다", message: "설문 응답 정리 좀 맡아 줄 수 있어?", sample_reply: "알겠어요."}
+  - {id: role-04, topic: 역할 요청, persona: 태오, relation: 선후배, situation: "후배가 자기가 맡을 부분을 물어본다", message: "선배, 저는 어떤 부분 하면 될까요?", sample_reply: "아무거나 해."}
+  - {id: role-05, topic: 역할 요청, persona: 준호, relation: 팀원, situation: "자료 조사 두 꼭지를 나눠야 한다", message: "자료 조사 두 꼭지 중에 하나 가져가실래요?", sample_reply: "둘 다 제가 할게요!"}
+  # 거절
+  - {id: refuse-01, topic: 거절, persona: 민지, relation: 팀원, situation: "이번 주에 다른 과제 마감이 겹쳤다", message: "이번 주에 슬라이드 디자인까지 같이 해 주실 수 있어요?", sample_reply: "이번 주는 못 해요."}
+  - {id: refuse-02, topic: 거절, persona: 서연, relation: 선후배, situation: "토요일에 이미 다른 약속이 있다", message: "토요일에 모여서 같이 작업하자!", sample_reply: "토요일은 안 돼요. 일요일 저녁은 괜찮아요."}
+  - {id: refuse-03, topic: 거절, persona: 준호, relation: 팀원, situation: "내가 맡은 부분이 이미 많다", message: "제 파트 자료 조사도 조금 도와주실 수 있나요?", sample_reply: "그건 좀 어렵겠는데요."}
+  - {id: refuse-04, topic: 거절, persona: 태오, relation: 선후배, situation: "후배가 발표 대본 검토를 부탁한다", message: "선배, 제 대본 한 번만 봐 주실 수 있을까요?", sample_reply: "지금은 시간이 없어."}
+  - {id: refuse-05, topic: 거절, persona: 민지, relation: 팀원, situation: "회의를 하루 더 하자는 제안이 왔다", message: "내일 한 번 더 모이는 건 어때요?", sample_reply: "굳이요?"}
+  # 마감 독촉
+  - {id: due-01, topic: 마감 독촉, persona: 민지, relation: 팀원, situation: "발표 자료 마감이 내일이다", message: "혹시 맡은 슬라이드 오늘 밤까지 될까요?", sample_reply: "아직이요."}
+  - {id: due-02, topic: 마감 독촉, persona: 준호, relation: 팀원, situation: "공유 문서에 내 파트가 아직 비어 있다", message: "공유 문서에 맡은 부분 언제쯤 올라와요?", sample_reply: "곧 올릴게요."}
+  - {id: due-03, topic: 마감 독촉, persona: 서연, relation: 선후배, situation: "선배가 제출 전날 진행 상황을 묻는다", message: "내일 제출인데 어디까지 했어?", sample_reply: "하고 있어요."}
+  - {id: due-04, topic: 마감 독촉, persona: 태오, relation: 선후배, situation: "후배가 내 초안 검토를 기다리고 있다", message: "선배, 어제 보낸 초안 확인해 주셨어요?", sample_reply: "봤어."}
+  - {id: due-05, topic: 마감 독촉, persona: 민지, relation: 팀원, situation: "최종본 마감이 두 시간 남았다", message: "마감 두 시간 남았어요! 최종본 올려 주실 수 있나요?", sample_reply: "ㅇㅇ"}

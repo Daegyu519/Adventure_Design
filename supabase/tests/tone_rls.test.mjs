@@ -139,9 +139,10 @@ test('tone_events: own insert only, member room only', async () => {
 
 test('mirror_attempts: own rows only for select; authenticated insert denied; service insert OK; gap range enforced', async () => {
   const { db, a, b, c } = await abc()
+  let n = 0   // 카드 하나에 한 줄이라(unique) 넣을 때마다 다른 출처
   const ins = (uid, cols = '', vals = []) => as(db, 'service',
     `insert into public.mirror_attempts(user_id, kind, card_ref${cols ? ', ' + cols.split('|')[0] : ''})
-     values ($1, 'predict', 'card-1'${cols ? ', ' + cols.split('|')[1] : ''}) returning id`, [uid, ...vals])
+     values ($1, 'predict', 'card-${++n}'${cols ? ', ' + cols.split('|')[1] : ''}) returning id`, [uid, ...vals])
   assert.ok((await one(ins(a, 'answer_score, predicted, panel_bin, gap|$2, $3, $4, $5', [null, 2, 4, 2]))).id)
   await ins(b)
   await ins(a, 'gap|$2', [0])
@@ -168,6 +169,13 @@ test('mirror_attempts: own rows only for select; authenticated insert denied; se
   }
   await assert.rejects(as(db, 'service',
     "insert into public.mirror_attempts(user_id, kind, card_ref) values ($1, 'quiz', 'c')", [a]), /check constraint/)
+  // (사용자, 종류, 출처)마다 한 줄. 엔진은 on conflict do nothing으로 써서 첫 답만 남긴다
+  const once = "insert into public.mirror_attempts(user_id, kind, card_ref, gap) values ($1, 'receive', 'msg:1', $2)"
+  await as(db, 'service', once, [a, 1])
+  await assert.rejects(as(db, 'service', once, [a, 2]), /duplicate key/)
+  await as(db, 'service', once + ' on conflict (user_id, kind, card_ref) do nothing', [a, 3])
+  await as(db, 'service', once, [b, 4])   // 다른 사용자는 따로
+  assert.deepEqual((await as(db, a, "select gap from public.mirror_attempts where card_ref = 'msg:1'")).rows, [{ gap: 1 }])
 })
 
 test('push_tokens: own rows only, platform web accepted', async () => {

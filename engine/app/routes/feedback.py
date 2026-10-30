@@ -14,6 +14,7 @@ import pipeline
 from app.auth import current_user, ensure_member
 from app.contracts import FeedbackIn, FeedbackOut
 from app.db import Repo
+from app.ratelimit import RATE_LIMITED, limited
 from app.deps import get_feedback_queue, get_registry, get_repo
 from experts.registry import Registry
 from jobs import feedback as job
@@ -24,7 +25,7 @@ log = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.post("/v1/feedback", status_code=202)
+@router.post("/v1/feedback", status_code=202, dependencies=[Depends(limited("default"))], responses=RATE_LIMITED)
 async def feedback(body: FeedbackIn, user: UUID = Depends(current_user), repo: Repo = Depends(get_repo),
                    reg: Registry = Depends(get_registry), queue: JobQueue = Depends(get_feedback_queue)) -> FeedbackOut:
     await ensure_member(repo, body.room_id, user)   # 방을 읽기 전에(Repo는 접근 검사를 하지 않는다)
