@@ -12,6 +12,9 @@ export function useRoomMessages(roomId: string, me: string) {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState(false);
+  const [olderError, setOlderError] = useState(false);
+  const hasMoreRef = useRef(false);
+  const catchUpRef = useRef<() => Promise<void>>(async () => {});
   const ref = useRef<Msg[]>([]);
   const loading = useRef(false);
   // 따라잡기의 기준은 "가져와서 확인한" 가장 큰 id다. Realtime으로 받은 id는 올리지 않는다:
@@ -32,25 +35,37 @@ export function useRoomMessages(roomId: string, me: string) {
     synced.current = null;
     setMessages([]);
     setHasMore(false);
+    hasMoreRef.current = false;
     setError(false);
+    setOlderError(false);
 
     // SUBSCRIBED가 될 때마다(첫 연결 포함) 호출: 아직 아무것도 없으면 첫 페이지, 있으면 가장 새 id 뒤의 빈 구간.
     const catchUp = async () => {
       const newest = synced.current;
       const q = c.from('messages').select('*').eq('room_id', roomId);
-      const { data, error: e } = newest === null ? await q.order('id', { ascending: false }).limit(PAGE_SIZE) : await q.gt('id', newest).order('id', { ascending: true });
+      let res;
+      try {
+        res = newest === null ? await q.order('id', { ascending: false }).limit(PAGE_SIZE) : await q.gt('id', newest).order('id', { ascending: true });
+      } catch {
+        res = { data: null, error: { message: 'throw' } }; // 연결이 끊겨 던진 것도 오류 응답처럼 다룬다
+      }
       if (!alive) return;
-      if (e) {
+      const { data, error: e } = res;
+      if (e || !data) {
         if (newest === null) setError(true);
         return;
       }
       setError(false);
-      if (newest === null) setHasMore(data.length === PAGE_SIZE);
+      if (newest === null) {
+        hasMoreRef.current = data.length === PAGE_SIZE;
+        setHasMore(hasMoreRef.current);
+      }
       if (data.length) synced.current = Math.max(newest ?? 0, ...data.map((x) => x.id));
       else if (newest === null) synced.current = 0; // 빈 방: 이후 따라잡기는 id > 0
       add(data);
     };
 
+    catchUpRef.current = catchUp;
     const channel = c
       .channel(`room:${roomId}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `room_id=eq.${roomId}` }, (p) => alive && add([p.new as Msg]))
@@ -64,18 +79,29 @@ export function useRoomMessages(roomId: string, me: string) {
     };
   }, [roomId, add]);
 
+  // 실패해도 던지지 않는다: olderError로 알리고, 호출한 쪽(다시 불러오기 줄)이 다시 부른다.
   const loadOlder = useCallback(async () => {
-    if (!supabase || loading.current || ref.current.length === 0) return;
+    if (!supabase || loading.current || !hasMoreRef.current || ref.current.length === 0) return;
     loading.current = true;
     try {
       const { data, error: e } = await supabase.from('messages').select('*').eq('room_id', roomId).lt('id', ref.current[0].id).order('id', { ascending: false }).limit(PAGE_SIZE);
-      if (e) return;
-      setHasMore(data.length === PAGE_SIZE);
+      if (e || !data) {
+        setOlderError(true);
+        return;
+      }
+      setOlderError(false);
+      hasMoreRef.current = data.length === PAGE_SIZE;
+      setHasMore(hasMoreRef.current);
       add(data);
+    } catch {
+      setOlderError(true);
     } finally {
       loading.current = false;
     }
   }, [roomId, add]);
+
+  // 첫 페이지·따라잡기를 다시 한 번(오류 줄의 다시 불러오기).
+  const reload = useCallback(() => catchUpRef.current(), []);
 
   // 엔진을 부르지 않는다(규칙 11). 실패하면 status를 단 Error를 던진다 — 호출한 쪽이 문구를 고른다.
   const send = useCallback(
@@ -89,5 +115,5 @@ export function useRoomMessages(roomId: string, me: string) {
     [roomId, me, add],
   );
 
-  return { messages, hasMore, error, loadOlder, send };
+  return { messages, hasMore, error, olderError, reload, loadOlder, send };
 }

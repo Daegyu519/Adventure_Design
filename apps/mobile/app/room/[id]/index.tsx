@@ -8,6 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppText } from '../../../components/AppText';
 import { Bubble } from '../../../components/Bubble';
 import { Composer } from '../../../components/Composer';
+import { Button } from '../../../components/Button';
 import { IconButton } from '../../../components/IconButton';
 import { dbErrorMessage, isUnreachable, NETWORK_MESSAGE } from '../../../lib/dbErrors';
 import { shouldMarkRead } from '../../../lib/messages';
@@ -17,6 +18,9 @@ import { useSession } from '../../../lib/session';
 import { supabase } from '../../../lib/supabase';
 import { useTheme } from '../../../lib/theme';
 import type { Tables } from '../../../lib/types/db';
+
+// 방 정보를 못 받았을 때 줄 문구: 코드가 있는 DB 오류는 고정 문구, 그 밖(연결 끊김 등)은 연결 문구. 서버 글은 내지 않는다.
+const loadMessage = (e: unknown) => ((e as { code?: string })?.code ? dbErrorMessage(e as { message: string }, '대화방을 불러오지 못했어요. 다시 시도해 주세요.') : NETWORK_MESSAGE);
 
 // 화면 읽기 프로그램에만 보이는 한 줄(웹·네이티브 공통으로 화면 밖).
 const SR_ONLY = { position: 'absolute', width: 1, height: 1, overflow: 'hidden', opacity: 0 } as const;
@@ -42,9 +46,15 @@ function RoomBody({ id, me }: { id: string; me: string }) {
   const { colors, space } = useTheme();
   const router = useRouter();
   const focused = useIsFocused();
-  const { messages, hasMore, error, loadOlder, send } = useRoomMessages(id, me);
+  const { messages, hasMore, error, olderError, reload, loadOlder, send } = useRoomMessages(id, me);
   const [info, setInfo] = useState<{ room: Tables<'rooms'>; members: Member[] } | null>(null);
-  const [infoFailed, setInfoFailed] = useState(false);
+  const [infoError, setInfoError] = useState<string | null>(null);
+  const [infoTick, setInfoTick] = useState(0);
+  const [markTick, setMarkTick] = useState(0);
+  const markAttempts = useRef(0);
+  const markTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sending = useRef(false);
+  const failedRef = useRef(false);
   const [draft, setDraft] = useState('');
   const [sendError, setSendError] = useState<string | null>(null);
   const [appActive, setAppActive] = useState(isActive(AppState.currentState));
@@ -57,14 +67,28 @@ function RoomBody({ id, me }: { id: string; me: string }) {
     fetchRoom(id)
       .then((r) => {
         if (!alive) return;
-        lastRead.current = r.members.find((m) => m.user_id === me)?.last_read_at ?? null;
+        lastRead.current ??= r.members.find((m) => m.user_id === me)?.last_read_at ?? null; // 이미 표시한 값이 있으면 덮어쓰지 않는다
         setInfo(r);
+        setInfoError(null);
       })
-      .catch(() => alive && setInfoFailed(true));
+      .catch((e) => alive && setInfoError(loadMessage(e)));
     return () => {
       alive = false;
     };
-  }, [id, me]);
+  }, [id, me, infoTick]);
+
+  // 불러오기 실패 줄의 다시 불러오기, 그리고 앞으로 돌아오거나 포커스를 얻을 때 자동 다시 시도.
+  const retry = useCallback(() => {
+    setInfoTick((t) => t + 1);
+    void reload();
+  }, [reload]);
+  useEffect(() => {
+    failedRef.current = infoError !== null || error;
+  }, [infoError, error]);
+  useEffect(() => {
+    if (failedRef.current && focused && appActive) retry();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 실패 상태가 바뀔 때가 아니라 focused/appActive가 바뀔 때만
+  }, [focused, appActive]);
 
   useEffect(() => {
     const sub = AppState.addEventListener('change', (s) => setAppActive(isActive(s)));
@@ -77,14 +101,29 @@ function RoomBody({ id, me }: { id: string; me: string }) {
 
   // 읽음: 앞에 보이고 포커스가 있을 때만, 방에서 가장 새 메시지의 서버 시각으로(앞으로만).
   const newest = messages.length ? messages[messages.length - 1].created_at : null;
+  // 방 정보(info)와 무관하다: 방 정보를 못 받아도 읽음은 표시한다. 실패하면 3초 간격으로 최대 3번 다시 시도하고, 포커스·앞뒤 전환 때도 다시 시도한다.
   useEffect(() => {
-    if (!info || !shouldMarkRead({ appActive, focused, newest, lastRead: lastRead.current })) return;
+    if (!shouldMarkRead({ appActive, focused, newest, lastRead: lastRead.current })) return;
     const at = newest!;
-    lastRead.current = at; // 같은 값으로 중복 요청하지 않는다. 실패하면 되돌려 다음 변화에 다시 시도한다.
-    markRead(id, me, at).catch(() => {
-      if (lastRead.current === at) lastRead.current = null;
-    });
-  }, [info, appActive, focused, newest, id, me]);
+    lastRead.current = at; // 같은 값으로 중복 요청하지 않는다. 실패하면 되돌려 다시 시도한다.
+    markRead(id, me, at)
+      .then(() => {
+        markAttempts.current = 0;
+      })
+      .catch(() => {
+        if (lastRead.current === at) lastRead.current = null;
+        if (markAttempts.current < 3) {
+          markAttempts.current += 1;
+          markTimer.current = setTimeout(() => setMarkTick((t) => t + 1), 3000);
+        }
+      });
+  }, [appActive, focused, newest, id, me, markTick]);
+  useEffect(
+    () => () => {
+      if (markTimer.current) clearTimeout(markTimer.current);
+    },
+    [],
+  );
 
   // 새 메시지 알림은 말풍선마다 읽지 않고 상대가 보낸 가장 새 것 한 줄만 정중하게(polite) 알린다.
   useEffect(() => {
@@ -98,7 +137,8 @@ function RoomBody({ id, me }: { id: string; me: string }) {
 
   const onSend = useCallback(async () => {
     const text = draft.trim();
-    if (!text) return;
+    if (!text || sending.current) return; // 보내는 중에는 다시 보내지 않는다(되돌린 글이 이중 전송되지 않게)
+    sending.current = true;
     setSendError(null);
     setDraft(''); // 먼저 비운다. 실패하면 되돌린다.
     try {
@@ -107,6 +147,8 @@ function RoomBody({ id, me }: { id: string; me: string }) {
       const err = e as SendError;
       setDraft((cur) => (cur ? `${text}\n${cur}` : text));
       setSendError(isUnreachable(err.status) || err.status === undefined ? NETWORK_MESSAGE : dbErrorMessage(err, '보내지 못했어요. 다시 보내 주세요.'));
+    } finally {
+      sending.current = false;
     }
   }, [draft, send]);
 
@@ -122,10 +164,13 @@ function RoomBody({ id, me }: { id: string; me: string }) {
         <IconButton icon={Info} label="방 정보" onPress={() => router.push(`/room/${id}/info` as Href)} />
       </View>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        {(error || infoFailed) && (
-          <AppText accessibilityRole="alert" variant="small" color="danger" style={{ padding: space[3] }}>
-            {NETWORK_MESSAGE}
-          </AppText>
+        {(error || infoError) && (
+          <View style={{ padding: space[3], gap: space[1], alignItems: 'flex-start' }}>
+            <AppText accessibilityRole="alert" variant="small" color="danger">
+              {infoError ?? NETWORK_MESSAGE}
+            </AppText>
+            <Button label="다시 불러오기" kind="secondary" onPress={retry} />
+          </View>
         )}
         <View accessibilityLiveRegion="polite" aria-live="polite" style={SR_ONLY}>
           <AppText>{announce}</AppText>
@@ -134,9 +179,19 @@ function RoomBody({ id, me }: { id: string; me: string }) {
           inverted
           data={data}
           keyExtractor={(m) => String(m.id)}
-          onEndReached={() => hasMore && void loadOlder()}
+          onEndReached={() => hasMore && !olderError && void loadOlder()}
           onEndReachedThreshold={0.5}
           keyboardShouldPersistTaps="handled"
+          ListFooterComponent={
+            olderError ? (
+              <View style={{ paddingVertical: space[2], gap: space[1], alignItems: 'center' }}>
+                <AppText accessibilityRole="alert" variant="small" color="danger">
+                  이전 메시지를 불러오지 못했어요
+                </AppText>
+                <Button label="이전 메시지 다시 불러오기" kind="secondary" onPress={() => void loadOlder()} />
+              </View>
+            ) : undefined
+          }
           contentContainerStyle={{ paddingHorizontal: space[3], paddingVertical: space[2] }}
           renderItem={({ item, index }) => {
             const older = data[index + 1]; // 화면에서 바로 위(더 오래된) 메시지
