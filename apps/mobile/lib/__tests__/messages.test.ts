@@ -40,3 +40,45 @@ test('formatStamp: same day → 오전/오후 시각, other day → M월 D일', 
   expect(formatStamp(new Date(2026, 9, 26, 15, 7).toISOString(), now)).toBe('10월 26일');
   expect(formatStamp('2026-10-27 ' + '06:00:00.5+00', new Date('2026-10-27T07:00:00Z')).length).toBeGreaterThan(0);
 });
+
+// ── T-09b ──
+import fs from 'fs';
+import path from 'path';
+import { nextReactionOp, REACTIONS, summarizeReactions, unreadCount } from '../messages';
+
+const A = 'a', B = 'b', C = 'c';
+test('unreadCount excludes sender, null last_read_at is unread', () =>
+  expect(unreadCount({ sender_id: A, created_at: '2026-10-27T01:32:17.000000+00:00' }, [{ user_id: A, last_read_at: null }, { user_id: B, last_read_at: null }, { user_id: C, last_read_at: null }])).toBe(2));
+test('unreadCount: last_read_at equal to created_at is read', () =>
+  expect(unreadCount({ sender_id: A, created_at: '2026-10-27T01:32:17.123456+00:00' }, [{ user_id: B, last_read_at: '2026-10-27 01:32:17.123456+00' }])).toBe(0));
+test('unreadCount: a message 1µs after last_read_at is unread', () =>
+  expect(unreadCount({ sender_id: A, created_at: '2026-10-27T01:32:17.123457+00:00' }, [{ user_id: B, last_read_at: '2026-10-27T01:32:17.123456+00:00' }])).toBe(1));
+test('summarizeReactions groups in REACTIONS order and marks mine', () => {
+  const rows = [
+    { message_id: 1, user_id: A, emoji: '❤️' },
+    { message_id: 1, user_id: B, emoji: '👍' },
+    { message_id: 1, user_id: C, emoji: '❤️' },
+    { message_id: 2, user_id: A, emoji: '😂' },
+  ];
+  expect(summarizeReactions(rows, 1, A)).toEqual([
+    { emoji: '👍', count: 1, mine: false },
+    { emoji: '❤️', count: 2, mine: true },
+  ]);
+  expect(summarizeReactions(rows, 3, A)).toEqual([]);
+});
+test('nextReactionOp: insert when none, update when changing, delete when tapping the same', () => {
+  expect(nextReactionOp(null, '😂')).toEqual({ op: 'insert', emoji: '😂' });
+  expect(nextReactionOp('👍', '❤️')).toEqual({ op: 'update', emoji: '❤️' });
+  expect(nextReactionOp('👍', '👍')).toEqual({ op: 'delete' });
+  for (const a of [null, ...REACTIONS]) for (const b of REACTIONS) expect(nextReactionOp(a, b).op).not.toBe('upsert');
+});
+const chatSql = () => fs.readFileSync(path.join(__dirname, '../../../../supabase/migrations/20261027000001_chat.sql'), 'utf8');
+test('reactions grant stays insert(message_id,user_id,emoji) + update(emoji) only', () => {
+  const grant = chatSql().split('\n').find((l) => /^grant .* on public\.reactions to authenticated/.test(l))!;
+  expect(grant).toMatch(/insert \(message_id, user_id, emoji\)/);
+  expect(grant).toMatch(/update \(emoji\)/);
+  expect(grant).not.toMatch(/update \([^)]*message_id/);
+});
+test('REACTIONS match the DB check constraint', () => {
+  for (const e of REACTIONS) expect(chatSql()).toContain(`'${e}'`);
+});
