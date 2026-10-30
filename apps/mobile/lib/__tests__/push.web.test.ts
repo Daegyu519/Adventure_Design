@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { disablePush, enablePush, pushEnabled } from '../push.web';
+import { disablePush, enablePush, pushDenied, pushEnabled } from '../push.web';
 
 let mockSupabase: unknown = null;
 jest.mock('../supabase', () => ({
@@ -11,7 +11,7 @@ jest.mock('../supabase', () => ({
 let mockIos = 'not-ios';
 jest.mock('../iosWeb', () => ({ currentIosWebState: () => mockIos }));
 
-const upsert = jest.fn();
+const rpc = jest.fn();
 const delEq2 = jest.fn();
 const del = jest.fn(() => ({ eq: () => ({ eq: delEq2 }) }));
 
@@ -41,14 +41,14 @@ beforeEach(async () => {
   process.env.EXPO_PUBLIC_VAPID_PUBLIC_KEY = KEY;
   mockIos = 'not-ios';
   perm = 'default';
-  upsert.mockReset().mockResolvedValue({ error: null });
+  rpc.mockReset().mockResolvedValue({ error: null });
   delEq2.mockReset().mockResolvedValue({ error: null });
   unsubscribe.mockReset().mockResolvedValue(true);
   subscribe.mockReset().mockResolvedValue(sub);
   getSubscription.mockReset().mockResolvedValue(null);
   register.mockReset().mockResolvedValue({});
   requestPermission.mockReset().mockImplementation(async () => (perm = 'granted'));
-  mockSupabase = { from: (t: string) => (t === 'push_tokens' ? { upsert, delete: del } : null) };
+  mockSupabase = { rpc, from: (t: string) => (t === 'push_tokens' ? { delete: del } : null) };
   setBrowser(true);
   await AsyncStorage.clear();
   jest.spyOn(console, 'warn').mockImplementation(() => {});
@@ -59,10 +59,11 @@ test('registers sw, subscribes with the VAPID key and upserts the web row', asyn
   await expect(enablePush('u1')).resolves.toBe('enabled');
   expect(register).toHaveBeenCalledWith('/sw.js');
   expect(subscribe).toHaveBeenCalledWith({ userVisibleOnly: true, applicationServerKey: new Uint8Array([1, 2, 3]) });
-  const row = upsert.mock.calls[0][0];
-  expect(row).toMatchObject({ user_id: 'u1', platform: 'web' });
-  expect(JSON.parse(row.token).endpoint).toBe('https://fcm.googleapis.com/x');
-  expect(upsert.mock.calls[0][1]).toEqual({ onConflict: 'user_id,token' });
+  const [fn, args] = rpc.mock.calls[0];
+  expect(fn).toBe('register_push_token');
+  expect(args.p_platform).toBe('web');
+  expect(JSON.parse(args.p_token).endpoint).toBe('https://fcm.googleapis.com/x');
+  getSubscription.mockResolvedValue(sub);
   await expect(pushEnabled()).resolves.toBe(true);
 });
 
@@ -92,7 +93,7 @@ test('permission not granted → denied (no subscription)', async () => {
 });
 
 test('subscribe/upsert failures → error, nothing remembered', async () => {
-  upsert.mockResolvedValue({ error: { message: 'x' } });
+  rpc.mockResolvedValue({ error: { message: 'x' } });
   await expect(enablePush('u1')).resolves.toBe('error');
   subscribe.mockRejectedValue(new Error('push service'));
   await expect(enablePush('u1')).resolves.toBe('error');
@@ -114,4 +115,40 @@ test('disablePush still unsubscribes when the row delete fails (then throws)', a
   delEq2.mockResolvedValue({ error: { message: 'net' } });
   await expect(disablePush('u1')).rejects.toBeDefined();
   expect(unsubscribe).toHaveBeenCalled();
+});
+
+test('pushEnabled mirrors the browser: stored AND permission granted AND a live subscription', async () => {
+  getSubscription.mockResolvedValue(sub);
+  await enablePush('u1');
+  await expect(pushEnabled()).resolves.toBe(true);
+  perm = 'denied'; // 사용자가 브라우저에서 막음
+  await expect(pushEnabled()).resolves.toBe(false);
+  perm = 'granted';
+  getSubscription.mockResolvedValue(null); // 브라우저가 구독을 버림
+  await expect(pushEnabled()).resolves.toBe(false);
+});
+
+test('pushDenied is true only when the browser permission is denied', async () => {
+  perm = 'denied';
+  await expect(pushDenied()).resolves.toBe(true);
+  perm = 'default';
+  await expect(pushDenied()).resolves.toBe(false);
+  setBrowser(false);
+  await expect(pushDenied()).resolves.toBe(false);
+});
+
+test('a service worker that never becomes ready ends in error after the timeout (no hang)', async () => {
+  jest.useFakeTimers();
+  (globalThis as unknown as { navigator: { serviceWorker: { ready: Promise<never> } } }).navigator.serviceWorker.ready = new Promise(() => {});
+  const p = enablePush('u1');
+  await jest.advanceTimersByTimeAsync(10_000);
+  await expect(p).resolves.toBe('error');
+  jest.useRealTimers();
+});
+
+test('token rotation on web: a different stored subscription row is released first', async () => {
+  await AsyncStorage.setItem('push.token.v1', '{"endpoint":"https://fcm.googleapis.com/old"}');
+  await enablePush('u1');
+  expect(delEq2).toHaveBeenCalledTimes(1);
+  expect(rpc).toHaveBeenCalled();
 });

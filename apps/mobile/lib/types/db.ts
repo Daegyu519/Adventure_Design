@@ -395,6 +395,10 @@ export type Database = {
         Returns: string
       }
       is_member: { Args: { room: string }; Returns: boolean }
+      register_push_token: {
+        Args: { p_platform: string; p_token: string }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never

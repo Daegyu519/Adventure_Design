@@ -4,20 +4,41 @@ import { urlBase64ToUint8Array } from './vapid';
 
 export type { PushResult };
 
-export const pushEnabled = async (): Promise<boolean> => (await storedToken()) !== null;
+const hasPushApi = () =>
+  typeof navigator !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in globalThis && typeof Notification !== 'undefined';
+
+// 서비스 워커가 준비되지 않으면 영원히 기다리지 않는다.
+const READY_MS = 10_000;
+function swReady(): Promise<ServiceWorkerRegistration> {
+  return Promise.race([
+    navigator.serviceWorker.ready,
+    new Promise<never>((_, rej) => setTimeout(() => rej(new Error('sw timeout')), READY_MS)),
+  ]);
+}
+
+// 스위치는 브라우저 상태를 따른다: 기억한 토큰 + 허용됨 + 살아 있는 구독이 모두 있어야 켜짐.
+export async function pushEnabled(): Promise<boolean> {
+  if (!(await storedToken()) || !hasPushApi() || Notification.permission !== 'granted') return false;
+  try {
+    return (await (await swReady()).pushManager.getSubscription()) !== null;
+  } catch {
+    return false;
+  }
+}
+
+export const pushDenied = async (): Promise<boolean> => hasPushApi() && Notification.permission === 'denied';
 
 // 권한 요청은 반드시 사용자가 누른 안에서 불러야 한다(브라우저·iOS가 막는다). 앱 시작 때는 부르지 않는다.
 export async function enablePush(userId: string): Promise<PushResult> {
   const key = process.env.EXPO_PUBLIC_VAPID_PUBLIC_KEY;
-  const hasApi = typeof navigator !== 'undefined' && 'serviceWorker' in navigator && 'PushManager' in globalThis && typeof Notification !== 'undefined';
-  if (!key || !hasApi) {
+  if (!key || !hasPushApi()) {
     if (__DEV__ && !key) console.warn('[push] EXPO_PUBLIC_VAPID_PUBLIC_KEY가 비어 있어 웹 푸시를 켜지 않습니다.');
     return currentIosWebState() === 'needs-install' ? 'needs-install' : 'unsupported';
   }
   try {
     if ((await Notification.requestPermission()) !== 'granted') return 'denied';
     await navigator.serviceWorker.register('/sw.js');
-    const reg = await navigator.serviceWorker.ready;
+    const reg = await swReady();
     const sub =
       (await reg.pushManager.getSubscription()) ??
       (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(key) as BufferSource }));
@@ -34,7 +55,7 @@ export async function disablePush(userId: string): Promise<void> {
     await releaseToken(userId);
   } finally {
     try {
-      const reg = typeof navigator !== 'undefined' && 'serviceWorker' in navigator ? await navigator.serviceWorker.ready : null;
+      const reg = typeof navigator !== 'undefined' && 'serviceWorker' in navigator ? await swReady() : null;
       await (await reg?.pushManager.getSubscription())?.unsubscribe();
     } catch {
       // 구독을 못 끊어도 계속한다.

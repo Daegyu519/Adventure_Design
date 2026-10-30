@@ -9,13 +9,20 @@ export type PushResult = 'enabled' | 'denied' | 'unsupported' | 'needs-install' 
 export const storedToken = () => AsyncStorage.getItem(TOKEN_KEY);
 export const forgetToken = () => AsyncStorage.removeItem(TOKEN_KEY);
 
-// 행을 먼저 올리고 성공했을 때만 기억한다. 실패하면 던진다(호출한 쪽이 'error'로 바꾼다).
+async function dropRow(userId: string, token: string): Promise<void> {
+  if (!supabase) throw new Error('no supabase');
+  const { error } = await supabase.from('push_tokens').delete().eq('user_id', userId).eq('token', token);
+  if (error) throw new Error('push_tokens delete failed');
+}
+
+// 서버 RPC가 같은 토큰을 가진 다른 사용자의 행을 정리하고 내 행을 만든다(공유 기기에서 이전 사용자의 알림이 새지 않게).
+// 토큰이 바뀐 경우(로테이션) 이전에 기억한 토큰의 내 행은 먼저 지운다(실패해도 계속). 성공했을 때만 기억한다.
 export async function saveToken(userId: string, token: string, platform: 'android' | 'web'): Promise<void> {
   if (!supabase) throw new Error('no supabase');
-  const { error } = await supabase
-    .from('push_tokens')
-    .upsert({ user_id: userId, token, platform, updated_at: new Date().toISOString() }, { onConflict: 'user_id,token' });
-  if (error) throw new Error('push_tokens upsert failed');
+  const prev = await storedToken();
+  if (prev && prev !== token) await dropRow(userId, prev).catch(() => {});
+  const { error } = await supabase.rpc('register_push_token', { p_token: token, p_platform: platform });
+  if (error) throw new Error('register_push_token failed');
   await AsyncStorage.setItem(TOKEN_KEY, token);
 }
 
@@ -23,8 +30,6 @@ export async function saveToken(userId: string, token: string, platform: 'androi
 export async function releaseToken(userId: string): Promise<void> {
   const token = await storedToken();
   if (!token) return;
-  if (!supabase) throw new Error('no supabase');
-  const { error } = await supabase.from('push_tokens').delete().eq('user_id', userId).eq('token', token);
-  if (error) throw new Error('push_tokens delete failed');
+  await dropRow(userId, token);
   await forgetToken();
 }

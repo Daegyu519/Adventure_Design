@@ -16,6 +16,16 @@ Notifications.setNotificationHandler({
 
 export const pushEnabled = async (): Promise<boolean> => (await storedToken()) !== null;
 
+// 안드로이드 알림 권한이 막혀 있는지(요청은 하지 않는다). 설정에서 방법을 계속 보여 주려고 쓴다.
+export async function pushDenied(): Promise<boolean> {
+  if (Platform.OS !== 'android') return false;
+  try {
+    return (await Notifications.getPermissionsAsync()).status === 'denied';
+  } catch {
+    return false;
+  }
+}
+
 // 아이폰은 웹 푸시로 쓰므로 네이티브 iOS는 지원하지 않는다. projectId·FCM이 아직 없으면 조용히 'unsupported'(개발 중에만 경고).
 export async function enablePush(userId: string): Promise<PushResult> {
   if (Platform.OS !== 'android' || !Device.isDevice) return 'unsupported';

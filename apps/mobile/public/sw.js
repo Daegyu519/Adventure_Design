@@ -11,6 +11,7 @@ self.addEventListener('push', (event) => {
       body: d.body || '',
       data: { url: typeof d.url === 'string' ? d.url : '/' },
       icon: '/icon.png',
+      lang: 'ko',
     }),
   );
 });
@@ -18,8 +19,8 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const raw = (event.notification.data && event.notification.data.url) || '/';
-  // 같은 출처 경로만 연다.
-  const url = typeof raw === 'string' && raw.startsWith('/') && !raw.startsWith('//') ? raw : '/';
+  // 대화방 경로(앱의 tapUrl과 같은 허용 목록)만 연다. 그 밖(`/\evil.com`, `//x`, 절대 주소)은 홈으로.
+  const url = typeof raw === 'string' && /^\/room\/[A-Za-z0-9-]+$/.test(raw) ? raw : '/';
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((wins) => {
       const w = wins[0];
