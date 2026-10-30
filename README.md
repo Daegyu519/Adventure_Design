@@ -1,10 +1,16 @@
-# tone-chat
+# Adventure_Design — tone-chat
+
+CNU 어드벤처디자인 수업 저장소다. 이 저장소의 프로젝트는 아래 tone-chat이다.
+
+처음 보는 사람이나 AI 에이전트는 [`AGENTS.md`](AGENTS.md)부터 읽는다(흐름·현재 상태·결정·구조도).
+
+## tone-chat
 
 1:1·그룹 채팅 앱(Expo)과, 보내려는 문장이 차갑게 읽힐 수 있으면 보내기 전에 나에게만 조용히 알려 주는 AI 엔진(FastAPI)이다. 수업 프로젝트다.
 
 설계는 `ARCHITECTURE.md`, 규칙은 `CLAUDE.md`, 작업 목록은 `docs/tasks.md`에 있다.
 
-## 폴더
+### 폴더
 
 | 경로 | 내용 |
 |---|---|
@@ -17,13 +23,13 @@
 | `scripts` | `claim`, `land`, `check` |
 | `prototype/tone-harness` | 참고용 기존 프로토타입 (수정하지 않음) |
 
-## 실행
+### 실행
 
 명령은 `CLAUDE.md`의 "명령" 표를 본다. 환경 변수 이름은 `.env.example`(엔진·협업)과 `apps/mobile/.env.example`(앱)에 있고, 값은 각각 `.env`·`apps/mobile/.env`(git에 넣지 않음)에 직접 넣는다.
 
 엔진은 Supabase JWKS로 토큰을 검증한다. JWKS가 비어 있으면(예전 HS256 프로젝트) 대시보드 Settings → JWT Keys에서 비대칭 키로 바꾼다.
 
-## dev 웹훅 연결
+### dev 웹훅 연결
 
 DB 웹훅은 SQL 마이그레이션이 아니라 Supabase 대시보드에서 만든다. 엔진은 받는 쪽(`POST /hooks/message`)만 갖고 있다.
 
@@ -32,7 +38,7 @@ DB 웹훅은 SQL 마이그레이션이 아니라 Supabase 대시보드에서 만
 3. Supabase 대시보드 Database → Webhooks에서 만든다: 표 `public.messages`, 이벤트 Insert, HTTP POST `<터널 URL>/hooks/message`, 헤더 `X-Hook-Secret: <HOOK_SECRET>`.
 4. 터널 URL은 실행할 때마다 바뀌므로 웹훅 URL도 고친다.
 
-## 푸시 키 (엔진)
+### 푸시 키 (엔진)
 
 웹 푸시는 VAPID 키 한 쌍이 필요하다. 한 번만 만든다.
 
@@ -42,6 +48,6 @@ DB 웹훅은 SQL 마이그레이션이 아니라 Supabase 대시보드에서 만
 
 엔진은 공개키를 읽지 않는다(`VAPID_PUBLIC_KEY`는 없다). 키는 git에 넣지 않는다. `VAPID_PRIVATE_KEY`나 `VAPID_SUBJECT`가 비어 있으면 웹 푸시는 건너뛴다. Expo Push 보안을 켠 경우에만 `EXPO_ACCESS_TOKEN`을 넣는다.
 
-## 협업
+### 협업
 
 두 Claude 계정이 같은 맥에서 나눠 작업한다. 작업 잡기와 합치기는 `docs/COLLAB.md`를 따른다.
