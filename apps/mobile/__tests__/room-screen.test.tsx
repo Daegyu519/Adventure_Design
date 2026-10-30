@@ -12,7 +12,8 @@ jest.mock('lucide-react-native/icons/x', () => () => null);
 jest.mock('react-native-safe-area-context', () => ({ SafeAreaView: ({ children }: { children: unknown }) => children }));
 const mockRouter = { push: jest.fn(), back: jest.fn(), replace: jest.fn(), canGoBack: () => true };
 let mockFocused = true;
-jest.mock('expo-router', () => ({ useRouter: () => mockRouter, useLocalSearchParams: () => ({ id: 'r1' }), useIsFocused: () => mockFocused }));
+let mockParams: Record<string, string> = { id: 'r1' };
+jest.mock('expo-router', () => ({ useRouter: () => mockRouter, useLocalSearchParams: () => mockParams, useIsFocused: () => mockFocused }));
 jest.mock('../lib/session', () => ({ useSession: () => ({ userId: 'me' }) }));
 const mockFrom = jest.fn();
 jest.mock('../lib/supabase', () => ({ supabase: { from: (...a: unknown[]) => mockFrom(...a) } }));
@@ -67,6 +68,7 @@ async function setup() {
 beforeEach(() => {
   mockMessages = [m(1, 'u2', '안녕'), m(2, 'me', '반가워')];
   mockFocused = true;
+  mockParams = { id: 'r1' };
   mockSend.mockReset();
   mockLoadOlder.mockReset();
   mockReload.mockReset();
@@ -572,4 +574,17 @@ test('답장 중이면 입력창 이름에 대상이 들어가고, 취소하면 
   expect(input().props.accessibilityLabel).toBe('메시지 입력');
   const live = textOf(root.container.queryAll((n) => n.props.accessibilityLiveRegion === 'polite')[0] as unknown as TestNode);
   expect(live).toContain('답장 취소됨');
+});
+
+test('검색에서 온 ?at=: 그 메시지로 이동하고 알린다', async () => {
+  mockParams = { id: 'r1', at: '1', k: '1' };
+  const { texts } = await setup();
+  expect(texts()).toContain('원문으로 이동했어요');
+});
+
+test('?at= 메시지가 불러온 범위 밖이면 더 불러온다', async () => {
+  mockParams = { id: 'r1', at: '99', k: '1' };
+  mockHasMore = true;
+  await setup();
+  expect(mockLoadOlder).toHaveBeenCalled();
 });
