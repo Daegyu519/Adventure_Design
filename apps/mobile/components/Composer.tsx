@@ -44,15 +44,20 @@ export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, 
     }
   }, [replyId, ref]);
   const [active, setActive] = useState(0);
+  const [lastCount, setLastCount] = useState(0);
   const [dismissed, setDismissed] = useState<string | null>(null); // Esc로 닫은 시점의 글. 글이 바뀌면 다시 열린다
   const shown = (mentionCandidates ?? []).slice(0, MAX_SHOWN);
   const picking = shown.length > 0 && dismissed !== value && !!onSelectMention;
   const safeActive = Math.min(active, Math.max(shown.length - 1, 0));
   const count = picking ? shown.length : 0;
+  // 렌더 중 상태 조정(effect 아님): 글이 바뀌면 Esc로 닫은 것을 풀고, 후보 수가 바뀌면 활성 후보를 처음으로.
+  if (dismissed !== null && dismissed !== value) setDismissed(null);
+  if (count !== lastCount) {
+    setLastCount(count);
+    setActive(0);
+  }
   // 열릴 때와 후보 수가 바뀔 때만 한 번 알린다(글자마다 읽지 않는다).
   const mentionSay = count ? `멘션 후보 ${count}명, 위아래 화살표로 고르세요` : '';
-  useEffect(() => setActive(0), [count]);
-  useEffect(() => setDismissed((d) => (d !== null && d !== value ? null : d)), [value]); // 글이 바뀌면 Esc로 닫은 것을 푼다
   useEffect(() => {
     // iOS VoiceOver는 accessibilityLiveRegion을 읽지 않는다. 새 문구가 생길 때만 직접 읽힌다.
     if (Platform.OS === 'ios' && typingLabel) AccessibilityInfo.announceForAccessibility(typingLabel);
