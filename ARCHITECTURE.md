@@ -222,7 +222,7 @@ sequenceDiagram
 - `reply_to`는 답장 대상 메시지 id다. 엔진은 같은 방 메시지인지 확인하고(없거나 다른 방이면 422 `reply_to not in room`), 그 문장은 DB에서 읽는다. 앱이 보낸 문장은 믿지 않는다. 이 메시지를 맥락 맨 앞에 넣는다.
 - 읽힘 키는 `차갑게, 성의없게, 화나게, 무난하게, 따뜻하게` 다섯 개로 고정.
 - `intent`는 의도 칩 `단호하게, 미안하게, 가볍게` 중 하나다. 고쳐 쓰기에만 들어간다(3-3).
-- 요청·응답 모델은 `engine/app/contracts.py`의 pydantic이 원본이다. 앱 타입은 OpenAPI에서 `openapi-typescript`로, DB 타입은 `supabase gen types typescript`로 생성한다. `npm run gen:engine:pull`(`engine/app/openapi_dump.py`)은 엔진 OpenAPI를 원본으로 쓰고, 엔진에 아직 없는 경로와 그 경로가 쓰는 스키마만 기존 파일(T-04b seed)에서 옮긴다. 이 표의 경로가 엔진에 다 생기면 옮기기를 지운다.
+- 요청·응답 모델은 `engine/app/contracts.py`의 pydantic이 원본이다. 앱 타입은 OpenAPI에서 `openapi-typescript`로, DB 타입은 `supabase gen types typescript`로 생성한다. `npm run gen:engine:pull`(`engine/app/openapi_dump.py`)은 엔진 OpenAPI를 그대로 앱 타입의 원본으로 쓴다(seed에서 옮기던 단계는 E9에서 없앴다).
 
 ---
 

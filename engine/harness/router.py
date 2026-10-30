@@ -113,7 +113,8 @@ class Router:
             return cached.model_copy(deep=True), entry
 
         errors = []
-        for entry in self.chains[expert_id]:
+        chain = self.chains[expert_id]
+        for i, entry in enumerate(chain):
             provider_name, model = entry.split(":", 1)
             if (provider_name == "mock") != self.force_mock:   # mock은 force_mock(테스트·평가)에서만, 그때는 mock만. 실제 모델이 다 막히면 폴백 없이 NoResult(기권)
                 continue
@@ -127,7 +128,10 @@ class Router:
                 errors.append(f"{entry}: 한도 대기")
                 continue
             remaining = deadline - time.monotonic()
-            if remaining <= 0.05:
+            if remaining <= 0.05:   # 시간이 다 됐다: 아직 못 불러 본 실제 항목도 기록한다(조용히 빠지지 않게)
+                for rest in chain[i:]:
+                    if (rest.split(":", 1)[0] == "mock") == self.force_mock:
+                        self._note(rest, "deadline")
                 break
             if provider_name == "mock":
                 s, u, p = system, user, payload
@@ -145,6 +149,11 @@ class Router:
                         self.cache.clear()
                     self.cache[key] = (obj.model_copy(deep=True), entry)
                 return obj, entry
+            except asyncio.CancelledError:   # 바깥 wait_for의 시간 제한이 먼저 울린 경우도 시간 초과로 남긴다. 취소는 삼키지 않는다
+                breaker.record(False)
+                self._trace(expert_id, entry, t0, False, "TimeoutError")
+                self._note(entry, "TimeoutError")
+                raise
             except (ProviderError, asyncio.TimeoutError, ValueError, ValidationError) as e:
                 breaker.record(False)
                 self._trace(expert_id, entry, t0, False, type(e).__name__)

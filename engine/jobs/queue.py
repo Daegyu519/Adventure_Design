@@ -28,7 +28,7 @@ class _Job:
     args: tuple[Any, ...] = field(repr=False)
     attempt: int = 1
     max_attempts: int | None = None  # None이면 큐 기본값
-    key: str | None = None  # 멱등 키(종류와 id뿐). 버릴 때 로그에 남긴다
+    key: str | None = None  # 멱등 키(종류와 id뿐). 버릴 때 키를 풀어 준다(로그에는 종류만)
 
 
 class JobQueue:
@@ -108,7 +108,10 @@ class JobQueue:
                 self._retry_later(job, self._backoff_s * 2 ** (job.attempt - 1))
                 job.attempt += 1
                 return  # task_done은 다시 넣을 때 한다: 백오프 동안에도 join이 끝나지 않는다
-            log.warning("job %s dropped after %d attempts: %s (key=%s)", job.name, job.attempt, type(e).__name__, job.key)
+            kind = job.key.split(":", 1)[0] if job.key else None   # id는 로그에 남기지 않는다(종류만)
+            log.warning("job %s dropped after %d attempts: %s (key=%s)", job.name, job.attempt, type(e).__name__, kind)
+            if job.key is not None:
+                self._keys.pop(job.key, None)   # 버려진 작업의 키는 풀어 준다: 같은 신고를 다시 받을 수 있게
         self._open -= 1
         self._q.task_done()
 

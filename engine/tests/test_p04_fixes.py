@@ -14,6 +14,13 @@ from jobs import feedback as job
 from jobs import push
 from jobs.queue import JobQueue
 from tests.fakes import FakeRepo
+from fastapi.testclient import TestClient
+from experts.registry import Registry, run_all
+from harness import mock_rules
+from harness.router import NoResult
+from harness.schemas import ToneReading
+from tests.spy import SpyProvider, make_registry
+from tests.test_experts import _req
 from tests.test_feedback import COMPLAINT, SECRET, canned, group
 from tests.test_push import SETTINGS, _chat, _expo, _run, _sub
 
@@ -131,7 +138,7 @@ def test_classifier_unavailable_drop_log_via_queue(fake, registry, spy, caplog):
     caplog.set_level(logging.WARNING)
     asyncio.run(main())
     assert "dropped after 1 attempts: ClassificationUnavailable" in caplog.text
-    assert f"feedback:{jieun}:{mid}" in caplog.text   # E12: 작업 키가 드롭 로그에 남는다
+    assert "key=feedback)" in caplog.text and str(jieun) not in caplog.text   # F4: 키는 종류만, id는 남기지 않는다
     assert fake.feedback_log == []
 
 
@@ -155,3 +162,64 @@ def test_expo_unknown_error_code_is_not_echoed(fake, caplog):
     caplog.set_level(logging.WARNING)
     _run(fake, mid, http=http)
     assert "expo push ticket error: other" in caplog.text and "abc" not in caplog.text
+
+
+# ---- P-04b ----
+def test_f1_model_timeout_through_run_all_is_logged_and_counted(caplog):
+    reg = make_registry(SpyProvider(canned={"tone_alt": mock_rules.tone_alt}, delay=0.5))
+    caplog.set_level(logging.WARNING)
+    out = asyncio.run(run_all(reg.for_path("detail", "tone"), _req(), time.monotonic() + 0.1))
+    assert [r.expert_id for r in out] == ["tone_ds"]   # 느린 쪽만 빠진다(취소는 삼키지 않고 위로 전달)
+    assert reg.router.failures["mock"]["TimeoutError"] >= 1
+    assert any("TimeoutError" in r.getMessage() for r in caplog.records)
+
+
+def test_f1_deadline_exhausted_entries_are_recorded(caplog):
+    reg = make_registry()
+    caplog.set_level(logging.WARNING)
+    with pytest.raises(NoResult):
+        asyncio.run(reg.router.call("tone_ds", "s", "u", {}, ToneReading, time.monotonic() - 1))
+    assert reg.router.failures["mock"]["deadline"] >= 1
+    assert any("deadline" in r.getMessage() for r in caplog.records)
+
+
+def test_f3_dropped_job_releases_idempotency_key():
+    async def boom():
+        raise ValueError("x")
+
+    async def main():
+        q = JobQueue(workers=1, max_attempts=1, backoff_s=0.001)
+        q.start()
+        assert q.enqueue("feedback", boom, key="feedback:u1:m1") and q._keys
+        await q.join()
+        assert "feedback:u1:m1" not in q._keys   # 버려졌으니 다시 신고할 수 있다
+        await q.stop()
+
+    asyncio.run(main())
+
+
+def test_f4_drop_log_has_key_kind_only(caplog):
+    async def boom():
+        raise ValueError("x")
+
+    async def main():
+        q = JobQueue(workers=1, max_attempts=1, backoff_s=0.001)
+        q.start()
+        q.enqueue("feedback", boom, key="feedback:USER-ID-1:MSG-ID-1")
+        await q.join()
+        await q.stop()
+
+    caplog.set_level(logging.WARNING)
+    asyncio.run(main())
+    assert "USER-ID-1" not in caplog.text and "MSG-ID-1" not in caplog.text
+    assert "feedback" in caplog.text
+
+
+def test_f5_health_providers_hide_mock_unless_force_mock():
+    reg = Registry.load(DEFAULT_MODELS_PATH, force_mock=False)
+    app.dependency_overrides[get_registry] = lambda: reg
+    try:
+        body = TestClient(app).get("/health").json()
+    finally:
+        app.dependency_overrides.clear()
+    assert "mock" not in body["providers"]
