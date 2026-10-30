@@ -1,6 +1,9 @@
 import os
+from functools import lru_cache
 from dataclasses import dataclass, field
 from pathlib import Path
+
+import yaml
 
 DEFAULT_MODELS_PATH = Path(__file__).resolve().parent.parent / "config" / "models.yaml"
 DEFAULT_CORS_ORIGINS = ("http://localhost:8081",)  # Expo 웹 개발 서버
@@ -38,3 +41,9 @@ class Settings:
             cors_origins=tuple(o for o in (x.strip() for x in os.environ.get("CORS_ORIGINS", "").split(",")) if o)
             or DEFAULT_CORS_ORIGINS,
         )
+
+
+@lru_cache
+def load_config() -> dict:
+    """models.yaml 전체(공급자·전문가·경로·집계·한도). 한 번 읽어 둔다."""
+    return yaml.safe_load(Settings.from_env().models_path.read_text(encoding="utf-8")) or {}

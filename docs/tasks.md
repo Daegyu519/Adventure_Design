@@ -94,4 +94,4 @@
 |---|---|---|---|---|---|
 | T-32 | 디스코드 사용자 설치 앱: `/말투 문장`(나만 보이는 응답), 메시지 우클릭 털어놓기. 엔진 API 재사용 | 엔진 | T-21, T-24 | 디스코드 DM에서 힌트와 털어놓기 동작 | 대기 |
 | T-33 | 실시간 경로 헤지 요청(빠른 모델 2개 동시, 먼저 온 답 사용) | 엔진 | T-13 | 지연 p95 비교표 | 대기 |
-| T-38 | /v1/* 사용자별 요청 한도(429) | 엔진 | T-14 | 한 사용자가 분당 한도를 넘으면 429(ARCHITECTURE 4장), 다른 사용자는 영향 없음, 한도 값은 models.yaml/env | 대기 |
+| T-38 | /v1/* 사용자별 요청 한도(429) | 엔진 | T-14 | 한 사용자가 분당 한도를 넘으면 429(ARCHITECTURE 4장), 다른 사용자는 영향 없음, 한도 값은 models.yaml/env. 확인: `cd engine && uv run --locked pytest -q -W error` 514 passed 1 skipped(test_rate_limit 7), 한도 초과 429 `{"detail":"rate_limited"}`+`Retry-After`≥1, 다른 사용자 무영향, 60초 슬라이딩 윈도우(주입 시계), hint/default 따로 셈, 401은 세지 않음, `app.routes` 순회로 모든 /v1/* 라우트에 한도 의존성(·OpenAPI 429)이 있고 /hooks/*에는 없음, 값은 `models.yaml` `limits:`(hint 2로 바꾸면 3번째가 429), 앱 타입 재생성, `scripts/check` 통과. 한계: 프로세스마다 따로 셈(파일럿은 1개), detail·feedback·mirror·stats는 `default` 한 통을 같이 씀 | 완료 |

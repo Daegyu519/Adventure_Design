@@ -16,6 +16,7 @@ import pipeline
 from app.auth import current_user
 from app.contracts import MirrorAnswerIn, MirrorAnswerOut, MirrorTodayOut, OptionOut, Readings
 from app.db import KST, Repo
+from app.ratelimit import RATE_LIMITED, limited
 from app.deps import get_registry, get_repo
 from experts.registry import Registry
 from harness.schemas import Conversation, Turn
@@ -29,7 +30,7 @@ UNAVAILABLE = "engine_unavailable"
 NEEDS = {"roleplay": "reply", "receive": "score", "predict": "predicted"}   # 종류별 필수 답
 
 
-@router.post("/v1/mirror/today")
+@router.post("/v1/mirror/today", dependencies=[Depends(limited("default"))], responses=RATE_LIMITED)
 async def mirror_today(user: UUID = Depends(current_user), repo: Repo = Depends(get_repo)) -> MirrorTodayOut:
     now = datetime.now(timezone.utc)
     today = now.astimezone(KST).date()
@@ -40,7 +41,7 @@ async def mirror_today(user: UUID = Depends(current_user), repo: Repo = Depends(
                                                    mirror.get_mirror_key()))
 
 
-@router.post("/v1/mirror/answer")
+@router.post("/v1/mirror/answer", dependencies=[Depends(limited("default"))], responses=RATE_LIMITED)
 async def mirror_answer(body: MirrorAnswerIn, user: UUID = Depends(current_user), repo: Repo = Depends(get_repo),
                         reg: Registry = Depends(get_registry)) -> MirrorAnswerOut:
     t0 = time.monotonic()

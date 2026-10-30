@@ -215,7 +215,7 @@ sequenceDiagram
 | POST | `/hooks/message` | Supabase 웹훅 페이로드 `{type, table, schema, record, old_record}` + `X-Hook-Secret` 헤더 | 202 |
 | GET | `/health` | 없음 | `{ok, models: {id: "up"\|"down"}}` |
 
-- 오류: 401(토큰), 403(방 멤버 아님 / 받은 메시지 아님), 422(형식), 503(엔진·모델 일시 불가: `engine_unavailable`, 그리고 공개키를 받지 못해 토큰을 검증할 수 없는 `auth_unavailable`. 앱이 다시 시도한다); 429는 단계 1에서 미구현.
+- 오류: 401(토큰), 403(방 멤버 아님 / 받은 메시지 아님), 422(형식), 503(엔진·모델 일시 불가: `engine_unavailable`, 그리고 공개키를 받지 못해 토큰을 검증할 수 없는 `auth_unavailable`. 앱이 다시 시도한다); 429(`rate_limited`, `Retry-After` 초: 사용자 1명이 1분에 보낼 수 있는 /v1/* 요청 수를 넘음. 인증 뒤·방 멤버 확인 앞에서 세고, 401은 세지 않는다. 값은 `models.yaml`의 `limits:`(hint 90, 나머지 default 20), 프로세스 안 메모리 슬라이딩 윈도우라 프로세스를 늘리면 Redis로 옮긴다).
 - 토큰은 서명·`exp`·`aud`(authenticated)·`iss`와 `role=authenticated`를 모두 통과해야 한다. 익명 로그인(`is_anonymous`)과 `anon`·`service_role` 토큰은 401이다. 알고리즘은 ES256·RS256만 받는다.
 - 방 멤버 확인은 `room_members`로 한다. `room_id`를 받는 모든 `/v1/*`는 방을 읽기 전에 `ensure_member`를 거친다(`test_every_room_route_checks_membership_before_reading`이 라우트를 모두 돈다).
 - CORS: 허용 origin은 `CORS_ORIGINS`(쉼표로 나눔, 기본 `http://localhost:8081`), 메서드 GET·POST·OPTIONS, 헤더 Authorization·Content-Type. 쿠키를 쓰지 않아 credentials는 켜지 않는다.
