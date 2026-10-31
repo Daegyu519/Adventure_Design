@@ -48,6 +48,28 @@ DB 웹훅은 SQL 마이그레이션이 아니라 Supabase 대시보드에서 만
 
 엔진은 공개키를 읽지 않는다(`VAPID_PUBLIC_KEY`는 없다). 키는 git에 넣지 않는다. `VAPID_PRIVATE_KEY`나 `VAPID_SUBJECT`가 비어 있으면 웹 푸시는 건너뛴다. Expo Push 보안을 켠 경우에만 `EXPO_ACCESS_TOKEN`을 넣는다.
 
+### 학교 GPU 서버 (로컬 SEED)
+
+말투 전문가 `tone_hcx`(HyperCLOVAX-SEED-Text-Instruct-1.5B)는 학교 GPU 서버(P100 16GB, 여러 사람이 같이 쓰는 컨테이너)의 llama.cpp `llama-server`에서 돈다. **쓸 때만 켠다.**
+
+```bash
+scripts/gpu up      # 서버에 llama-server(가장 한가한 GPU 1장) + 이 컴퓨터 127.0.0.1:11434 터널
+(cd engine && USE_LOCAL_MODEL=1 uv run uvicorn app.main:app --env-file ../.env --port 8000)
+scripts/gpu down    # 끝나면 터널 닫고 GPU 반납 (scripts/gpu status로 상태 확인)
+```
+
+접속은 `~/.ssh/config`의 `Host tone-gpu`(키 인증. 주소·포트·계정은 저장소에 넣지 않는다, 다른 이름이면 `GPU_SSH=`). 서버는 바깥 포트를 열지 않는다(llama-server는 컨테이너의 127.0.0.1, 이 컴퓨터는 ssh 터널로만). 서버 로그에는 요청 문장이 남지 않는다(기본 로그 수준, 토큰 수·시간만). GPU 서버가 꺼져 있으면 엔진은 `tone_hcx` 없이 돈다(선택 전문가).
+
+서버 한 번 준비(`/root/tone-chat-llm`, 해 둠). Ollama 최신판은 P100(compute 6.0)에 드라이버 550 이상을 요구해서 이 서버(535)에서는 CPU로 떨어진다. 그래서 llama.cpp를 서버의 CUDA 12.2로 직접 빌드했다(llama.cpp 0ec4027).
+
+```bash
+cd /root/tone-chat-llm
+curl -fL -o hcx-seed-1.5b-q4_k_m.gguf https://huggingface.co/naver-ellm/HyperCLOVAX-SEED-Text-Instruct-1.5B-GGUF/resolve/main/HyperCLOVAX-SEED-Text-Instruct-1.5B-Q4_K_M.gguf
+apt-get install -y cmake && git clone --depth 1 https://github.com/ggml-org/llama.cpp && cd llama.cpp
+PATH=/usr/local/cuda/bin:$PATH cmake -B build -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=60 -DLLAMA_CURL=OFF -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j 32 --target llama-server
+```
+
 ### 배포
 
 서버(학교 서버 또는 VM)와 Cloudflare 계정·도메인이 생기면 바로 올릴 수 있게 준비해 두었다(T-29, 서버 없이 로컬에서 확인한 것만 완료). 이미지 빌드 컨텍스트는 `engine/`이다. **프로세스는 반드시 1개**(`--workers 1`, Dockerfile CMD에 고정): 한도·큐·중복 제거·거울 키가 프로세스 메모리에 있다. 복제본도 늘리지 않는다.
