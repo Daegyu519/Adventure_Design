@@ -207,3 +207,19 @@ describe('입력 중 안내', () => {
     expect(root.container.queryAll((n) => n.props.accessibilityLiveRegion === 'polite')).toHaveLength(0);
   });
 });
+
+// 활성 후보를 색(바탕 bubbleOther, 대비 약 1.03:1)만으로 알리지 않는다: 왼쪽 막대(primary)와 굵은 글자도 같이(AI-3).
+test('멘션 후보: 활성 줄은 색 말고도 왼쪽 막대와 굵은 글자로 보이고, 다른 줄은 같은 자리에 투명 막대(밀리지 않음)', async () => {
+  const { MentionPicker } = jest.requireActual<typeof import('../components/MentionPicker')>('../components/MentionPicker');
+  const tokens = jest.requireActual('../lib/tokens.json');
+  const root = createRoot();
+  await act(async () => root.render(<MentionPicker candidates={[{ user_id: 'u2', name: '민수' }, { user_id: 'u3', name: '지은' }]} active={1} onSelect={() => {}} />));
+  const rows = root.container.queryAll((n) => typeof n.props.accessibilityLabel === 'string' && n.props.accessibilityLabel.endsWith(' 언급') && typeof n.props.onClick === 'function');
+  const style = (i: number) => Object.assign({}, ...[rows[i].props.style].flat(Infinity));
+  expect(style(1)).toMatchObject({ borderLeftWidth: 3, borderLeftColor: tokens.light.primary });
+  expect(style(0)).toMatchObject({ borderLeftWidth: 3, borderLeftColor: 'transparent' });
+  const weight = (i: number) => Object.assign({}, ...[rows[i].queryAll((n) => n.props.style !== undefined && String(n.props.children).startsWith('@'))[0].props.style].flat(Infinity)).fontWeight;
+  expect(weight(1)).toBe('600');
+  expect(weight(0)).not.toBe('600');
+});
+

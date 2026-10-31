@@ -12,6 +12,18 @@ jest.mock('../supabase', () => ({
   supabase: { storage: { from: (b: string) => ({ upload: (...a: unknown[]) => mockUpload(b, ...a), createSignedUrl: (...a: unknown[]) => mockSign(b, ...a) }) } },
 }));
 
+// 그린 화면은 테스트마다 내린다: 보이는 동안 서명 주소를 다시 받는 타이머(약 54분)가 남으면 jest 작업자가 끝나지 않는다.
+let roots: ReturnType<typeof createRoot>[] = [];
+const newRoot = () => {
+  const r = createRoot();
+  roots.push(r);
+  return r;
+};
+afterEach(async () => {
+  for (const r of roots) await act(async () => r.unmount());
+  roots = [];
+});
+
 const asset = (mimeType?: string, fileSize?: number) => ({ canceled: false, assets: [{ uri: 'file:///x', mimeType, fileSize }] });
 beforeEach(() => {
   clearSignedUrls();
@@ -99,7 +111,7 @@ function Probe({ path }: { path: string | null }) {
 }
 test('useSignedUrl signs for an hour once per path (module cache)', async () => {
   mockSign.mockResolvedValue({ data: { signedUrl: 'https://s/1' }, error: null });
-  const root = createRoot();
+  const root = newRoot();
   await act(async () => root.render(<Probe path="r1/a.jpg" />));
   expect(url).toBe('https://s/1');
   expect(mockSign).toHaveBeenCalledWith('chat-images', 'r1/a.jpg', 3600);
@@ -113,7 +125,7 @@ test('useSignedUrl re-signs when the URL expires while mounted', async () => {
   jest.useFakeTimers();
   try {
     mockSign.mockResolvedValueOnce({ data: { signedUrl: 'https://s/1' }, error: null }).mockResolvedValueOnce({ data: { signedUrl: 'https://s/2' }, error: null });
-    const root = createRoot();
+    const root = newRoot();
     await act(async () => root.render(<Probe path="r1/e.jpg" />));
     expect(url).toBe('https://s/1');
     await act(async () => void jest.advanceTimersByTime(3300 * 1000 + 1000));
@@ -129,7 +141,7 @@ test('useSignedUrl re-signs 60 s before the URL stops being served (no placehold
   try {
     const seen: (string | null)[] = [];
     mockSign.mockResolvedValueOnce({ data: { signedUrl: 'https://s/1' }, error: null }).mockResolvedValueOnce({ data: { signedUrl: 'https://s/2' }, error: null });
-    const root = createRoot();
+    const root = newRoot();
     await act(async () => root.render(<Probe path="r1/g.jpg" />));
     await act(async () => void jest.advanceTimersByTime((3300 - 60) * 1000 + 500));
     seen.push(url);
@@ -142,7 +154,7 @@ test('useSignedUrl re-signs 60 s before the URL stops being served (no placehold
 
 test('useSignedUrl: a failure on one path is not shown for another path', async () => {
   mockSign.mockResolvedValueOnce({ data: null, error: { message: 'x' } }).mockResolvedValue({ data: { signedUrl: 'https://s/9' }, error: null });
-  const root = createRoot();
+  const root = newRoot();
   await act(async () => root.render(<Probe path="r1/h.jpg" />));
   expect(failed).toBe(true);
   await act(async () => root.render(<Probe path="r1/i.jpg" />));
@@ -154,7 +166,7 @@ test('useSignedUrl: a failure on one path is not shown for another path', async 
 
 test('useSignedUrl: failure sets failed (no url); retry signs again', async () => {
   mockSign.mockResolvedValueOnce({ data: null, error: { message: 'x' } }).mockResolvedValueOnce({ data: { signedUrl: 'https://s/3' }, error: null });
-  const root = createRoot();
+  const root = newRoot();
   await act(async () => root.render(<Probe path="r1/f.jpg" />));
   expect(url).toBeNull();
   expect(failed).toBe(true);
@@ -164,7 +176,7 @@ test('useSignedUrl: failure sets failed (no url); retry signs again', async () =
 });
 
 test('null path gives null, not failed', async () => {
-  const root = createRoot();
+  const root = newRoot();
   await act(async () => root.render(<Probe path={null} />));
   expect(url).toBeNull();
   expect(failed).toBe(false);
@@ -172,7 +184,7 @@ test('null path gives null, not failed', async () => {
 
 test('clearSignedUrls drops cached bearer URLs', async () => {
   mockSign.mockResolvedValue({ data: { signedUrl: 'https://s/1' }, error: null });
-  const root = createRoot();
+  const root = newRoot();
   await act(async () => root.render(<Probe path="r1/c.jpg" />));
   clearSignedUrls();
   await act(async () => root.render(<Probe path="r1/d.jpg" />));

@@ -115,8 +115,9 @@ export default function Report() {
           </AppText>
 
           {failed && (
-            <View accessibilityLiveRegion="polite" style={{ gap: space[3], alignItems: 'flex-start' }}>
-              <AppText>지금은 불러오지 못했어요</AppText>
+            <View style={{ gap: space[3], alignItems: 'flex-start' }}>
+              {/* 글이 든 채로 붙는 live 영역은 웹에서 안 읽힌다: 글자 자체가 alert */}
+              <AppText accessibilityRole="alert">지금은 불러오지 못했어요</AppText>
               <Button label="다시 시도" onPress={refresh} loading={refreshing} />
             </View>
           )}

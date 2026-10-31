@@ -1,4 +1,5 @@
 // 거울 탭의 순수 함수. 점수는 늘 "차이"로만 말한다(MASTER 거울 원칙).
+import { engineErrorCopy } from './dbErrors';
 import { EngineError, type MirrorTodayRes } from './engine';
 
 export type Card = MirrorTodayRes['cards'][number];
@@ -40,12 +41,5 @@ export function changedWords(a: string, b: string): { text: string; changed: boo
 /** 422: 서명된 카드가 바뀌었거나 낡았다. 다시 받아야 답할 수 있다. */
 export const isStaleCard = (e: unknown) => e instanceof EngineError && e.status === 422;
 
-const GENERIC = '지금은 이 카드에 답하지 못했어요. 잠시 뒤 다시 해 주세요.';
 /** 서버가 준 글은 보여 주지 않는다. 상태로 고정 문구만. */
-export function mirrorErrorCopy(e: unknown): string {
-  const s = e instanceof EngineError ? e.status : -1;
-  if (s === 422) return '카드가 바뀌었을 수도 있어요. 새로 받아 주세요.';
-  if (s === 429) return '요청이 많아요. 잠시 뒤 다시 해 주세요.';
-  if (s === 0 || s === 503) return '연결이 불안정할 수도 있어요. 잠시 뒤 다시 해 주세요.';
-  return GENERIC;
-}
+export const mirrorErrorCopy = (e: unknown) => (isStaleCard(e) ? '카드가 바뀌었을 수도 있어요. 새로 받아 주세요.' : engineErrorCopy(e, '지금은 이 카드에 답하지 못했어요. 잠시 뒤 다시 해 주세요.'));

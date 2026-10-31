@@ -1,6 +1,6 @@
 # AGENTS.md
 
-이 저장소를 이어받는 AI 에이전트(Claude Code, Codex, Cursor, Gemini CLI 등)와 사람이 처음 읽는 문서다. 도구와 상관없이 같은 규칙으로 일한다. 기준: 2026-10-30, `main` = `land T-28a` 이후. land할 때마다 "2. 지금 상태"·"3. 진행 중"·"4. 다음 순서"를 같은 변경에서 고친다.
+이 저장소를 이어받는 AI 에이전트(Claude Code, Codex, Cursor, Gemini CLI 등)와 사람이 처음 읽는 문서다. 도구와 상관없이 같은 규칙으로 일한다. 기준: 2026-10-31, `main` = `land P-05`(단계 1 끝 리뷰 반영) 이후. land할 때마다 "2. 지금 상태"·"3. 진행 중"·"4. 다음 순서"를 같은 변경에서 고친다.
 
 ## 1. 무엇을 만드는가, 읽는 순서
 
@@ -36,7 +36,7 @@
 
 (단계 0의 14개에는 이 문서를 만든 P-03이 들어 있다.)
 
-검사 기준치(`scripts/check`, 병합된 main, 2026-10-30): 엔진 pytest 516 passed, 1 skipped · 앱 jest 627 passed(57 suites) · supabase(PGlite) 25 pass · tsc·lint 0 · 대비 OK.
+검사 기준치(`scripts/check`, 병합된 main, 2026-10-31): 엔진 pytest 548 passed, 1 skipped · 앱 jest 717 passed(62 suites) · supabase(PGlite) 25 pass · tsc·lint 0 · 대비 OK.
 
 영역별:
 
@@ -50,7 +50,8 @@
 
 | 작업 | 브랜치 | 상태 |
 |---|---|---|
-| (없음) | | |
+| T-02 Supabase dev 연결 | `t02-supabase-dev` | 클라우드에 마이그레이션 8개 적용·실제 DB 타입 생성 끝, 대시보드 확인 2개(Realtime "Allow public access" 끄기, Magic Link `{{ .Token }}`) 기다림 |
+| T-29a 엔진 배포 준비 | `t29-deploy-prep` | 리뷰 반영 끝, land 직전 |
 
 보류(paused): 없음.
 
@@ -78,7 +79,7 @@
 | 4 | T-33 헤지 요청, T-32 디스코드 앱 (선택) | 다른 AI | 엔진 쪽, 필수 아님 |
 | — | **T-02 Supabase dev 프로젝트**, **T-16 라벨 30쌍** | **사람** | -live 확인 6개와 실제 평가(T-17-live·T-20)가 여기에 막혀 있다(5장) |
 
-Claude가 이어서 할 것: 단계 1 끝 리뷰(전체 브랜치 코드 리뷰·과설계·조용한 실패·테스트 범위). 앱·엔진 개발 작업(필수)은 모두 끝났다. 남은 필수 7개는 사람 입력이나 계정이 먼저 필요하다: T-02(Supabase), T-16(라벨), T-18·T-20(로컬 모델·실제 평가), T-29~T-31(배포·파일럿).
+Claude가 이어서 할 것: 단계 1 끝 리뷰는 반영까지 끝났다(P-04, P-04b, P-05). 남은 필수 6개는 사람 입력·계정이 먼저 필요하다: T-16(라벨), T-18·T-20(로컬 모델·실제 평가), T-29(서버·Cloudflare), T-30(웹 호스팅·Expo·Firebase), T-31(파일럿 모집). T-02는 대시보드 확인만 남았다.
 
 - T-15는 T-14·T-03b도 선행(완료). 힌트 설정(`tone_hint_on`)이 꺼져 있으면 `/v1/hint`를 보내지 않는 테스트를 T-15에서 쓴다(T-37이 저장만 한다).
 - T-22는 T-15와 T-21(완료) 뒤. T-25는 T-09b와 T-24(완료) 뒤.
@@ -197,7 +198,7 @@ flowchart LR
 - 저장소는 GitHub 비공개 `Daegyu519/Adventure_Design`.
 
 ### 앱
-- 앱 환경 변수는 `apps/mobile/.env`에만(Expo는 루트 `.env`를 읽지 않는다) — 루트와 따로 관리하는 이유. `EXPO_PUBLIC_ENGINE_URL`이 비면 mock 엔진 + 개발 중 경고; T-30에서 배포 빌드가 `engine.isMock === false`인지 확인.
+- 앱 환경 변수는 `apps/mobile/.env`에만(Expo는 루트 `.env`를 읽지 않는다) — 루트와 따로 관리하는 이유. `EXPO_PUBLIC_ENGINE_URL`이 비면 개발·테스트는 mock 엔진 + 개발 중 경고, 배포 빌드(`__DEV__` 아님)는 엔진이 꺼진다: mock도 던짐도 없이 모든 호출이 `EngineError(0, 'engine_not_configured')`로 실패하고 만들 때 `console.error` 한 번(값 없음). 힌트는 조용히 없고 살펴보기·털어놓기·거울·리포트는 기존 고정 문구, 채팅(방·보내기·Realtime·푸시 등록)은 그대로(규칙 11). EAS preview·production 빌드는 `eas-build-pre-install`에서 실패. T-30에서는 `isMock === false`만으로는 모자라니(꺼진 엔진도 false) 콘솔에 그 오류가 없고 힌트가 실제로 오는지 확인.
 - 엔진 클라이언트 시간 제한: hint 1700ms, detail 9000ms, 나머지 10000ms — 서버 예산(1.5초·8초)보다 조금 길게.
 - 생성 타입은 손으로 쓰지 않는다. 생성 스크립트는 `.tmp`에 쓰고 성공해야 `mv` — 실패해도 기존 파일 유지. `gen:engine:pull`은 엔진 OpenAPI를 앱 seed 위에 합친다(엔진이 제공하는 경로가 이김).
 - 색은 `useTheme()` 토큰으로만, `scripts/check`가 색 리터럴을 막는다. 금지 색 검사는 갈색 계열까지(색상 20~65°) — 규칙 15.
@@ -205,13 +206,16 @@ flowchart LR
 - 리포트: 계획 문구 대신 MASTER 5장 + 승인 목업. 숫자 3개 = 예측과의 차이 · 이번 주 힌트(KST) · 스스로 고친 비율. "숫자는 나만 봐요"는 근거 없는 약속이라 빼고 "힌트 수는 점수가 아니에요…" 문구를 쓴다.
 - 설정(T-37)은 `tone_hint_on`을 저장만 한다. 꺼져 있으면 `/v1/hint`를 안 보내는 일은 T-15에서(테스트 포함) — 힌트 요청 코드가 그때 생기기 때문.
 - 공용 `Button`의 수정은 프리미티브 한 곳에서(모든 화면에 퍼지므로 T-07·T-34 테스트가 초록이어야 한다).
-- 화면 안내(스크린리더)는 `lib/announce.tsx`의 `useAnnounce()` → `{say, region}`으로만 한다: iOS는 `announceForAccessibility`, 웹·Android는 늘 붙어 있는 polite 라이브 영역(같은 문구 반복도 다시 읽힘). **react-native-web의 `announceForAccessibility`는 아무것도 하지 않는다.** `region`은 화면마다 한 번. 눈에 보이는 `role="alert"` 오류(예: `TextField`)는 웹·Android에서 이미 읽히므로 `say`는 iOS에서만 부른다(두 번 읽힘 방지).
+- 화면 안내(스크린리더)는 `lib/announce.tsx`의 `useAnnounce()` → `{say, region}`으로만 한다: iOS는 `announceForAccessibility`, 웹·Android는 늘 붙어 있는 polite 라이브 영역(같은 문구 반복도 다시 읽힘). **react-native-web의 `announceForAccessibility`는 아무것도 하지 않는다.** region은 화면마다 한 번 + 열린 시트마다 한 번: `Sheet`가 자기 `useAnnounce` 영역을 dialog 안에 그리고 children 함수로 그 `say`를 넘긴다(웹 Modal의 aria-modal 밖인 화면 영역은 가려진다). 화면 안의 상자(거울 `FocusBox` 등)는 영역을 그리지 않고 화면의 `say`를 받는다. 영역은 opacity 0.01(0이면 TalkBack이 건너뛸 수 있다). 눈에 보이는 `role="alert"` 오류(예: `TextField`)는 웹·Android에서 이미 읽히므로 `say`는 iOS에서만 부른다(두 번 읽힘 방지).
 - 푸시 등록(T-28a): 권한은 설정 스위치를 누를 때만 묻는다(앱 시작 때 안 물음). 토큰 저장은 `register_push_token` RPC(SECURITY DEFINER, 같은 토큰을 가진 다른 사용자 행을 지우고 내 행을 넣음)로만 — 공용 기기에서 로그아웃 해제가 실패해도 다음 사용자가 켜면 이전 사용자 알림이 끊긴다. 로그아웃 때도 최선으로 해제(3초). 서비스 워커 알림 탭은 `/room/<id>`만 연다. 아이폰은 웹 + 홈 화면 추가(iOS 16.4+), 네이티브 iOS 스위치는 이유와 함께 꺼 둔다. 키(VAPID·Firebase·EAS)가 없으면 등록하지 않고 "받지 못할 수도 있어요".
 - 살펴보기 시트(T-22): 힌트 막대의 "살펴보기"로 연다(빈 초안이면 안 열림). 순서는 제목(힌트 제목, 없으면 "이렇게 읽힐 수도 있어요") → 보낼 문장 → 의도 칩 → 어긋남 한 줄·고쳐 쓰기 후보 → 읽힘·이유. 칩마다 결과를 캐시하고 앞 요청은 끊는다. 후보를 고르면 입력창 초안만 바꾸고(자동 전송 없음) 힌트를 다시 묻는다, 기록은 id·A/B만. 닫히면 `lib/focus.ts`의 `retryFocus`로 입력창에 포커스(최대 10번, 동작 줄이기면 지연 없음). 거울의 `Readings`·`DiffText`·`changedWords`를 같이 쓴다.
 - 입력 중 힌트(T-15): 마지막 입력 0.5초 뒤 `/v1/hint`(초안·방·답장 대상만, 500자 넘거나 빈 글은 안 보냄), 새 입력이 오면 이전 요청을 끊고 seq가 지난 답은 버린다, 클라이언트 시간 제한 1.7초. 설정에서 힌트를 끄면 요청이 없고 보이던 힌트도 지운다. 429·503·연결 실패면 Retry-After(없거나 0이면 5초, 최대 60초)만큼 쉰다 — 엔진 CORS가 `Retry-After`를 노출한다. 힌트는 바뀔 때 한 번만 `say`, 멘션 후보가 열려 있으면 미룬다. 입력창은 웹에서 `aria-describedby`로, 네이티브에서 `accessibilityHint`로 힌트를 다시 읽게 한다. 이벤트(`toneEvents`)에는 초안 글이 들어가지 않는다.
 - 털어놓기(T-25): 받은 글 메시지에만 메뉴의 "AI에게만 털어놓기". 글은 시트 상태에만 있고 닫으면 사라진다(저장·로그 없음). 202의 여러 경우(접수·중복·이미 신고·주간 한도)를 화면에서 구분하지 않는다. 안내 문구는 단정하지 않게("상대에게 직접 보이지 않아요. 누가 남겼는지 드러나지 않도록 해요."). 알림 토스트는 6초·눌러 닫기·탭 순서 밖, 내용은 `say`로 읽는다. 닫히면 원래 메시지로 포커스(`focusItem`이 roving 활성도 바꾼다).
 - 사진: 클라이언트는 jpg·png·webp만(움직이는 GIF는 멈출 수 없어 뺐다, WCAG 2.2.2), 5MB 이하, 경로 `room_id/<시각>-<무작위>.<확장자>`, `upsert:false`. 서명 주소는 55분, 만료 60초 전에 다시 받고, 로그아웃 때 캐시를 비운다. 멘션은 그룹방만, 같은 이름이 둘이면 후보에서 뺀다. 입력 중 표시는 Presence 키(내 id)에서 신원을 얻는다.
-- 대화방 메시지 목록은 웹에서 roving tabindex(탭 정지 하나, ↑/↓로 이동, Enter·Shift+F10·ContextMenu로 메뉴 시트). 메시지 이름은 보낸 사람·내용·시간·안 읽은 수를 한 줄로. 메뉴는 내 메시지에도 있다(키보드 접근).
+- 대화방 메시지 목록은 웹에서 roving tabindex(탭 정지 하나, ↑/↓로 이동, Enter·Shift+F10·ContextMenu로 메뉴 시트). 메시지 이름은 보낸 사람·내용·시간·안 읽은 수(나는 세지 않음)를 한 줄로. 메뉴는 내 메시지에도 있다(키보드 접근).
+- 방 화면(`room/[id]/index`)은 id마다 하나(`_layout`의 `dangerouslySingular`): 알림 탭·두 번 누름은 있던 방을 맨 위로 옮긴다. 방 안 검색 결과는 `router.dismissTo`로 아래 방에 돌아가 `at`·`k`만 바꾼다(뒤로 가기가 검색으로 가지 않게).
+- Realtime postgres_changes 채널은 구독마다 새 이름(`lib/realtime.ts`의 `freshTopic`): realtime-js는 같은 이름이면 열린(닫히는 중인 것도) 채널을 돌려주고 subscribe 뒤 `on()`은 던진다. private `typing:<방 id>`만 예외(정책이 이름을 본다). CHANNEL_ERROR·TIMED_OUT·CLOSED는 다시 불러오기 줄(대화방은 메시지·공감·멤버 채널, 대화 목록)과 개발 중 경고, 다시 불러오기는 채널을 새로 연다(서버가 닫은 채널은 realtime-js가 다시 들어가지 않는다). realtime-js가 스스로 다시 들어가면(끊김 뒤 SUBSCRIBED) 메시지·공감·멤버 읽음을 다시 읽어 따라잡는다. 시트가 열린 동안의 새 메시지 안내는 `SheetSaySlot`으로 열린 시트의 영역에 간다. 테스트는 `test-utils/realtime.ts`(realtime-js처럼 움직이는 공용 가짜)를 쓴다.
+- 포커스 옮기기는 `lib/focus.ts` 하나: `focusNode(ref)`(웹 focus, 네이티브 접근성 포커스), `retryFocus(get, {delay})`(delay 뒤, 웹은 닿을 때까지 최대 10번, 취소 함수를 돌려준다). 선택·활성 표시는 색만으로 하지 않는다(멘션 활성 줄: 왼쪽 막대 + 굵게 + 웹 `aria-selected`).
 - 공감(reactions)은 insert / update(emoji) / delete만, upsert 금지. 메시지 `image_path`는 `room_id/`로 시작, 멘션은 방 멤버만 8명까지, 답장 대상 삭제 시 null.
 
 ### 엔진 — 개인정보와 안전
@@ -256,18 +260,21 @@ flowchart LR
 
 - (T-02 뒤) 초대·멤버 상한의 동시성은 추론만 했다 — 실제 Postgres에서 경쟁 테스트. `_platform.sql`을 실제 프로젝트에서 재확인(Realtime을 먼저 켰으면 `alter publication` 실패). Storage 업로드는 `upsert: false`.
 - (T-02 뒤) 초대 코드 시도 횟수 제한은 공개 가입 전에 더한다.
-- (T-07-live) 다크 모드, 200% 글자, VoiceOver·TalkBack, 가로 화면, Android 키보드 겹침을 기기에서 확인.
+- (T-07-live) 다크 모드, 200% 글자, VoiceOver·TalkBack, 가로 화면, Android 키보드 겹침을 기기에서 확인. 시트 안내 영역(살펴보기 "살펴보는 중"·결과, 털어놓기 "보내는 중", 시트가 열린 동안 받은 새 메시지)이 웹 VoiceOver·NVDA와 Android TalkBack에서 읽히는지, 영역 opacity 0.01을 TalkBack이 건너뛰지 않는지(P-05).
 - (T-17-live/T-20) 살펴보기 경로 단계별 예산(첫 단계가 8초를 쓰면 안전하게 "알림만"으로 떨어짐), 가린 문장이 gate "짧음" 신호를 약하게 하는 정도, JWKS 재요청이 10분마다 한 응답을 ~2.5초로 늘릴 수 있는 점(규칙 8) — 측정. `rewrite.md`·`judge.md` 문구는 평가로 다시 확인. mock 평가는 정밀도만 막는다(recall 회귀는 T-17-live 전까지 막지 못함).
-- (T-28a, 보안 메모) `register_push_token`은 정확한 토큰 문자열을 아는 사람이 그 기기의 알림을 가져갈 수 있다 — 피해자 알림이 끊기는 서비스 거부뿐이고 남의 알림을 받을 수는 없다(토큰은 본인만 읽음, RPC는 항상 내 user_id로 씀). 같은 토큰을 동시에 등록하면 행이 둘 남을 수 있음(원자적으로 하려면 `unique(token)` + on conflict). 토큰 교체 때 이전 행을 RPC 전에 지워 RPC가 실패하면 스위치가 켜짐으로 보임(순서 바꾸기). 다음 사용자가 알림을 안 켜면 이전 사용자 행이 남는다 — 엔진 쪽 "미리보기 숨기기" 옵션으로 막을 것(알림에 글 앞 100자가 잠금 화면에 보인다). 앱이 안 쓰는 push_tokens insert/update 권한 회수. `lib/types/db.ts`의 RPC 타입은 손으로 씀 — T-02 뒤 `gen:db`로 다시 만들어 비교. 설정 "켜는 중…"이 읽히지 않음, 네이티브 이유 accessibilityHint 없음, `swReady` 타이머 정리.
+- (P-05 재검토 Minor) 실패 뒤 의도 칩을 고르면 포커스가 칩에서 `detail-text`로 튐(`hadErr`는 "다시 해 보기"에서만), 공감 다시 읽기 중 도착한 Realtime 행이 빠질 수 있음(다음 읽기에서 복구), 대화 목록이 자동 재연결(SUBSCRIBED) 뒤 다시 읽지 않음(한 줄: SUBSCRIBED에 `load`), 시트 안 안내 영역이 페이드인 중 불투명도 0 근처(TalkBack에서 첫 안내가 빠질 수 있음 — T-07-live에서 확인). 같은 방을 빨리 나갔다 들어오면 입력 중 채널이 떠나는 중인 채로 재사용돼 그 방문 동안 입력 중 표시가 꺼짐. 목록의 "다시 불러오기"가 사라지면 웹 포커스가 body로.
+- (T-28a, 보안 메모) `register_push_token`은 정확한 토큰 문자열을 아는 사람이 그 기기의 알림을 가져갈 수 있다 — 피해자 알림이 끊기는 서비스 거부뿐이고 남의 알림을 받을 수는 없다(토큰은 본인만 읽음, RPC는 항상 내 user_id로 씀). 같은 토큰을 동시에 등록하면 행이 둘 남을 수 있음(원자적으로 하려면 `unique(token)` + on conflict). 다음 사용자가 알림을 안 켜면 이전 사용자 행이 남는다 — 엔진 쪽 "미리보기 숨기기" 옵션으로 막을 것(알림에 글 앞 100자가 잠금 화면에 보인다). 앱이 안 쓰는 push_tokens insert/update 권한 회수. `lib/types/db.ts`의 RPC 타입은 손으로 씀 — T-02 뒤 `gen:db`로 다시 만들어 비교. 설정 "켜는 중…"이 읽히지 않음, 네이티브 이유 accessibilityHint 없음.
 - (T-28a) Expo가 묶음 전체를 400으로 거절하면 그 방 묶음이 빠진다 — 토큰 검사. 사용자별 push_tokens 개수 제한. 로그아웃 때 토큰 해제. EAS projectId, Android 알림 아이콘.
 - (T-29/T-30) `/health`가 모델 목록을 인증 없이 보여 준다 — 배포 때 다시 본다. 요청 크기는 엔진이 64 KB로 막지만(413) 바깥(Cloudflare)에서도 같은 한도를 건다. 템플릿 아이콘·스플래시 교체. 인증 설정이 비면 401이 아니라 503 `auth_unavailable`.
 - (P-04, 보류) 털어놓기 태그 "늦은 답에 사과 없음"·"반말 전환"·"농담에 정색"은 gate 신호가 아니라 저장만 되고 힌트에 영향이 없다("반말 전환"은 "존댓말이 갑자기 빠짐"과 겹침) — 프롬프트 변경(평가 게이트)이 필요하니 T-20 데이터로 본다.
 - (털어놓기) 사용자별 "처리 중인 털어놓기 작업 수" 한도도 고려(작업 하나가 최대 60초). 주간 한도 확인과 증가가 원자적이지 않아 작업자 2개면 최대 6까지. 중복 방지 키가 메모리뿐이라 재시작하면 잊는다 — 파일럿 규모에서 받아들임.
 - (T-09a) 대화방: "다시 불러오기" 줄이 사라질 때 포커스가 body로 떨어짐(웹 키보드), 언마운트 뒤 읽음 재시도 타이머가 남을 수 있음, 목록 Realtime INSERT마다 전체 다시 읽기(디바운스 없음), 다른 기기의 읽음 갱신(room_members UPDATE) 미반영.
-- (T-09d) 검색은 최근 50개만(쪽 넘김 없음, 화면에 안내함), `*`가 든 검색어는 50개 안에서 거른다, 0행 업데이트(알림 끄기)를 저장된 것으로 봄, 네이티브에서 검색 뒤 키보드가 결과를 가릴 수 있음, `createGroupInvite`를 `rooms/new`도 쓰게.
-- (T-09b) 대화방 키보드: 활성 메시지가 가상 스크롤로 빠지면 목록에 탭 정지가 없음, 마우스로 누른 메시지가 활성으로 안 바뀜(`onFocus`로 활성 갱신), 가장 오래된 메시지에서 ↑는 불러오기만 하고 안내 없음, 실패한 인용의 다시 불러오기 버튼이 roving 밖, 웹 Modal 바깥 dialog 이름 없음, 받은 메시지에 `unreadCount`가 나를 셈(1:1에서 "상대가 안 읽음"이 잠깐 들림), 공감 Realtime 재연결 따라잡기 없음.
-- (T-22) 같은 오류로 다시 실패하면 웹·Android에서 안 읽힘(`key`로 다시 붙이기), 다시 시도 성공 뒤 버튼이 사라져 웹 포커스가 body로, 네이티브 `retryFocus`가 지연 없이 바로 포커스(모달 닫히는 중엔 무시될 수 있음), "보냈어요"가 전송 결과 전에 읽힘, `retryFocus`에 취소 없음, `focusItem`·Composer 답장 포커스가 같은 반복을 따로 씀(하나로 합치기).
-- (T-15) 실패한 전송 뒤 되살린 초안은 다음 입력 전까지 힌트 없음, `sent_with_hint`가 "닫은 뒤 고쳐서 힌트가 사라진" 경우도 셈(계획 그대로), 렌더 중 ref 대입(lint), 전체 jest에서 "worker failed to exit gracefully" 경고(원인 미확인).
+- (T-09d) 검색은 최근 50개만(쪽 넘김 없음, 화면에 안내함), `*`가 든 검색어는 50개 안에서 거른다, 네이티브에서 검색 뒤 키보드가 결과를 가릴 수 있음.
+- (T-09b) 대화방 키보드: 활성 메시지가 가상 스크롤로 빠지면 목록에 탭 정지가 없음, 마우스로 누른 메시지가 활성으로 안 바뀜(`onFocus`로 활성 갱신), 가장 오래된 메시지에서 ↑는 불러오기만 하고 안내 없음, 실패한 인용의 다시 불러오기 버튼이 roving 밖, 웹 Modal 바깥 dialog 이름 없음. 공감 DELETE는 RLS 없이 모든 방의 (message_id, user_id) 쌍이 모든 클라이언트에 간다 — 앱은 불러온 메시지 것만 반영하지만 다른 방 공감이 지워진 시점은 보인다(내용 없음).
+- (T-22) "보냈어요"가 전송 결과 전에 읽힘.
+- (T-09a-live, 측정) 입력 중 표시가 바뀔 때마다 대화방 목록 전체가 다시 그려진다(AM-8, React Compiler 켜짐) — 기기에서 긴 방으로 다시 그림 횟수·프레임을 재 보고 필요하면 `renderItem`을 나눈다.
+- (P-05) 웹 export에는 빈 엔진 URL을 막는 빌드 검사가 없다(EAS 빌드만 `eas-build-pre-install`). 배포한 웹은 엔진이 꺼진 채 채팅만 돈다 — T-30에서 콘솔의 `[engine] … engine features are off`가 없는지 확인.
+- (T-15) 실패한 전송 뒤 되살린 초안은 다음 입력 전까지 힌트 없음, `sent_with_hint`가 "닫은 뒤 고쳐서 힌트가 사라진" 경우도 셈(계획 그대로), 렌더 중 ref 대입(lint). 401·403·422·500 같은 힌트 실패는 5초 쉬고 개발 중 경고만 한다 — `tone_events.kind`에 `hint_error`가 없어 파일럿 기록은 마이그레이션이 생기면(P-05).
 - (T-25) 요청 중에 시트를 닫으면 결과가 조용히 끝남, 429의 Retry-After를 안 씀(고정 문구), 토스트 위치가 키보드·안전 영역과 겹칠 수 있음, 1000자 넘김을 입력 중에 안내하지 않음, `textMuted` on `surface` 대비 미확인.
 - (T-09c) 업로드 뒤 메시지 저장이 실패하면 Storage에 고아 파일이 남는다(클라이언트에 삭제 정책 없음) — 파일럿 전에 서비스 키로 청소. 이미 올라간 GIF는 버킷 MIME 목록에서도 빼야 한다(T-02 때). 멘션 강조가 저장된 mentions가 아니라 글자 기준, Shift+Enter가 멘션을 고름, 사진 실패 자리 안내 없음, 전체 크기 보기 없음.
 - (T-09c) 입력 중 표시는 Presence 키(내 id로 입장)에서 신원을 얻고 방 멤버만 보이지만, `realtime.messages` 정책은 키를 로그인한 사용자에 묶지 않는다 — 방 멤버가 다른 멤버의 키로 입장해 "입력 중"을 꾸밀 수 있다(표시만, 대화·데이터에는 영향 없음). 서버에서 막으려면 Realtime 인가가 키를 `auth.uid()`에 묶는지 T-02 뒤 실제 확인. 사진: 올린 뒤 메시지 insert가 실패하면 고아 파일이 남는다.

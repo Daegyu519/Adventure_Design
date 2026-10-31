@@ -10,7 +10,7 @@ import { TextField } from '../TextField';
 import { CardShell, DisabledHint, ErrorLine, FocusBox, useAnswer, type CardProps } from './parts';
 
 // 답장 쓰기 → 속마음·읽힘 → 그대로 / A / 직접 고치기. 그대로나 A를 고르면 카드가 끝난다.
-export function RoleplayCard({ card, onDone, onRefresh }: CardProps) {
+export function RoleplayCard({ card, onDone, onRefresh, say }: CardProps) {
   const { colors, radius, space } = useTheme();
   const [reply, setReply] = useState('');
   const [editing, setEditing] = useState(false); // 직접 고치기로 돌아온 폼이면 입력창에 포커스
@@ -22,7 +22,7 @@ export function RoleplayCard({ card, onDone, onRefresh }: CardProps) {
   if (res) {
     return (
       <CardShell card={card}>
-        <FocusBox key={choice ?? 'result'} label={choice ? undefined : '역할극 결과'}>
+        <FocusBox key={choice ?? 'result'} label={choice ? undefined : '역할극 결과'} say={say}>
           {choice ? (
             <>
               <AppText accessibilityRole="alert" weight="600" color="mirror">

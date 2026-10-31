@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { mergeMessages, PAGE_SIZE, type Msg } from './messages';
+import { freshTopic, watchStatus } from './realtime';
 import { supabase } from './supabase';
 import type { TablesInsert } from './types/db';
 
@@ -14,7 +15,7 @@ export function useRoomMessages(roomId: string, me: string) {
   const [error, setError] = useState(false);
   const [olderError, setOlderError] = useState(false);
   const hasMoreRef = useRef(false);
-  const catchUpRef = useRef<() => Promise<void>>(async () => {});
+  const [gen, setGen] = useState(0); // 다시 불러오기마다 채널을 새로 연다(서버가 닫은 채널은 다시 들어가지 않는다)
   const ref = useRef<Msg[]>([]);
   const loading = useRef(false);
   // 따라잡기의 기준은 "가져와서 확인한" 가장 큰 id다. Realtime으로 받은 id는 올리지 않는다:
@@ -27,10 +28,8 @@ export function useRoomMessages(roomId: string, me: string) {
     setMessages(ref.current);
   }, []);
 
+  // 방이 바뀔 때만 비운다(다시 구독할 때는 불러 둔 것을 두고 빈 구간만 채운다).
   useEffect(() => {
-    if (!supabase) return;
-    const c = supabase;
-    let alive = true;
     ref.current = [];
     synced.current = null;
     setMessages([]);
@@ -38,6 +37,13 @@ export function useRoomMessages(roomId: string, me: string) {
     hasMoreRef.current = false;
     setError(false);
     setOlderError(false);
+  }, [roomId]);
+
+  useEffect(() => {
+    if (!supabase) return;
+    const c = supabase;
+    let alive = true;
+    let down = false; // Realtime이 끊긴 동안은 가져오기가 성공해도 오류 줄을 둔다(새 메시지가 안 온다)
 
     // SUBSCRIBED가 될 때마다(첫 연결 포함) 호출: 아직 아무것도 없으면 첫 페이지, 있으면 가장 새 id 뒤의 빈 구간.
     const catchUp = async () => {
@@ -55,7 +61,7 @@ export function useRoomMessages(roomId: string, me: string) {
         if (newest === null) setError(true);
         return;
       }
-      setError(false);
+      if (!down) setError(false);
       if (newest === null) {
         hasMoreRef.current = data.length === PAGE_SIZE;
         setHasMore(hasMoreRef.current);
@@ -65,19 +71,30 @@ export function useRoomMessages(roomId: string, me: string) {
       add(data);
     };
 
-    catchUpRef.current = catchUp;
     const channel = c
-      .channel(`room:${roomId}`)
+      .channel(freshTopic(`room:${roomId}`))
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `room_id=eq.${roomId}` }, (p) => alive && add([p.new as Msg]))
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') void catchUp();
-      });
+      .subscribe((s) =>
+        alive &&
+        watchStatus(
+          s,
+          'room',
+          () => {
+            down = false;
+            void catchUp();
+          },
+          () => {
+            down = true;
+            setError(true);
+          },
+        ),
+      );
     void catchUp(); // 첫 페이지는 Realtime 연결을 기다리지 않는다(연결이 안 돼도 대화는 보인다). 중복은 merge가 지운다.
     return () => {
       alive = false;
       void c.removeChannel(channel);
     };
-  }, [roomId, add]);
+  }, [roomId, add, gen]);
 
   // 실패해도 던지지 않는다: olderError로 알리고, 호출한 쪽(다시 불러오기 줄)이 다시 부른다.
   const loadOlder = useCallback(async () => {
@@ -100,8 +117,8 @@ export function useRoomMessages(roomId: string, me: string) {
     }
   }, [roomId, add]);
 
-  // 첫 페이지·따라잡기를 다시 한 번(오류 줄의 다시 불러오기).
-  const reload = useCallback(() => catchUpRef.current(), []);
+  // 오류 줄의 다시 불러오기: 채널을 새로 구독하고 첫 페이지(또는 빈 구간)를 다시 가져온다.
+  const reload = useCallback(() => setGen((g) => g + 1), []);
 
   // 엔진을 부르지 않는다(규칙 11). 실패하면 status를 단 Error를 던진다 — 호출한 쪽이 문구를 고른다.
   const send = useCallback(

@@ -17,10 +17,10 @@ import { Button } from '../../../components/Button';
 import { IconButton } from '../../../components/IconButton';
 import { pickAndSendImage } from '../../../lib/images';
 import { activeMentionQuery, extractMentions, insertMention, mentionCandidates } from '../../../lib/mentions';
-import { useAnnounce } from '../../../lib/announce';
-import { retryFocus as focusUntilHeld } from '../../../lib/focus';
+import { SheetSaySlot, useAnnounce } from '../../../lib/announce';
+import { retryFocus } from '../../../lib/focus';
 import { useReducedMotion } from '../../../lib/motion';
-import { dbErrorMessage, isUnreachable, NETWORK_MESSAGE } from '../../../lib/dbErrors';
+import { dbErrorMessage, isUnreachable, loadErrorMessage, NETWORK_MESSAGE } from '../../../lib/dbErrors';
 import { REACTION_LABELS, shouldMarkRead, summarizeReactions, unreadCount, type Emoji, type Msg } from '../../../lib/messages';
 import { fetchRoom, markRead, roomTitle, type Member } from '../../../lib/rooms';
 import { useMembers } from '../../../lib/useMembers';
@@ -34,8 +34,6 @@ import { supabase } from '../../../lib/supabase';
 import { useTheme } from '../../../lib/theme';
 import type { Tables } from '../../../lib/types/db';
 
-// 방 정보를 못 받았을 때 줄 문구: 코드가 있는 DB 오류는 고정 문구, 그 밖(연결 끊김 등)은 연결 문구. 서버 글은 내지 않는다.
-const loadMessage = (e: unknown) => ((e as { code?: string })?.code ? dbErrorMessage(e as { message: string }, '대화방을 불러오지 못했어요. 다시 시도해 주세요.') : NETWORK_MESSAGE);
 
 // 시작 직후 currentState가 비어(null/unknown) 올 수 있다. 배경·비활성일 때만 "앞이 아님"으로 본다.
 const isActive = (s: string | null | undefined) => s !== 'background' && s !== 'inactive';
@@ -59,11 +57,12 @@ function RoomBody({ id, me }: { id: string; me: string }) {
   const { colors, space } = useTheme();
   const router = useRouter();
   const focused = useIsFocused();
-  const { messages, hasMore, error, olderError, reload, loadOlder, send } = useRoomMessages(id, me);
+  const { messages, hasMore, error, olderError, reload, loadOlder, send } = useRoomMessages(id, me); // error: 첫 페이지 실패 또는 Realtime 끊김
   const [info, setInfo] = useState<{ room: Tables<'rooms'>; members: Member[] } | null>(null);
   const [infoError, setInfoError] = useState<string | null>(null);
   const [infoTick, setInfoTick] = useState(0);
   const [markTick, setMarkTick] = useState(0);
+  const [markFailed, setMarkFailed] = useState(false); // 읽음 표시를 다시 해도 끝내 못 함(다시 불러오기 줄)
   const markAttempts = useRef(0);
   const markTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sending = useRef(false);
@@ -73,6 +72,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
   const [appActive, setAppActive] = useState(isActive(AppState.currentState));
   const lastRead = useRef<string | null>(null);
   const { say, region } = useAnnounce(); // 웹·안드로이드는 region, iOS는 announceForAccessibility
+  const sheetSay = useRef<((t: string) => void) | null>(null); // 열린 시트의 say(새 메시지 안내를 시트 영역으로)
   const [activeId, setActiveId] = useState<number | null>(null); // 웹 roving tabindex: 탭 순서에 있는 메시지(기본은 가장 새 것)
   const [failedQuotes, setFailedQuotes] = useState<Set<number>>(new Set());
   const [quoteTick, setQuoteTick] = useState(0);
@@ -81,7 +81,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
   const unmounted = useRef(false);
   const inputRef = useRef<InputHandle>(null);
   const listRef = useRef<FlatList<Msg>>(null);
-  const retryFocus = useRef(false); // 포커스가 있던 "다시 불러오기" 줄이 사라지면 입력창으로 옮긴다(웹 키보드가 body로 떨어지지 않게)
+  const refocusInput = useRef(false); // 포커스가 있던 "다시 불러오기" 줄이 사라지면 입력창으로 옮긴다(웹 키보드가 body로 떨어지지 않게)
   const [menuFor, setMenuFor] = useState<Msg | null>(null);
   const [ventFor, setVentFor] = useState<Msg | null>(null);
   const [detailText, setDetailText] = useState<string | null>(null); // 살펴보기 시트: 열 때의 입력창 글(null = 닫힘)
@@ -100,20 +100,28 @@ function RoomBody({ id, me }: { id: string; me: string }) {
         setInfo(r);
         setInfoError(null);
       })
-      .catch((e) => alive && setInfoError(loadMessage(e)));
+      .catch((e) => alive && setInfoError(loadErrorMessage(e, '대화방을 불러오지 못했어요. 다시 시도해 주세요.')));
     return () => {
       alive = false;
     };
   }, [id, me, infoTick]);
 
-  // 불러오기 실패 줄의 다시 불러오기, 그리고 앞으로 돌아오거나 포커스를 얻을 때 자동 다시 시도.
+  const { members, error: membersDown, reload: reloadMembers } = useMembers(id, info?.members);
+  const { rows: reactionRows, toggle, error: reactionsDown, reload: reloadReactions } = useReactions(id, useMemo(() => messages.map((x) => x.id), [messages]), me);
+  const failed = error || infoError !== null || membersDown || reactionsDown || markFailed; // 다시 불러오기 줄(Realtime 끊김·읽음 실패 포함)
+  // 불러오기 실패 줄의 다시 불러오기(끊긴 채널도 새로 연다), 그리고 앞으로 돌아오거나 포커스를 얻을 때 자동 다시 시도.
   const retry = useCallback(() => {
     setInfoTick((t) => t + 1);
-    void reload();
-  }, [reload]);
+    setMarkFailed(false);
+    markAttempts.current = 0;
+    setMarkTick((t) => t + 1);
+    reload();
+    reloadMembers();
+    reloadReactions();
+  }, [reload, reloadMembers, reloadReactions]);
   useEffect(() => {
-    failedRef.current = infoError !== null || error;
-  }, [infoError, error]);
+    failedRef.current = failed;
+  }, [failed]);
   useEffect(() => {
     if (failedRef.current && focused && appActive) retry();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 실패 상태가 바뀔 때가 아니라 focused/appActive가 바뀔 때만
@@ -124,9 +132,8 @@ function RoomBody({ id, me }: { id: string; me: string }) {
     return () => sub.remove();
   }, []);
 
-  const members = useMembers(id, info?.members);
   const names = useMemo(() => new Map(info?.members.map((m) => [m.user_id, m.name])), [info]);
-  const { rows: reactionRows, toggle } = useReactions(id, useMemo(() => messages.map((x) => x.id), [messages]), me);
+  const others = useMemo(() => members.filter((m) => m.user_id !== me), [members, me]);
   const byId = useMemo(() => new Map(messages.map((x) => [x.id, x])), [messages]);
   const group = info?.room.kind === 'group';
   const nameRecord = useMemo(() => Object.fromEntries(names), [names]);
@@ -146,7 +153,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
   const reducedMotion = useReducedMotion();
   const closeDetail = useCallback(() => {
     setDetailText(null);
-    focusUntilHeld(() => (unmounted.current ? null : inputRef.current), { delay: reducedMotion ? 0 : 30 });
+    retryFocus(() => (unmounted.current ? null : inputRef.current), { delay: reducedMotion ? 0 : 30 });
   }, [reducedMotion]);
   const title = info ? roomTitle(info.room, info.members, me) : '대화방';
 
@@ -168,6 +175,9 @@ function RoomBody({ id, me }: { id: string; me: string }) {
           markAttempts.current += 1;
           if (markTimer.current) clearTimeout(markTimer.current);
           markTimer.current = setTimeout(() => setMarkTick((t) => t + 1), 3000);
+        } else {
+          if (__DEV__) console.warn('[room] markRead failed after retries');
+          setMarkFailed(true);
         }
       });
   }, [appActive, focused, newest, id, me, markTick]);
@@ -180,10 +190,10 @@ function RoomBody({ id, me }: { id: string; me: string }) {
   }, []);
 
   // 다시 불러오기 줄이 성공으로 사라졌는데 포커스가 body로 떨어졌으면 입력창으로(웹만: 네이티브는 키보드가 올라온다).
-  const retryRowShown = error || infoError !== null || olderError;
+  const retryRowShown = failed || olderError;
   useEffect(() => {
-    if (retryRowShown || !retryFocus.current) return;
-    retryFocus.current = false;
+    if (retryRowShown || !refocusInput.current) return;
+    refocusInput.current = false;
     if (Platform.OS === 'web' && (typeof document === 'undefined' || document.activeElement === document.body || !document.activeElement)) inputRef.current?.focus();
   }, [retryRowShown]);
 
@@ -219,7 +229,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
     if (!messages.length) return;
     const top = messages[messages.length - 1];
     if (seen.current !== null && top.id > seen.current && top.sender_id !== me) {
-      say(`${names.get(top.sender_id) ?? '상대'}: ${top.text || '사진'}`);
+      (sheetSay.current ?? say)(`${names.get(top.sender_id) ?? '상대'}: ${top.text || '사진'}`); // 시트가 열려 있으면 그 시트 영역으로
     }
     seen.current = top.id;
   }, [messages, me, names, say]);
@@ -247,8 +257,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
 
   const photoBusy = useRef(false);
   const [photoSending, setPhotoSending] = useState(false);
-  const errCount = useRef(0);
-  const fail = useCallback((t: string) => setSendError(t + (errCount.current++ % 2 ? '\u200b' : '')), []); // 같은 문구가 연달아도 다시 읽히도록
+  const fail = setSendError; // 같은 문구가 연달아도 다시 읽힌다: 고를 때 먼저 지워서(setSendError(null)) alert가 새로 붙는다
   const pickImage = useCallback(async () => {
     if (photoBusy.current) return; // 보내는 중 두 번 눌러도 한 번만
     photoBusy.current = true; // 고르는 동안의 중복 누름만 막는다. 버튼이 busy가 되는 것은 사진을 고른 뒤(onStart)
@@ -290,15 +299,8 @@ function RoomBody({ id, me }: { id: string; me: string }) {
   // 웹: 메시지 본문으로 포커스를 옮긴다(가상화된 목록이라 그려진 뒤에).
   const focusItem = useCallback((id: number) => {
     setActiveId(id); // 로빙 tabindex: 포커스를 받은 메시지가 탭 순서에 있어야 Tab이 거기서 이어진다
-    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
-    // Modal이 닫히며 자기 포커스 복원을 끝낸 뒤에 옮긴다: 목표에 닿을 때까지 몇 번 다시 시도(고정 지연 한 번에 기대지 않는다).
-    let tries = 0;
-    const step = () => {
-      const el = document.getElementById(`msg-body-${id}`);
-      el?.focus();
-      if (document.activeElement !== el && ++tries < 10) setTimeout(step, 50);
-    };
-    setTimeout(step, 30);
+    // Modal이 닫히며 자기 포커스 복원을 끝낸 뒤에 옮긴다(닿을 때까지 몇 번 다시 시도).
+    if (Platform.OS === 'web' && typeof document !== 'undefined') retryFocus(() => document.getElementById(`msg-body-${id}`), { delay: 30 });
   }, []);
   const scrollTo = useCallback((index: number) => {
     try {
@@ -315,7 +317,6 @@ function RoomBody({ id, me }: { id: string; me: string }) {
       const j = i - dir; // data는 새 것부터
       if (i < 0 || j < 0) return;
       if (j >= data.length) return void (hasMore && !olderError && void loadOlder());
-      setActiveId(data[j].id);
       scrollTo(j);
       focusItem(data[j].id);
     },
@@ -329,7 +330,6 @@ function RoomBody({ id, me }: { id: string; me: string }) {
     const index = data.findIndex((x) => x.id === target);
     if (index >= 0) {
       jump.current = null;
-      setActiveId(target);
       scrollTo(index);
       focusItem(target);
       return say('원문으로 이동했어요');
@@ -368,7 +368,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
         <IconButton icon={Info} label="방 정보" onPress={() => router.push(`/room/${id}/info` as Href)} />
       </View>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        {(error || infoError) && (
+        {failed && (
           <View style={{ padding: space[3], gap: space[1], alignItems: 'flex-start' }}>
             <AppText accessibilityRole="alert" variant="small" color="danger">
               {infoError ?? NETWORK_MESSAGE}
@@ -377,7 +377,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
               label="다시 불러오기"
               kind="secondary"
               onPress={() => {
-                retryFocus.current = true;
+                refocusInput.current = true;
                 retry();
               }}
             />
@@ -406,7 +406,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
                   label="이전 메시지 다시 불러오기"
                   kind="secondary"
                   onPress={() => {
-                    retryFocus.current = true;
+                    refocusInput.current = true;
                     void loadOlder();
                   }}
                 />
@@ -417,6 +417,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
           renderItem={({ item, index }) => {
             const older = data[index + 1]; // 화면에서 바로 위(더 오래된) 메시지
             const mine = item.sender_id === me;
+            const unread = unreadCount(item, others); // 나는 세지 않는다(받은 메시지에 "상대가 안 읽음"이 뜨지 않게)
             const first = older?.sender_id !== item.sender_id;
             return (
               <View style={{ marginTop: older && !first ? space[0] : older ? space[2] : 0 }}>
@@ -426,7 +427,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
                   speaker={mine ? '나' : (names.get(item.sender_id) ?? '상대')}
                   mentionNames={group ? (info?.members ?? []).map((x) => x.name) : undefined}
                   mentionsMe={item.mentions.includes(me)}
-                  unreadText={unreadCount(item, members) > 0 ? (group ? `안 읽은 사람 ${unreadCount(item, members)}명` : '상대가 안 읽음') : ''}
+                  unreadText={unread > 0 ? (group ? `안 읽은 사람 ${unread}명` : '상대가 안 읽음') : ''}
                   active={item.id === (activeId ?? data[0]?.id)}
                   onNavigate={(dir) => navigate(item.id, dir)}
                   quoteFailed={item.reply_to !== null && failedQuotes.has(item.reply_to)}
@@ -435,7 +436,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
                   quoted={item.reply_to === null ? null : (byId.get(item.reply_to) ?? extra.get(item.reply_to) ?? null)}
                   quotedName={quotedName(item)}
                   reactions={summarizeReactions(reactionRows, item.id, me)}
-                  unread={unreadCount(item, members)}
+                  unread={unread}
                   onLongPress={() => setMenuFor(item)}
                   onMore={() => setMenuFor(item)}
                   onQuotePress={() => item.reply_to !== null && goTo(item.reply_to)}
@@ -482,6 +483,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
           </AppText>
         )}
       </KeyboardAvoidingView>
+      <SheetSaySlot.Provider value={sheetSay}>
       <MessageActions
         senderName={menuFor ? (menuFor.sender_id === me ? '나' : names.get(menuFor.sender_id)) : undefined}
         visible={menuFor !== null}
@@ -511,7 +513,6 @@ function RoomBody({ id, me }: { id: string; me: string }) {
       />
       <VentSheet
         visible={ventFor !== null}
-        say={say}
         roomId={id}
         message={ventFor}
         onClose={() => {
@@ -529,7 +530,6 @@ function RoomBody({ id, me }: { id: string; me: string }) {
         text={detailText ?? ''}
         hintTitle={toneHint?.title ?? null}
         replyTo={replyTarget?.id ?? null}
-        say={say}
         onClose={closeDetail}
         onApply={({ text, choice, topReading, traceId }) => {
           changeDraft(text);
@@ -546,6 +546,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
           void onSend(); // 평소 보내기 그대로(sent_with_hint는 toneSent가 기록)
         }}
       />
+      </SheetSaySlot.Provider>
       <Toast message={toast} onHide={hideToast} />
     </SafeAreaView>
   );

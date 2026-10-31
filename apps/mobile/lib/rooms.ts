@@ -86,13 +86,13 @@ export async function fetchRoom(id: string): Promise<{ room: Tables<'rooms'>; me
   return { room: room.data, members: mem.data.map((m) => ({ ...m, name: nameOf.get(m.user_id) ?? '' })) };
 }
 
-// 읽은 시각은 클라이언트 시계가 아니라 서버가 본 마지막 메시지의 created_at이다(`at`). 시계가 틀려도 안 읽은 수가 어긋나지 않는다.
-export async function markRead(roomId: string, me: string, at: string): Promise<void> {
-  const { error } = await db().from('room_members').update({ last_read_at: at }).eq('room_id', roomId).eq('user_id', me);
+// 내 room_members 행 하나를 고친다. 0행 업데이트(행 없음·RLS)는 오류 없이 오므로 고친 행을 돌려받아 없으면 실패로 본다.
+async function updateMine(roomId: string, me: string, patch: { last_read_at: string } | { muted: boolean }): Promise<void> {
+  const { data, error } = await db().from('room_members').update(patch).eq('room_id', roomId).eq('user_id', me).select('room_id');
   if (error) throw error;
+  if (!data?.length) throw new Error('room_members_not_updated');
 }
 
-export async function setMuted(roomId: string, me: string, muted: boolean): Promise<void> {
-  const { error } = await db().from('room_members').update({ muted }).eq('room_id', roomId).eq('user_id', me);
-  if (error) throw error;
-}
+// 읽은 시각은 클라이언트 시계가 아니라 서버가 본 마지막 메시지의 created_at이다(`at`). 시계가 틀려도 안 읽은 수가 어긋나지 않는다.
+export const markRead = (roomId: string, me: string, at: string) => updateMine(roomId, me, { last_read_at: at });
+export const setMuted = (roomId: string, me: string, muted: boolean) => updateMine(roomId, me, { muted });
