@@ -6,7 +6,7 @@ import asyncio
 import inspect
 import logging
 import time
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 
 import asyncpg
 import pytest
@@ -22,7 +22,6 @@ from tests.pg import PgSeeder, w
 COMPLAINT = "너무 단답이라 성의 없어 보였어"
 SECRET = "보라색코끼리하소연"
 D = datetime(2026, 10, 27, 10, 0, tzinfo=KST)          # 날짜 D 10:00 KST
-MIDNIGHT = datetime(2026, 10, 28, tzinfo=KST)          # D+1 0:00 KST
 PATTERN_TABLES = ("tone.sender_patterns", "tone.global_patterns", "tone.pattern_reporters",
                   "tone.sender_pattern_reporters")
 TABLES = ("tone.feedback_log", *PATTERN_TABLES)
@@ -221,27 +220,26 @@ def test_identical_complaint_calls_expert_again(fake, registry, spy):
 
 # ── 반영 규칙 ─────────────────────────────────────────
 
-def test_group_feedback_to_sender_from_next_day(fake, registry):
+def test_group_feedback_to_sender_immediately(fake, registry):
     (minsu, jieun, _), room, mid = group(fake)
     report(fake, registry, room, jieun, mid)
-    assert job.next_midnight_kst(D) == MIDNIGHT
-    assert set(fake.sender_pats) == {(minsu, "팀원", "짧은 답", MIDNIGHT)}
+    assert set(fake.sender_pats) == {(minsu, "팀원", "짧은 답", D)}
     assert not any(k[0] == jieun for k in fake.sender_pats)            # 신고자 키는 없다
     assert fake.global_pats == {"짧은 답": 1}
-    assert asyncio.run(fake.sender_patterns(minsu, "팀원", D)) == {}    # 다음 날 0시부터
-    assert asyncio.run(fake.sender_patterns(minsu, "팀원", MIDNIGHT))["짧은 답"]["count"] == 1
+    assert asyncio.run(fake.sender_patterns(minsu, "팀원", D))["짧은 답"]["count"] == 1    # 남긴 직후부터
+    assert asyncio.run(fake.sender_patterns(minsu, "팀원", D - timedelta(seconds=1))) == {}
 
 
 def test_direct_feedback_reaches_sender_and_global(fake, registry):
     (minsu, jieun), room, mid = group(fake, 2, kind="direct", relation="친구")
     report(fake, registry, room, jieun, mid)
-    assert set(fake.sender_pats) == {(minsu, "친구", "짧은 답", MIDNIGHT)} and fake.global_pats == {"짧은 답": 1}
+    assert set(fake.sender_pats) == {(minsu, "친구", "짧은 답", D)} and fake.global_pats == {"짧은 답": 1}
 
 
 def test_two_member_group_reaches_sender_and_global(fake, registry):
     (minsu, jieun), room, mid = group(fake, 2)
     report(fake, registry, room, jieun, mid)
-    assert set(fake.sender_pats) == {(minsu, "팀원", "짧은 답", MIDNIGHT)} and fake.global_pats == {"짧은 답": 1}
+    assert set(fake.sender_pats) == {(minsu, "팀원", "짧은 답", D)} and fake.global_pats == {"짧은 답": 1}
 
 
 def test_weekly_cap(fake, registry, spy):
@@ -337,22 +335,22 @@ def test_not_usable_result_logs_only(fake, registry, spy):
     assert SECRET not in repr(fake.__dict__)                            # dropped_reason도 남기지 않는다
 
 
-def test_rereport_next_day_keeps_yesterdays_pattern(fake, registry):
+def test_rereport_keeps_active_pattern_and_adds(fake, registry):
     (minsu, jieun, haneul), room, mid = group(fake)
     report(fake, registry, room, jieun, mid, now=D)
     report(fake, registry, room, haneul, mid, now=D + timedelta(days=1))
     read = lambda now: asyncio.run(fake.sender_patterns(minsu, "팀원", now))["짧은 답"]["count"]  # noqa: E731
-    assert read(D + timedelta(days=1)) == 1          # 어제 신고가 켠 패턴이 그대로 켜져 있다
-    assert read(MIDNIGHT + timedelta(days=1)) == 2   # 오늘 신고는 내일 0시부터
-    assert sorted(k[3] for k in fake.sender_pats) == [MIDNIGHT, MIDNIGHT + timedelta(days=1)]
+    assert read(D) == 1                              # 먼저 켜진 패턴이 그대로 켜져 있다
+    assert read(D + timedelta(days=1)) == 2          # 재신고는 바로 더해진다(신고마다 자기 시각 행, 합으로 읽는다)
+    assert sorted(k[3] for k in fake.sender_pats) == [D, D + timedelta(days=1)]
 
 
-def test_same_day_rereport_stacks_in_one_row(fake, registry):
+def test_same_instant_rereport_stacks_in_one_row(fake, registry):
     (minsu, jieun, haneul), room, mid = group(fake)
     report(fake, registry, room, jieun, mid, now=D)
-    report(fake, registry, room, haneul, mid, now=D + timedelta(hours=13))   # 같은 KST 날 23:00
+    report(fake, registry, room, haneul, mid, now=D)   # 같은 시각이면 한 행에 쌓인다
     [(key, row)] = fake.sender_pats.items()
-    assert key == (minsu, "팀원", "짧은 답", MIDNIGHT) and row.count == 2
+    assert key == (minsu, "팀원", "짧은 답", D) and row.count == 2
 
 
 def test_every_room_kind_feeds_sender_pattern_direct_call(fake):
@@ -363,7 +361,7 @@ def test_every_room_kind_feeds_sender_pattern_direct_call(fake):
     pat = [FeedbackPattern(trigger="짧은 답", feeling="차갑게", strength=2)]
     for n, (room, reporter) in enumerate([(direct, jieun), (pair_group, haneul)], start=1):
         mid = fake.add_message(room, minsu, "ㅇㅇ")
-        assert asyncio.run(fake.apply_feedback(FeedbackWrite(room, reporter, mid, True, pat, MIDNIGHT)))
+        assert asyncio.run(fake.apply_feedback(FeedbackWrite(room, reporter, mid, True, pat, D)))
         assert len(fake.sender_pats) == n and fake.global_pats == {"짧은 답": n}
 
 
@@ -376,7 +374,7 @@ def test_bad_pattern_error_has_no_value(world, caplog):
         for bad in (FeedbackPattern.model_construct(trigger=SECRET, feeling="차갑게", strength=1),
                     FeedbackPattern.model_construct(trigger="짧은 답", feeling=SECRET, strength=1)):
             with pytest.raises(ValueError) as exc:
-                await repo.apply_feedback(FeedbackWrite(room, jieun, mid, True, [bad], MIDNIGHT))
+                await repo.apply_feedback(FeedbackWrite(room, jieun, mid, True, [bad], D))
             assert SECRET not in str(exc.value) and SECRET not in repr(exc.value)
             assert exc.value.__context__ is None and exc.value.__cause__ is None
         assert [await w(seed.rows(t)) for t in TABLES] == before
@@ -394,10 +392,7 @@ def test_known_triggers_all_storable():
     assert len(names) == 7 and names <= TRIGGERS
 
 
-def test_kst_boundaries():
-    utc = timezone.utc
-    assert job.next_midnight_kst(datetime(2026, 10, 27, 14, 59, tzinfo=utc)) == datetime(2026, 10, 28, tzinfo=KST)
-    assert job.next_midnight_kst(datetime(2026, 10, 27, 15, 1, tzinfo=utc)) == datetime(2026, 10, 29, tzinfo=KST)
+def test_week_start_kst():
     assert week_start(datetime(2027, 1, 1, 1, 0, tzinfo=KST)) == date(2026, 12, 28)
 
 

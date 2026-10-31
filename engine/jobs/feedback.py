@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, time, timedelta, timezone
+from datetime import datetime, time, timezone
 from uuid import UUID
 
 import pipeline
@@ -26,10 +26,6 @@ QUEUE_MAXSIZE = 20  # 털어놓기 전용 큐(app.main lifespan, 워커 1개)의
 # ponytail: 털어놓기 작업(최대 L4 60초 + DB)은 자기 큐(워커 1개, QUEUE_MAXSIZE)에서만 돈다. 몰아쳐도 push·baseline의 공유 큐는
 #   그대로고, 넘친 신고는 같은 202를 받고 버려진다(재시도 없음, 사용자는 모른다). 한 사람이 서로 다른 메시지로 몰아치면 다른 사람의
 #   신고가 밀려날 수 있다: 사용자별 요청 한도는 T-38(429)에서. 느리면 워커를 늘리되 아래 주간 상한 경합을 같이 본다.
-
-
-def next_midnight_kst(now: datetime) -> datetime:
-    return datetime.combine(now.astimezone(KST).date() + timedelta(days=1), time(0), KST)
 
 
 async def at_weekly_cap(repo: Repo, sender_id: UUID, relation: str, now: datetime) -> bool:
@@ -58,4 +54,4 @@ async def run(repo: Repo, reg: Registry, room_id: UUID, reporter_id: UUID, messa
                 raise ClassificationUnavailable
             patterns = result.patterns if result.usable else []   # FeedbackResult가 이미 거름
         await repo.apply_feedback(FeedbackWrite(room_id, reporter_id, message_id, bool(patterns), patterns,
-                                                next_midnight_kst(now)))
+                                                now))   # 남긴 즉시 반영(2026-10-31 사용자 결정)
