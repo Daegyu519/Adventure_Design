@@ -48,7 +48,7 @@ def available(name: str, pcfg: dict, env: Mapping[str, str]) -> bool:
     """공급자를 쓸 수 있는지. 라우터·레지스트리·/health가 이 함수 하나를 같이 쓴다."""
     if name == "mock":
         return True
-    if name == "local":
+    if name.startswith("local"):   # local(SEED)·local_fast(실시간 Gemma) — 학교 GPU 서버가 있을 때만
         return env.get("USE_LOCAL_MODEL") == "1"
     return bool(env.get(pcfg.get("api_key_env", ""))) or bool(pcfg.get("allow_no_key", False))  # 빈 값(.env의 `KEY=`)은 없는 것으로
 

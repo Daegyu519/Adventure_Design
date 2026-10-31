@@ -1,1 +1,1 @@
-{"precision": 0.83, "recall": 0.62, "abstain_rate": 0.0, "context_split": "4/8", "mode": "mock", "n": 16}
+{"precision": 0.5, "recall": 0.12, "abstain_rate": 0.0, "context_split": "0/8", "mode": "mock", "n": 16}

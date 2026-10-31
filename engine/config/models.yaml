@@ -22,6 +22,11 @@ providers:
     api_key_env: LOCAL_API_KEY           # 비어 있어도 됨
     rpm: 600
     allow_no_key: true
+  local_fast:
+    base_url: http://localhost:11435/v1  # 실시간용 Gemma3-4B llama-server(학교 GPU, up.sh llm·scripts/gpu up). P-12
+    api_key_env: LOCAL_API_KEY
+    rpm: 600
+    allow_no_key: true
   mock:
     rpm: 100000
 
@@ -33,19 +38,22 @@ providers:
 # 전문가. 추가·제거는 여기서만 한다. mock은 force_mock(테스트·평가)가 쓸 mock_rules 이름(없으면 prompt 이름).
 # optional은 첫 모델 공급자를 쓸 수 없으면 빠진다. HyperCLOVA X는 생성(rewrite)에 쓰지 않는다(라이선스).
 experts:
-  - {id: ctx_fast,  role: context,  model: nvidia:poolside/laguna-xs-2.1, prompt: context,  paths: [realtime]}
+  # 실시간 말투: 짧은 답(prompts/tone_fast.md)으로 1.2초 안에 드는 로컬 Gemma3-4B. 대조 세트 정밀도 1.0·재현율 0.38, p95 0.87~1.0초(P-12)
+  - {id: tone_fast, role: tone,     model: local_fast:gemma-3-4b-it, prompt: tone_fast, paths: [realtime], weight: 1.0, mock: tone}
+  - {id: ctx_fast,  role: context,  model: nvidia:poolside/laguna-xs-2.1, prompt: context,  paths: []}   # 실시간 1.2초에 못 와서 뺌(P-12)
   - {id: ctx_deep,  role: context,  model: nvidia:nvidia/nemotron-3.5-bolt-e4b,              prompt: context,  paths: [detail, mirror]}
-  - {id: tone_ds,   role: tone,     model: nvidia:poolside/laguna-xs-2.1, prompt: tone,     paths: [realtime, detail, mirror], weight: 1.0}
+  - {id: tone_ds,   role: tone,     model: nvidia:poolside/laguna-xs-2.1, prompt: tone,     paths: [detail, mirror], weight: 1.0}
   - {id: tone_kimi, role: tone,     model: nvidia:nvidia/nemotron-3.5-bolt-e4b,              prompt: tone,     paths: [detail, mirror], weight: 1.0, mock: tone_alt}
-  - {id: tone_hcx,  role: tone,     model: local:naver-hyperclovax/HyperCLOVAX-SEED-Text-Instruct-1.5B, prompt: tone, paths: [realtime, detail, mirror], weight: 1.0, optional: true}
+  - {id: tone_hcx,  role: tone,     model: local:naver-hyperclovax/HyperCLOVAX-SEED-Text-Instruct-1.5B, prompt: tone, paths: [detail, mirror], weight: 1.0, optional: true}
   - {id: judge,     role: judge,    model: nvidia:nvidia/nemotron-3.5-bolt-e4b,              prompt: judge,    paths: [detail, mirror]}
   - {id: rewrite,   role: rewrite,  model: nvidia:poolside/laguna-xs-2.1, prompt: rewrite,  paths: [detail, mirror]}
   - {id: feedback,  role: feedback, model: nvidia:nvidia/nemotron-3.5-bolt-e4b,              prompt: feedback, paths: [async]}
 fallback:   # 실제 문장이 지나가므로 gemini 금지
+  local_fast:gemma-3-4b-it: [mock:auto]   # NVIDIA로 폴백하지 않는다: 학교 GPU가 꺼져 있으면 실시간 힌트는 기권(공유 NVIDIA 40rpm을 안 쓴다). 운영(force_mock 아님)에서 mock은 건너뛴다
   nvidia:poolside/laguna-xs-2.1: [nvidia:nvidia/nemotron-3.5-bolt-e4b, mock:auto]
   nvidia:nvidia/nemotron-3.5-bolt-e4b: [nvidia:poolside/laguna-xs-2.1, mock:auto]
 paths:
-  realtime: {deadline_ms: 1500, expert_deadline_ms: 1200, gate_threshold: 0.3}
+  realtime: {deadline_ms: 1500, expert_deadline_ms: 1200, gate_threshold: 0.1}   # 0.3이면 pilot 요청이 전부 게이트에서 멈췄다(P-12)
   detail:   {deadline_ms: 8000}
   mirror:   {deadline_ms: 8000}
   async:    {deadline_ms: 60000}

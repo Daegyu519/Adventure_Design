@@ -28,3 +28,4 @@ package = false  # 앱이지 배포 패키지가 아니다
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
+markers = ["legacy_rt: 실시간에 context 전문가가 있는 테스트 전용 설정(P-12 이전 구조)으로 시험한다"]

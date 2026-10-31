@@ -7,20 +7,27 @@ BASE=/root/tone-chat-deploy; LLM=/root/tone-chat-llm
 PORT=11434; ENGINE_PORT=8000
 TS="$BASE/tailscale_1.104.4_amd64"; SOCK="$BASE/tailscaled.sock"
 MODEL_ID=naver-hyperclovax/HyperCLOVAX-SEED-Text-Instruct-1.5B   # models.yaml tone_hcx의 local: 뒤 이름과 같아야 한다
+FAST_PORT=11435; FAST_ID=gemma-3-4b-it; FAST_GGUF=gemma-3-4b-it-q4_k_m.gguf   # tone_fast의 local_fast: 뒤 이름과 같아야 한다(P-12)
 has() { tmux has-session -t "$1" 2>/dev/null; }
 ts() { "$TS/tailscale" --socket="$SOCK" "$@"; }
 logged_in() { ts status --json 2>/dev/null | grep -q '"BackendState": "Running"'; }
 funnel_url() { ts funnel status 2>/dev/null | grep -o 'https://[^ ]*' | head -1 || true; }
 
-llm() {
-  has tone-llm && return 0
+serve() {   # serve <tmux> <gguf> <port> <alias> [추가 옵션]
+  has "$1" && return 0
   cd "$LLM"
   # 가장 한가한 GPU: 사용률 50% 초과는 뒤로, 그다음 메모리 사용량, 사용률 순(호스트는 여러 사람이 공유)
   export CUDA_DEVICE_ORDER=PCI_BUS_ID
   G=$(nvidia-smi --query-gpu=index,memory.used,utilization.gpu --format=csv,noheader,nounits | awk -F', *' '{print ($3>50), $2, $3, $1}' | sort -n -k1,1 -k2,2 -k3,3 | head -1 | awk '{print $4}')
-  # 기본 로그 수준은 요청 문장을 남기지 않는다 — -v·--verbose·--log-verbosity를 붙이지 않는다(문장이 server.log에 남음).
-  tmux new-session -d -s tone-llm "CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=$G ./llama.cpp/build/bin/llama-server -m hcx-seed-1.5b-q4_k_m.gguf --host 127.0.0.1 --port $PORT -ngl 99 -np 4 -c 16384 --no-slots --alias $MODEL_ID > server.log 2>&1"
-  echo "llm started on GPU $G"
+  # 기본 로그 수준은 요청 문장을 남기지 않는다 — -v·--verbose·--log-verbosity를 붙이지 않는다(문장이 <세션>.log에 남음).
+  tmux new-session -d -s "$1" "CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=$G ./llama.cpp/build/bin/llama-server -m $2 --host 127.0.0.1 --port $3 -ngl 99 -np 4 -c 16384 --no-slots --alias $4 ${5:-} > $1.log 2>&1"
+  echo "$1 started on GPU $G"
+}
+
+llm() {
+  serve tone-llm hcx-seed-1.5b-q4_k_m.gguf "$PORT" "$MODEL_ID"
+  # Gemma는 SWA라 --swa-full이 있어야 고정 프롬프트 캐시를 다시 쓴다(없으면 요청마다 1초 더)
+  serve tone-llm-fast "$FAST_GGUF" "$FAST_PORT" "$FAST_ID" --swa-full
 }
 
 engine() {
@@ -59,7 +66,7 @@ funnel() {
 }
 
 status() {
-  for s in tone-llm tone-engine tone-ts; do has "$s" && echo "$s: running" || echo "$s: stopped"; done
+  for s in tone-llm tone-llm-fast tone-engine tone-ts; do has "$s" && echo "$s: running" || echo "$s: stopped"; done
   echo "health: $(curl -sf "http://127.0.0.1:$ENGINE_PORT/health" | head -c 300 || echo 'not answering')"
   if [ -S "$SOCK" ] && logged_in; then echo "public: $(funnel_url)"; else echo "tailscale: not logged in"; fi
 }

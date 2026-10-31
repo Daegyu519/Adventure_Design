@@ -135,19 +135,22 @@ DB 웹훅은 SQL 마이그레이션이 아니라 Supabase 대시보드에서 만
 </details>
 
 <details>
-<summary>학교 GPU 서버 (로컬 SEED)</summary>
+<summary>학교 GPU 서버 (로컬 Gemma·SEED)</summary>
 
-### 학교 GPU 서버 (로컬 SEED)
+### 학교 GPU 서버 (로컬 Gemma·SEED)
 
-말투 전문가 `tone_hcx`(HyperCLOVAX-SEED-Text-Instruct-1.5B)는 학교 GPU 서버(P100 16GB, GPU 호스트는 여러 사람이 같이 쓰고, 컨테이너는 우리 것)의 llama.cpp `llama-server`에서 돈다. **쓸 때만 켠다.**
+로컬 모델 서버가 둘이다. 둘 다 학교 GPU 서버(P100 16GB, GPU 호스트는 여러 사람이 같이 쓰고, 컨테이너는 우리 것)의 llama.cpp `llama-server`에서 돈다. **쓸 때만 켠다.**
+
+- `tone-llm`(포트 11434): HyperCLOVAX-SEED-Text-Instruct-1.5B, 말투 전문가 `tone_hcx`(상세·거울, 선택).
+- `tone-llm-fast`(포트 11435, `--swa-full`): Gemma3-4B(`gemma-3-4b-it-q4_k_m.gguf`), 실시간 말투 전문가 `tone_fast`(짧은 출력, P-12). 서버가 없으면 실시간 힌트는 기권한다(NVIDIA 폴백 없음).
 
 ```bash
-scripts/gpu up      # 서버에 llama-server(가장 한가한 GPU 1장) + 이 컴퓨터 127.0.0.1:11434 터널
+scripts/gpu up      # 서버에 llama-server 둘(각각 가장 한가한 GPU 1장) + 이 컴퓨터 127.0.0.1:11434·11435 터널
 (cd engine && USE_LOCAL_MODEL=1 uv run uvicorn app.main:app --env-file ../.env --port 8000)
 scripts/gpu down    # 끝나면 터널 닫고 GPU 반납 (scripts/gpu status로 상태 확인)
 ```
 
-접속은 `~/.ssh/config`의 `Host tone-gpu`(키 인증. 주소·포트·계정은 저장소에 넣지 않는다, 다른 이름이면 `GPU_SSH=`). 서버는 바깥 포트를 열지 않는다(llama-server는 컨테이너의 127.0.0.1, 이 컴퓨터는 ssh 터널로만). 서버 로그에는 요청 문장이 남지 않는다(기본 로그 수준, 토큰 수·시간만). GPU 서버가 꺼져 있으면 엔진은 `tone_hcx` 없이 돈다(선택 전문가).
+접속은 `~/.ssh/config`의 `Host tone-gpu`(키 인증. 주소·포트·계정은 저장소에 넣지 않는다, 다른 이름이면 `GPU_SSH=`). 서버는 바깥 포트를 열지 않는다(llama-server는 컨테이너의 127.0.0.1, 이 컴퓨터는 ssh 터널로만). 서버 로그(`/root/tone-chat-llm/tone-llm.log`, `tone-llm-fast.log`)에는 요청 문장이 남지 않는다(기본 로그 수준, 토큰 수·시간만). GPU 서버가 꺼져 있으면 엔진은 `tone_hcx` 없이 돌고(선택 전문가), 실시간 힌트는 기권한다(공유 NVIDIA 한도를 쓰지 않으려고 폴백하지 않는다).
 
 서버 한 번 준비(`/root/tone-chat-llm`, 해 둠). Ollama 최신판은 P100(compute 6.0)에 드라이버 550 이상을 요구해서 이 서버(535)에서는 CPU로 떨어진다. 그래서 llama.cpp를 서버의 CUDA 12.2로 직접 빌드했다(llama.cpp 0ec4027).
 
@@ -157,6 +160,12 @@ curl -fL -o hcx-seed-1.5b-q4_k_m.gguf https://huggingface.co/naver-ellm/HyperCLO
 apt-get install -y cmake && git clone --depth 1 https://github.com/ggml-org/llama.cpp && cd llama.cpp
 PATH=/usr/local/cuda/bin:$PATH cmake -B build -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=60 -DLLAMA_CURL=OFF -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j 32 --target llama-server
+```
+
+Gemma 한 번 내려받기(Hugging Face API로 파일 이름 확인함, 라이선스는 Gemma Terms of Use):
+
+```bash
+curl -fL -o /root/tone-chat-llm/gemma-3-4b-it-q4_k_m.gguf https://huggingface.co/unsloth/gemma-3-4b-it-GGUF/resolve/main/gemma-3-4b-it-Q4_K_M.gguf
 ```
 
 </details>
