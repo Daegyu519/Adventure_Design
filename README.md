@@ -150,6 +150,13 @@ scripts/gpu up      # 서버에 llama-server 둘(각각 가장 한가한 GPU 1�
 scripts/gpu down    # 끝나면 터널 닫고 GPU 반납 (scripts/gpu status로 상태 확인)
 ```
 
+**GPU를 다른 일(학습 등)에 쓸 때**는 GPU 끄기 스위치를 켠다. 모델 서버를 끄고, 그 뒤로는 `scripts/deploy-school`·`scripts/gpu up`도 GPU 모델을 띄우지 않는다(엔진은 로컬 모델 없이 돈다: 실시간 힌트는 기권, 상세는 NVIDIA만, 채팅은 그대로).
+
+```bash
+ssh tone-gpu 'bash -s -- gpu-off' < deploy/school-gpu/up.sh   # 끄기(서버에 /root/tone-chat-deploy/gpu.off)
+ssh tone-gpu 'bash -s -- gpu-on'  < deploy/school-gpu/up.sh   # 다시 쓰기
+```
+
 접속은 `~/.ssh/config`의 `Host tone-gpu`(키 인증. 주소·포트·계정은 저장소에 넣지 않는다, 다른 이름이면 `GPU_SSH=`). 서버는 바깥 포트를 열지 않는다(llama-server는 컨테이너의 127.0.0.1, 이 컴퓨터는 ssh 터널로만). 서버 로그(`/root/tone-chat-llm/tone-llm.log`, `tone-llm-fast.log`)에는 요청 문장이 남지 않는다(기본 로그 수준, 토큰 수·시간만). GPU 서버가 꺼져 있으면 엔진은 `tone_hcx` 없이 돌고(선택 전문가), 실시간 힌트는 기권한다(공유 NVIDIA 한도를 쓰지 않으려고 폴백하지 않는다).
 
 서버 한 번 준비(`/root/tone-chat-llm`, 해 둠). Ollama 최신판은 P100(compute 6.0)에 드라이버 550 이상을 요구해서 이 서버(535)에서는 CPU로 떨어진다. 그래서 llama.cpp를 서버의 CUDA 12.2로 직접 빌드했다(llama.cpp 0ec4027).
@@ -181,7 +188,7 @@ ssh tone-gpu 'bash -s -- status' < deploy/school-gpu/up.sh   # 상태와 공개 
 ssh tone-gpu 'bash -s -- stop' < deploy/school-gpu/up.sh     # 엔진만 끈다
 ```
 
-`deploy-school`은 커밋된 `engine/`·`deploy/`(`git archive HEAD`)를 올리고 `uv sync --locked --no-dev --python 3.11` 후 `llm`·`engine`·`funnel`을 켠 다음 상태와 공개 URL을 보여 준다. 엔진 env 파일은 서버 `/root/tone-chat-deploy/engine.env`(권한 600)로 복사되며 값은 화면에 나오지 않는다. **형식은 `KEY=값` 한 줄씩만**(따옴표·공백·`$`·`&`·`;` 금지, DB 비밀번호는 퍼센트 인코딩, docker `--env-file`과 같은 형식). 어기면 `up.sh engine`이 거절한다. `CORS_ORIGINS`에 웹 앱 origin을 꼭 넣는다. 엔진은 `/docs`·`/redoc`·`/openapi.json`을 열지 않는다. 로컬 파일럿 값은 `.env.pilot`에 두면 된다(`.gitignore`됨). 엔진은 항상 `USE_LOCAL_MODEL=1`로 뜬다. `scripts/gpu down`은 `tone-engine`이 떠 있으면 llama-server를 끄지 않는다(`--force`로 끈다).
+`deploy-school`은 커밋된 `engine/`·`deploy/`(`git archive HEAD`)를 올리고 `uv sync --locked --no-dev --python 3.11` 후 `llm`·`engine`·`funnel`을 켠 다음 상태와 공개 URL을 보여 준다. 엔진 env 파일은 서버 `/root/tone-chat-deploy/engine.env`(권한 600)로 복사되며 값은 화면에 나오지 않는다. **형식은 `KEY=값` 한 줄씩만**(따옴표·공백·`$`·`&`·`;` 금지, DB 비밀번호는 퍼센트 인코딩, docker `--env-file`과 같은 형식). 어기면 `up.sh engine`이 거절한다. `CORS_ORIGINS`에 웹 앱 origin을 꼭 넣는다. 엔진은 `/docs`·`/redoc`·`/openapi.json`을 열지 않는다. 로컬 파일럿 값은 `.env.pilot`에 두면 된다(`.gitignore`됨). 엔진은 GPU 끄기 스위치가 없으면 `USE_LOCAL_MODEL=1`, 있으면 `0`으로 뜬다. `scripts/gpu down`은 `tone-engine`이 떠 있으면 llama-server를 끄지 않는다(`--force`로 끈다).
 
 사람이 해야 할 것(한 번):
 1. 처음 `deploy-school`이 `Tailscale login needed. Open: https://...`를 출력하고 종료 코드 3으로 멈추면, 그 링크를 열어 로그인한다. 그다음 `ssh tone-gpu 'bash -s -- funnel' < deploy/school-gpu/up.sh`를 다시 실행한다.
