@@ -334,7 +334,7 @@ experts:
   - {id: rewrite,   role: rewrite,  model: nvidia:deepseek-ai/deepseek-v4.1-flash, prompt: rewrite,  paths: [detail, mirror]}
   - {id: feedback,  role: feedback, model: nvidia:moonshotai/kimi-k3,              prompt: feedback, paths: [async]}
 fallback:   # 실제 문장이 지나가므로 gemini 금지
-  local_fast:gemma-3-4b-it: [nvidia:deepseek-ai/deepseek-v4.1-flash, mock:auto]
+  local_fast:gemma-3-4b-it: [mock:auto]   # NVIDIA 폴백 없음: GPU가 꺼지면 실시간은 기권
   nvidia:deepseek-ai/deepseek-v4.1-flash: [github:openai/gpt-4.1-mini, mock:auto]
   nvidia:moonshotai/kimi-k3: [nvidia:deepseek-ai/deepseek-v4.1-flash, mock:auto]
 paths:

@@ -142,7 +142,7 @@ DB 웹훅은 SQL 마이그레이션이 아니라 Supabase 대시보드에서 만
 로컬 모델 서버가 둘이다. 둘 다 학교 GPU 서버(P100 16GB, GPU 호스트는 여러 사람이 같이 쓰고, 컨테이너는 우리 것)의 llama.cpp `llama-server`에서 돈다. **쓸 때만 켠다.**
 
 - `tone-llm`(포트 11434): HyperCLOVAX-SEED-Text-Instruct-1.5B, 말투 전문가 `tone_hcx`(상세·거울, 선택).
-- `tone-llm-fast`(포트 11435, `--swa-full`): Gemma3-4B(`gemma-3-4b-it-q4_k_m.gguf`), 실시간 말투 전문가 `tone_fast`(짧은 출력, P-12). 서버가 없으면 NVIDIA로 폴백하지만 대개 1.2초를 넘겨 기권한다.
+- `tone-llm-fast`(포트 11435, `--swa-full`): Gemma3-4B(`gemma-3-4b-it-q4_k_m.gguf`), 실시간 말투 전문가 `tone_fast`(짧은 출력, P-12). 서버가 없으면 실시간 힌트는 기권한다(NVIDIA 폴백 없음).
 
 ```bash
 scripts/gpu up      # 서버에 llama-server 둘(각각 가장 한가한 GPU 1장) + 이 컴퓨터 127.0.0.1:11434·11435 터널
@@ -150,7 +150,7 @@ scripts/gpu up      # 서버에 llama-server 둘(각각 가장 한가한 GPU 1�
 scripts/gpu down    # 끝나면 터널 닫고 GPU 반납 (scripts/gpu status로 상태 확인)
 ```
 
-접속은 `~/.ssh/config`의 `Host tone-gpu`(키 인증. 주소·포트·계정은 저장소에 넣지 않는다, 다른 이름이면 `GPU_SSH=`). 서버는 바깥 포트를 열지 않는다(llama-server는 컨테이너의 127.0.0.1, 이 컴퓨터는 ssh 터널로만). 서버 로그(`/root/tone-chat-llm/tone-llm.log`, `tone-llm-fast.log`)에는 요청 문장이 남지 않는다(기본 로그 수준, 토큰 수·시간만). GPU 서버가 꺼져 있으면 엔진은 `tone_hcx` 없이 돌고(선택 전문가), 실시간은 `tone_fast`가 NVIDIA로 폴백한다.
+접속은 `~/.ssh/config`의 `Host tone-gpu`(키 인증. 주소·포트·계정은 저장소에 넣지 않는다, 다른 이름이면 `GPU_SSH=`). 서버는 바깥 포트를 열지 않는다(llama-server는 컨테이너의 127.0.0.1, 이 컴퓨터는 ssh 터널로만). 서버 로그(`/root/tone-chat-llm/tone-llm.log`, `tone-llm-fast.log`)에는 요청 문장이 남지 않는다(기본 로그 수준, 토큰 수·시간만). GPU 서버가 꺼져 있으면 엔진은 `tone_hcx` 없이 돌고(선택 전문가), 실시간 힌트는 기권한다(공유 NVIDIA 한도를 쓰지 않으려고 폴백하지 않는다).
 
 서버 한 번 준비(`/root/tone-chat-llm`, 해 둠). Ollama 최신판은 P100(compute 6.0)에 드라이버 550 이상을 요구해서 이 서버(535)에서는 CPU로 떨어진다. 그래서 llama.cpp를 서버의 CUDA 12.2로 직접 빌드했다(llama.cpp 0ec4027).
 

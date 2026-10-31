@@ -18,15 +18,20 @@ case "${1:-}" in
 up)
   # 서버 쪽 시작 명령은 deploy/school-gpu/up.sh llm 한 곳에만 있다(stdin으로 보낸다. 서버 복사본에 의존하지 않음).
   remote "bash -s -- llm" < "$(dirname "$0")/../deploy/school-gpu/up.sh"
-  # 남은 소켓 파일이 있으면 지운다(없으면 -M이 멀티플렉싱 없이 터널을 열어 down이 못 닫는다)
-  tunnel_up || { rm -f "$SOCK"; ssh -f -N -M -S "$SOCK" -o BatchMode=yes -o ExitOnForwardFailure=yes -L "127.0.0.1:$PORT:127.0.0.1:11434" -L "127.0.0.1:11435:127.0.0.1:11435" "$H"; }
+  # 터널은 항상 새로 연다(11435 전달이 없는 옛 터널을 재사용하지 않는다). 남은 소켓 파일도 지운다.
+  tunnel_up && ssh -S "$SOCK" -O exit "$H" 2>/dev/null || true
+  rm -f "$SOCK"
+  ssh -f -N -M -S "$SOCK" -o BatchMode=yes -o ExitOnForwardFailure=yes -L "127.0.0.1:$PORT:127.0.0.1:11434" -L "127.0.0.1:11435:127.0.0.1:11435" "$H"
   for _ in $(seq 60); do
-    if curl -sf "http://127.0.0.1:$PORT/health" >/dev/null; then
-      echo "ready: http://127.0.0.1:$PORT/v1  (engine: USE_LOCAL_MODEL=1)"; exit 0
+    if curl -sf "http://127.0.0.1:$PORT/health" >/dev/null && curl -sf "http://127.0.0.1:11435/health" >/dev/null; then
+      echo "ready: http://127.0.0.1:$PORT/v1 (SEED) and http://127.0.0.1:11435/v1 (Gemma)  (engine: USE_LOCAL_MODEL=1)"; exit 0
     fi
     sleep 1
   done
-  echo "llama-server not ready after 60s: scripts/gpu status, server logs /root/tone-chat-llm/tone-llm.log, tone-llm-fast.log" >&2; exit 1 ;;
+  nr=""
+  curl -sf "http://127.0.0.1:$PORT/health" >/dev/null || nr="$nr :$PORT(tone-llm, SEED)"
+  curl -sf "http://127.0.0.1:11435/health" >/dev/null || nr="$nr :11435(tone-llm-fast, Gemma)"
+  echo "not ready after 60s:$nr. scripts/gpu status, server logs /root/tone-chat-llm/tone-llm.log, tone-llm-fast.log" >&2; exit 1 ;;
 down)
   tunnel_up && ssh -S "$SOCK" -O exit "$H" 2>/dev/null || true
   if [ "${2:-}" != --force ] && remote "tmux has-session -t tone-engine 2>/dev/null"; then

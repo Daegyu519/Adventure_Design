@@ -90,6 +90,23 @@ def test_one_trace_per_hint_request(client, login, fake, queue, registry, monkey
     assert rows[0]["risk"] is None and 0 <= rows[1]["risk"] <= 1 and rows[2]["risk"] is None
 
 
+def test_production_realtime_trace_is_tone_fast_only(client, login, fake, queue, spy):
+    """운영 설정(legacy_rt 아님): 실시간은 tone_fast 하나, context 없음. 응답은 정상이고 trace에 원문이 없다."""
+    me, _, room = _room(fake, f"민수야 {HEAVY}", you_name="민수")
+    login(me)
+    draft = f"{SECRET} 안 돼요."
+    r = _hint(client, room, text=draft)
+    assert r.status_code == 200
+    body = r.json()
+    assert set(body) == {"seq", "hint", "trace_id"} and (body["hint"] is None or set(body["hint"]) == {"title", "detail"})
+    assert [c["model"] for c in spy.calls] == ["tone"]            # mock:tone = tone_fast의 mock, 맥락 호출 없음
+    [row] = _rows(fake, queue)
+    e = row["experts"]
+    assert e["gate"] is not None and e["status"] != "gated"        # 게이트 0.1을 통과해 전문가가 돌았다
+    assert [(x["expert_id"], x["role"]) for x in e["results"]] == [("tone_fast", "tone")]
+    assert SECRET not in json.dumps(row, ensure_ascii=False, default=str) and "안 돼요" not in json.dumps(row, ensure_ascii=False, default=str)
+
+
 @pytest.mark.legacy_rt
 def test_hint_trace_contents(client, login, fake, queue):
     me, _, room = _room(fake, HEAVY)

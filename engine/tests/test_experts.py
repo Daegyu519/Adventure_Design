@@ -99,12 +99,32 @@ def test_available_local_providers_follow_use_local_model():
 
 
 def test_tone_short_form_parses_and_malformed_falls_back():
-    t = ToneReading.model_validate({"r": [5, 0, 0, 5, 0], "c": 0.7})
+    t = ToneReading.model_validate({"r": [0.5, 0, 0, 0.5, 0], "c": 0.7})
     assert t.confidence == 0.7 and abs(sum(t.readings.values()) - 1) < 0.01
     assert t.readings["차갑게"] == 0.5 and t.readings["무난하게"] == 0.5
-    for bad in ({"r": ["a", 0, 0, 0, 0], "c": 0.5}, {"r": [1, 2], "c": 0.5}, {"r": [float("inf"), 0, 0, 0, 0]}):
+    ok = [0.5, 0, 0, 0.5, 0]
+    nan = float("nan")
+    for bad in ({"r": ["a", 0, 0, 0, 0], "c": 0.5}, {"r": [nan, 0, 0, 0, 0], "c": 0.5},
+                {"r": [float("inf"), 0, 0, 0, 0], "c": 0.5}, {"r": [-0.1, 0.5, 0, 0, 0], "c": 0.5},
+                {"r": [1.5, 0, 0, 0, 0], "c": 0.5}, {"r": [True, 0, 0, 0, 0], "c": 0.5},
+                {"r": ["0.5", 0, 0, 0.5, 0], "c": 0.5}, {"r": ok}, {"r": ok, "c": None}, {"r": ok, "c": "0.5"},
+                {"r": ok, "c": 1.5}, {"r": ok, "c": nan}, {"r": ok, "c": True}, {"r": [0, 0, 0, 0, 0], "c": 0.5},
+                {"r": [1, 2, 3, 4], "c": 0.5}, {"r": [0.1] * 6, "c": 0.5}, {"r": "abcde", "c": 0.5}):
         with pytest.raises(ValidationError):
             ToneReading.model_validate(bad)
+    # 긴 형식은 그대로
+    assert ToneReading.model_validate({"readings": {"차갑게": 1}, "confidence": 0.9}).confidence == 0.9
+
+
+def test_gpu_down_realtime_abstains_without_nvidia(monkeypatch):
+    """운영 레지스트리(force_mock 아님)에서 USE_LOCAL_MODEL이 없으면 tone_fast는 기권한다. NVIDIA·mock으로 새지 않는다."""
+    monkeypatch.delenv("USE_LOCAL_MODEL", raising=False)
+    monkeypatch.delenv("NVIDIA_API_KEY", raising=False)
+    assert chains(CFG)["tone_fast"] == ["local_fast:gemma-3-4b-it", "mock:tone"]
+    reg = Registry.load(DEFAULT_MODELS_PATH, force_mock=False)
+    [expert] = reg.for_path("realtime", "tone")
+    with pytest.raises(NoResult):
+        asyncio.run(expert.run(_req(path="realtime"), time.monotonic() + 1))
 
 
 def test_no_gemini_in_any_chain():
