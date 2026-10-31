@@ -63,7 +63,7 @@
 | 작업 | 영역 | 메모 |
 |---|---|---|
 | T-18 두 번째 말투 전문가(로컬 SEED) | 엔진 | T-12 완료. 로컬 모델은 Ollama |
-| T-29 엔진 배포 | 배포 | T-24 완료. Cloudflare Tunnel 등, 계정이 필요할 수 있음 **[사람]** |
+| T-29 엔진 배포 | 배포 | T-24 완료. Cloudflare Tunnel 등, 계정이 필요할 수 있음 **[사람]**. 준비물은 만들어 둠: README "배포" |
 | T-33 헤지 요청 | 엔진 (선택) | T-13 완료 |
 | T-32 디스코드 앱 | 엔진 (선택) | T-21, T-24 완료 |
 | T-02 Supabase dev 연결 | DB | **[사람]** 계정·키 |
@@ -98,7 +98,8 @@ T-02 뒤에: T-07-live, T-08-live, T-09a-live, T-09b-live, T-09c-live, T-09d-liv
    - Auth → Email Templates → Magic Link 본문에 `{{ .Token }}`(앱은 6자리 코드로 로그인한다). 기본 메일 한도가 작으니 계정 2개로만 확인.
    - 루트 `.env`(`.env.example` 복사): `SUPABASE_URL`, `SUPABASE_DB_URL`, `HOOK_SECRET`(`openssl rand -hex 32`), `MIRROR_SECRET`(32바이트 이상). `apps/mobile/.env`(`apps/mobile/.env.example` 복사): `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`, `EXPO_PUBLIC_ENGINE_URL`.
    - DB 웹훅은 `README.md`의 "dev 웹훅 연결" 순서(T-10-live).
-2. **`NVIDIA_API_KEY`** (build.nvidia.com, `nvapi-`로 시작) — 없으면 그 모델은 쓰이지 않고(시작 경고·`/health` down) 기권한다. 로컬 시연은 `FORCE_MOCK=1`.
+2. **T-29 배포 자원** — 서버/VM, Cloudflare 계정+도메인, pilot Supabase 프로젝트. 순서는 README "배포".
+   **`NVIDIA_API_KEY`** (build.nvidia.com, `nvapi-`로 시작) — 없으면 그 모델은 쓰이지 않고(시작 경고·`/health` down) 기권한다. 로컬 시연은 `FORCE_MOCK=1`.
 3. **T-16 라벨** — 같은 문장, 다른 맥락 30쌍. 두 사람이 각자 블라인드로 라벨한 뒤 합의.
 4. 나중에: Expo 계정(EAS 빌드), Firebase 프로젝트(Android FCM `google-services.json`), 웹 푸시 VAPID 키(`npx web-push generate-vapid-keys`; 개인키는 엔진 `.env`, 공개키는 `apps/mobile/.env`), 선택으로 Apple Developer(네이티브 iOS를 할 때만. 기본 아이폰 경로는 웹 + 웹 푸시).
 

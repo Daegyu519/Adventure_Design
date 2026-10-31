@@ -95,7 +95,7 @@
 
 | ID | 작업 | 영역 | 선행 | 완료 기준 | 상태 |
 |---|---|---|---|---|---|
-| T-29 | 엔진 배포: Dockerfile, 서버(학교 서버 또는 VM), 공개 HTTPS(Cloudflare Tunnel 등), pilot Supabase로 전환 | 배포 | T-24 | 컨테이너 실행, 외부 네트워크에서 `/health` 200, 웹훅 수신, uvicorn 한 프로세스(`--workers 1`), `MIRROR_SECRET` 필수, `/health`에서 `nvidia:*` up 확인(한도·큐·잠금이 프로세스 메모리), 바깥(Cloudflare)에서도 요청 본문 64 KB 제한 | 대기 |
+| T-29 | 엔진 배포: Dockerfile, 서버(학교 서버 또는 VM), 공개 HTTPS(Cloudflare Tunnel 등), pilot Supabase로 전환 | 배포 | T-24 | 컨테이너 실행, 외부 네트워크에서 `/health` 200, 웹훅 수신, uvicorn 한 프로세스(`--workers 1`), `MIRROR_SECRET` 필수, `/health`에서 `nvidia:*` up 확인(한도·큐·잠금이 프로세스 메모리), 바깥(Cloudflare)에서도 요청 본문 64 KB 제한. 준비: `engine/Dockerfile`(비root, uv.lock frozen, workers 1, MIRROR_SECRET 엔트리포인트 가드), `deploy/cloudflared/config.example.yml`, `deploy/compose.yml`, `scripts/deploy-smoke`, README "배포"(환경 변수 표·터널 순서·64 KB 이중 방어) — 로컬 엔진에 smoke 통과(nvidia는 키 없어 down). Docker 빌드는 Docker 없는 맥이라 미확인. 사람이 해야 함: 서버/VM, Cloudflare 계정+도메인, pilot Supabase 프로젝트, NVIDIA 키 | 대기 |
 | T-30 | 웹 빌드 배포(`npx expo export --platform web`, HTTPS, 웹 푸시 서비스 워커 포함), Android = EAS preview APK 배포, iOS 네이티브(TestFlight) = 선택(Apple 개발자 계정 필요) | 배포 | T-22, T-28a, T-28b | 참가자가 링크·APK로 접속, 아이폰은 홈 화면에 추가해서 실행, 배포 빌드에서 `engine.isMock === false` 확인 | 대기 |
 | T-31 | 파일럿: 동의서, 10~15쌍 + 팀 그룹방 모집, 1주 운영, 이벤트 집계(알림 수 변화, 고친 비율) | 공통 | T-29, T-30 | 집계표와 발표용 그래프 | 대기 |
 

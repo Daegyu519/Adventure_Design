@@ -1,0 +1,15 @@
+# 서버에서:  docker compose -f deploy/compose.yml up -d --build
+# 호스트 경로(ENV_FILE, CLOUDFLARED_DIR)는 저장소 밖에 둔다. 값은 git에 없다.
+services:
+  engine:
+    build: ../engine
+    env_file: ${ENV_FILE:?set ENV_FILE=/etc/tone/engine.env}
+    restart: unless-stopped
+    expose: ["8000"]          # 공개 포트 없음: 바깥은 터널로만
+    # workers=1 고정(Dockerfile CMD). 복제본을 늘리지 않는다.
+  cloudflared:
+    image: cloudflare/cloudflared:2025.8.1
+    command: tunnel --config /etc/cloudflared/config.yml run
+    volumes: ["${CLOUDFLARED_DIR:?set CLOUDFLARED_DIR=/etc/tone/cloudflared}:/etc/cloudflared:ro"]
+    restart: unless-stopped
+    depends_on: [engine]

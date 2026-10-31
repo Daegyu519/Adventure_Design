@@ -1,0 +1,8 @@
+# cp config.example.yml ~/.cloudflared/config.yml 후 <...> 를 채운다. 자격 증명 JSON은 git에 넣지 않는다.
+tunnel: <TUNNEL_UUID>
+credentials-file: /etc/cloudflared/<TUNNEL_UUID>.json   # compose에서는 /etc/cloudflared 로 마운트
+
+ingress:
+  - hostname: <engine.example.com>
+    service: http://localhost:8000    # compose에서는 http://engine:8000
+  - service: http_status:404
