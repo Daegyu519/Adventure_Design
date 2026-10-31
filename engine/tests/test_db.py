@@ -114,10 +114,10 @@ def test_apply_feedback(world):
         m = [await w(seed.add_message(room, a, f"응{i}")) for i in range(5)]
         tomorrow = NOW + timedelta(days=1)
 
-        def fb(reporter, message_id, *, usable=True, to_sender=True, strength=2, feeling="성의없게"):
+        def fb(reporter, message_id, *, usable=True, strength=2, feeling="성의없게"):
             pats = [FeedbackPattern(trigger="짧은 답", feeling=feeling, strength=strength)] if usable else []
             return FeedbackWrite(room_id=room, reporter_id=reporter, message_id=message_id, usable=usable,
-                                 patterns=pats, to_sender=to_sender, active_from=tomorrow)
+                                 patterns=pats, active_from=tomorrow)
 
         async def rows(*tables):
             return [await w(seed.rows(t)) for t in tables]
@@ -140,21 +140,22 @@ def test_apply_feedback(world):
         assert await repo.apply_feedback(fb(b, m[0])) is False
         assert await rows(*TABLES) == before
 
-        # 같은 신고자가 다른 메시지로 되풀이해도 전체 수는 서로 다른 신고자 수
+        # 같은 신고자가 다른 메시지로 되풀이해도 전체 수·보낸 사람 수 모두 서로 다른 신고자 수
         for mid in m[1:]:
-            assert await repo.apply_feedback(fb(b, mid, to_sender=False)) is True
+            assert await repo.apply_feedback(fb(b, mid)) is True
         assert await repo.global_patterns() == {"짧은 답": 1}
+        assert (await repo.sender_patterns(a, "팀원", tomorrow))["짧은 답"]["count"] == 1
 
-        # 다른 신고자, to_sender=False → 전체만 +1, 보낸 사람 패턴은 그대로
-        sp_before = await w(seed.rows("tone.sender_patterns"))
-        assert await repo.apply_feedback(fb(c, m[0], to_sender=False)) is True
+        # 다른 신고자 → 전체·보낸 사람 둘 다 +1, strength 누적 평균
+        assert await repo.apply_feedback(fb(c, m[0], strength=3)) is True
         assert await repo.global_patterns() == {"짧은 답": 2}
-        assert await w(seed.rows("tone.sender_patterns")) == sp_before
-
-        # 또 다른 신고자, to_sender=True → count + 1, strength 누적 평균, feeling은 새 값
-        assert await repo.apply_feedback(fb(d, m[1], strength=3, feeling="차갑게")) is True
         assert await repo.sender_patterns(a, "팀원", tomorrow) == {
-            "짧은 답": {"count": 2, "strength": 2.5, "feeling": "차갑게"}}
+            "짧은 답": {"count": 2, "strength": 2.5, "feeling": "성의없게"}}
+
+        # 또 다른 신고자 → count + 1, feeling은 새 값
+        assert await repo.apply_feedback(fb(d, m[1], strength=1, feeling="차갑게")) is True
+        assert await repo.sender_patterns(a, "팀원", tomorrow) == {
+            "짧은 답": {"count": 3, "strength": 2.0, "feeling": "차갑게"}}
         assert await repo.global_patterns() == {"짧은 답": 3}
 
         # usable=False → feedback_log만(pattern_count 0), 패턴 표는 그대로
@@ -177,7 +178,7 @@ def test_weekly_feedback_count(world):
         def fb(room_id, reporter, message_id, usable=True):
             pats = [FeedbackPattern(trigger="짧은 답", feeling="차갑게")] if usable else []
             return FeedbackWrite(room_id=room_id, reporter_id=reporter, message_id=message_id, usable=usable,
-                                 patterns=pats, to_sender=True, active_from=NOW)
+                                 patterns=pats, active_from=NOW)
 
         await repo.apply_feedback(fb(room, b, m1))
         await repo.apply_feedback(fb(room, c, m1))
@@ -315,7 +316,7 @@ def test_check_domains(world):
         def fb(i, *, trigger="짧은 답", feeling="차갑게", strength=1):
             pat = FeedbackPattern.model_construct(trigger=trigger, feeling=feeling, strength=strength)
             return FeedbackWrite(room_id=room, reporter_id=b, message_id=msgs[i], usable=True, patterns=[pat],
-                                 to_sender=True, active_from=NOW)
+                                 active_from=NOW)
 
         bad = [
             lambda: repo.insert_trace(TraceRow(uuid4(), "realtime", a, room, {}, None, False, 1)),  # path는 hint|detail|mirror
@@ -346,14 +347,14 @@ def test_rereport_keeps_active_pattern(world):
         await w(seed.add_sender_pattern(a, "팀원", "짧은 답", count=1, strength=2.0, feeling="성의없게",
                                         active_from=YESTERDAY))
         m1, m2 = [await w(seed.add_message(room, a, t)) for t in ("응", "ㅇㅇ")]
-        assert await repo.apply_feedback(FeedbackWrite(room, b, m1, True, [pat(strength=3)], True, TOMORROW))
+        assert await repo.apply_feedback(FeedbackWrite(room, b, m1, True, [pat(strength=3)], TOMORROW))
         assert len(await w(seed.rows("tone.sender_patterns"))) == 2
         # 재신고가 어제부터 켜진 패턴을 끄거나 바꾸지 않는다
         assert await repo.sender_patterns(a, "팀원", NOW) == {"짧은 답": {"count": 1, "strength": 2.0, "feeling": "성의없게"}}
         assert await repo.sender_patterns(a, "팀원", TOMORROW) == {
             "짧은 답": {"count": 2, "strength": 2.5, "feeling": "차갑게"}}
         # 같은 날 한 번 더 → 내일 행에 쌓인다(행은 여전히 2개)
-        assert await repo.apply_feedback(FeedbackWrite(room, c, m2, True, [pat(feeling="화나게", strength=1)], True,
+        assert await repo.apply_feedback(FeedbackWrite(room, c, m2, True, [pat(feeling="화나게", strength=1)],
                                                        TOMORROW))
         rows = await w(seed.rows("tone.sender_patterns"))
         assert sorted((r["active_from"], r["count"], r["strength"]) for r in rows) == [
@@ -380,37 +381,37 @@ def test_sender_patterns_weighted_read(world):
 def test_apply_feedback_derives_sender_and_relation(world):
     async def body(repo, seed):
         assert {f.name for f in dataclasses.fields(FeedbackWrite)} == {
-            "room_id", "reporter_id", "message_id", "usable", "patterns", "to_sender", "active_from"}
+            "room_id", "reporter_id", "message_id", "usable", "patterns", "active_from"}
         a, b, c, room = await trio(seed, "친구")
         other = await w(seed.add_room("group", "팀원", [a, b, c]))
         mine, elsewhere = await w(seed.add_message(room, a, "응")), await w(seed.add_message(other, a, "응"))
         for message_id in (elsewhere, 10**12):     # 다른 방의 메시지, 없는 메시지
             before = await snapshot(seed)
             with pytest.raises(ValueError, match="^unknown message$"):
-                await repo.apply_feedback(FeedbackWrite(room, b, message_id, True, [pat()], True, TOMORROW))
+                await repo.apply_feedback(FeedbackWrite(room, b, message_id, True, [pat()], TOMORROW))
             assert await snapshot(seed) == before
-        assert await repo.apply_feedback(FeedbackWrite(room, b, mine, True, [pat()], True, TOMORROW))
+        assert await repo.apply_feedback(FeedbackWrite(room, b, mine, True, [pat()], TOMORROW))
         [row] = await w(seed.rows("tone.sender_patterns"))
         assert (row["sender_id"], row["relation"], row["trigger"]) == (a, "친구", "짧은 답")
     world(body)
 
 
-def test_apply_feedback_group_rule_in_sql(world):
-    """호출자가 to_sender=True를 넘겨도 1:1·2명 그룹방이면 sender_patterns는 그대로, global_patterns만 는다."""
+def test_apply_feedback_every_room_feeds_sender(world):
+    """규칙 14(2026-10-31 변경): 1:1·2명 그룹방 하소연도 sender_patterns와 global_patterns 모두에 들어간다."""
     async def body(repo, seed):
         a, b, c, room = await trio(seed)
         direct = await w(seed.add_room("direct", "팀원", [a, b]))
         pair = await w(seed.add_room("group", "팀원", [a, c]))
         for n, (room_id, reporter) in enumerate([(direct, b), (pair, c)], start=1):
             mid = await w(seed.add_message(room_id, a, "응"))
-            assert await repo.apply_feedback(FeedbackWrite(room_id, reporter, mid, True, [pat()], True, TOMORROW))
-            assert await w(seed.rows("tone.sender_patterns")) == []
+            assert await repo.apply_feedback(FeedbackWrite(room_id, reporter, mid, True, [pat()], TOMORROW))
+            assert [r["count"] for r in await w(seed.rows("tone.sender_patterns"))] == [n]   # 같은 행에 쌓인다
             assert await repo.global_patterns() == {"짧은 답": n}
             assert len(await w(seed.rows("tone.feedback_log"))) == n
         d = await w(seed.add_user("소연"))
         mid = await w(seed.add_message(room, a, "응"))
-        assert await repo.apply_feedback(FeedbackWrite(room, d, mid, True, [pat()], True, TOMORROW))
-        assert len(await w(seed.rows("tone.sender_patterns"))) == 1
+        assert await repo.apply_feedback(FeedbackWrite(room, d, mid, True, [pat()], TOMORROW))
+        assert [r["count"] for r in await w(seed.rows("tone.sender_patterns"))] == [3]
     world(body)
 
 
@@ -431,7 +432,7 @@ def test_apply_feedback_rejects_bad_values(world, bad):
         before = await snapshot(seed)
         for usable in (True, False):      # usable=False여도 패턴이 있으면 검사한다
             with pytest.raises(ValueError) as exc:
-                await repo.apply_feedback(FeedbackWrite(room, b, mid, usable, [pat("마침표로 끝남"), p], True, TOMORROW))
+                await repo.apply_feedback(FeedbackWrite(room, b, mid, usable, [pat("마침표로 끝남"), p], TOMORROW))
             assert str(exc.value) == message
             assert str(next(iter(change.values()))) not in repr(exc.value)
         assert await snapshot(seed) == before
@@ -449,8 +450,8 @@ def test_apply_feedback_no_deadlock_with_reversed_triggers(world, request):
             r1, r2 = [await w(seed.add_user("신고자")) for _ in range(2)]
             m1, m2 = [await w(seed.add_message(room, a, "응")) for _ in range(2)]
             await asyncio.gather(
-                repo.apply_feedback(FeedbackWrite(room, r1, m1, True, pats, True, TOMORROW)),
-                repo.apply_feedback(FeedbackWrite(room, r2, m2, True, pats[::-1], True, TOMORROW)))
+                repo.apply_feedback(FeedbackWrite(room, r1, m1, True, pats, TOMORROW)),
+                repo.apply_feedback(FeedbackWrite(room, r2, m2, True, pats[::-1], TOMORROW)))
         assert await repo.global_patterns() == {"짧은 답": 40, "마침표로 끝남": 40}
         assert await repo.sender_patterns(a, "팀원", TOMORROW) == {
             "짧은 답": {"count": 40, "strength": 2.0, "feeling": "차갑게"},
@@ -466,21 +467,21 @@ def test_sender_patterns_count_distinct_reporters(world):
         for i in range(5):    # b가 다섯 번, 활성 시각도 다르게
             mid = await w(seed.add_message(room, a, "응"))
             at = TOMORROW + timedelta(days=i)
-            assert await repo.apply_feedback(FeedbackWrite(room, b, mid, True, [pat(strength=1 + i % 3)], True, at))
+            assert await repo.apply_feedback(FeedbackWrite(room, b, mid, True, [pat(strength=1 + i % 3)], at))
         later = TOMORROW + timedelta(days=9)
         assert await repo.sender_patterns(a, "팀원", later) == {"짧은 답": {"count": 1, "strength": 1.0, "feeling": "차갑게"}}
         assert len(await w(seed.rows("tone.sender_patterns"))) == 1
         for who in (c, d):
             mid = await w(seed.add_message(room, a, "응"))
-            assert await repo.apply_feedback(FeedbackWrite(room, who, mid, True, [pat()], True, TOMORROW))
+            assert await repo.apply_feedback(FeedbackWrite(room, who, mid, True, [pat()], TOMORROW))
         assert (await repo.sender_patterns(a, "팀원", later))["짧은 답"]["count"] == 3
         assert sorted(r["reporter_id"] for r in await w(seed.rows("tone.sender_pattern_reporters"))) == sorted([b, c, d])
         # 같은 신고자라도 다른 관계·다른 보낸 사람이면 따로 센다
         friends = await w(seed.add_room("group", "친구", [a, b, c]))
         await repo.apply_feedback(FeedbackWrite(friends, b, await w(seed.add_message(friends, a, "응")), True, [pat()],
-                                                True, TOMORROW))
+                                                TOMORROW))
         await repo.apply_feedback(FeedbackWrite(room, b, await w(seed.add_message(room, c, "응")), True, [pat()],
-                                                True, TOMORROW))
+                                                TOMORROW))
         assert (await repo.sender_patterns(a, "친구", later))["짧은 답"]["count"] == 1
         assert (await repo.sender_patterns(c, "팀원", later))["짧은 답"]["count"] == 1
     world(body)
@@ -491,7 +492,7 @@ def test_has_feedback(world):
         a, b, c, room = await trio(seed)
         m = await w(seed.add_message(room, a, "응"))
         assert await repo.has_feedback(b, m) is False
-        await repo.apply_feedback(FeedbackWrite(room, b, m, False, [], False, TOMORROW))
+        await repo.apply_feedback(FeedbackWrite(room, b, m, False, [], TOMORROW))
         assert await repo.has_feedback(b, m) is True
         assert await repo.has_feedback(c, m) is False
     world(body)

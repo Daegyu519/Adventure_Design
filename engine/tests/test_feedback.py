@@ -1,5 +1,5 @@
 """T-24 털어놓기: POST /v1/feedback → 가린 하소연을 메모리 큐에 → 202 → 작업이 L4 → sender_patterns·global_patterns.
-하소연은 DB·로그·trace 어디에도 남지 않고, 큐에는 가린 문장만 메모리에 잠깐 있다(규칙 5). 1:1·2명 방은 global에만(규칙 14).
+하소연은 DB·로그·trace 어디에도 남지 않고, 큐에는 가린 문장만 메모리에 잠깐 있다(규칙 5). 1:1·2명 방도 sender·global 모두(규칙 14).
 보낸 사람 패턴의 count는 서로 다른 신고자 수다(규칙 7)."""
 import ast
 import asyncio
@@ -11,7 +11,7 @@ from datetime import date, datetime, timedelta, timezone
 import asyncpg
 import pytest
 
-from app.db import GROUP_MIN_MEMBERS, KST, FeedbackWrite, PgRepo, week_start
+from app.db import KST, FeedbackWrite, PgRepo, week_start
 from harness.schemas import TRIGGERS, FeedbackPattern
 from jobs import feedback as job
 from jobs.queue import JobQueue, _Job
@@ -232,17 +232,16 @@ def test_group_feedback_to_sender_from_next_day(fake, registry):
     assert asyncio.run(fake.sender_patterns(minsu, "팀원", MIDNIGHT))["짧은 답"]["count"] == 1
 
 
-def test_direct_feedback_global_only(fake, registry):
+def test_direct_feedback_reaches_sender_and_global(fake, registry):
     (minsu, jieun), room, mid = group(fake, 2, kind="direct", relation="친구")
     report(fake, registry, room, jieun, mid)
-    assert fake.sender_pats == {} and fake.global_pats == {"짧은 답": 1}
+    assert set(fake.sender_pats) == {(minsu, "친구", "짧은 답", MIDNIGHT)} and fake.global_pats == {"짧은 답": 1}
 
 
-def test_two_member_group_counts_as_direct(fake, registry):
-    assert GROUP_MIN_MEMBERS == 3
+def test_two_member_group_reaches_sender_and_global(fake, registry):
     (minsu, jieun), room, mid = group(fake, 2)
     report(fake, registry, room, jieun, mid)
-    assert fake.sender_pats == {} and fake.global_pats == {"짧은 답": 1}
+    assert set(fake.sender_pats) == {(minsu, "팀원", "짧은 답", MIDNIGHT)} and fake.global_pats == {"짧은 답": 1}
 
 
 def test_weekly_cap(fake, registry, spy):
@@ -356,16 +355,16 @@ def test_same_day_rereport_stacks_in_one_row(fake, registry):
     assert key == (minsu, "팀원", "짧은 답", MIDNIGHT) and row.count == 2
 
 
-def test_caller_cannot_force_sender_pattern(fake):
-    """run()을 거치지 않고 to_sender=True를 직접 넘겨도 1:1·2명 방이면 sender_patterns는 그대로다(fake 경로)."""
+def test_every_room_kind_feeds_sender_pattern_direct_call(fake):
+    """run()을 거치지 않고 apply_feedback을 직접 불러도 1:1·2명 방이 sender·global 모두에 들어간다(fake 경로)."""
     minsu, jieun, haneul = (fake.add_user(n) for n in ("민수", "지은", "하늘"))
     direct = fake.add_room("direct", "친구", [minsu, jieun])
     pair_group = fake.add_room("group", "팀원", [minsu, haneul])
     pat = [FeedbackPattern(trigger="짧은 답", feeling="차갑게", strength=2)]
     for n, (room, reporter) in enumerate([(direct, jieun), (pair_group, haneul)], start=1):
         mid = fake.add_message(room, minsu, "ㅇㅇ")
-        assert asyncio.run(fake.apply_feedback(FeedbackWrite(room, reporter, mid, True, pat, True, MIDNIGHT)))
-        assert fake.sender_pats == {} and fake.global_pats == {"짧은 답": n}
+        assert asyncio.run(fake.apply_feedback(FeedbackWrite(room, reporter, mid, True, pat, MIDNIGHT)))
+        assert len(fake.sender_pats) == n and fake.global_pats == {"짧은 답": n}
 
 
 def test_bad_pattern_error_has_no_value(world, caplog):
@@ -377,7 +376,7 @@ def test_bad_pattern_error_has_no_value(world, caplog):
         for bad in (FeedbackPattern.model_construct(trigger=SECRET, feeling="차갑게", strength=1),
                     FeedbackPattern.model_construct(trigger="짧은 답", feeling=SECRET, strength=1)):
             with pytest.raises(ValueError) as exc:
-                await repo.apply_feedback(FeedbackWrite(room, jieun, mid, True, [bad], True, MIDNIGHT))
+                await repo.apply_feedback(FeedbackWrite(room, jieun, mid, True, [bad], MIDNIGHT))
             assert SECRET not in str(exc.value) and SECRET not in repr(exc.value)
             assert exc.value.__context__ is None and exc.value.__cause__ is None
         assert [await w(seed.rows(t)) for t in TABLES] == before

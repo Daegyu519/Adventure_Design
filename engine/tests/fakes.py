@@ -12,7 +12,7 @@ from itertools import count
 from typing import Any
 from uuid import UUID
 
-from app.db import GROUP_MIN_MEMBERS, FeedbackWrite, Msg, PushTarget, Room, SentMsg, TraceRow, check_patterns, week_start
+from app.db import FeedbackWrite, Msg, PushTarget, Room, SentMsg, TraceRow, check_patterns, week_start
 
 
 # DB CHECK 제약과 같은 값 범위(supabase/migrations). 어긋나면 운영처럼 실패한다.
@@ -213,7 +213,6 @@ class FakeRepo:
         if m is None or m.room_id != fb.room_id:
             raise ValueError("unknown message")
         room = self.rooms[fb.room_id]
-        to_sender = fb.to_sender and room["kind"] == "group" and len(self.members[fb.room_id]) >= GROUP_MIN_MEMBERS
         if any((f["reporter_id"], f["message_id"]) == (fb.reporter_id, fb.message_id) for f in self.feedback_log):
             return False
         self.feedback_log.append({"id": next(self._ids), "room_id": fb.room_id, "reporter_id": fb.reporter_id,
@@ -226,7 +225,7 @@ class FakeRepo:
                 self.pattern_reporters.add((p.trigger, fb.reporter_id))
                 self.global_pats[p.trigger] = self.global_pats.get(p.trigger, 0) + 1
             first = (m.sender_id, room["relation"], p.trigger, fb.reporter_id)
-            if to_sender and first not in self.sender_pattern_reporters:   # 서로 다른 신고자만 센다
+            if first not in self.sender_pattern_reporters:   # 서로 다른 신고자만 센다
                 self.sender_pattern_reporters.add(first)
                 key = (m.sender_id, room["relation"], p.trigger, fb.active_from)
                 old = self.sender_pats.get(key)
