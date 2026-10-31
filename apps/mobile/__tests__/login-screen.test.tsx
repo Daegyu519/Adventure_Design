@@ -22,7 +22,7 @@ async function setup() {
   return { root, field, button, type, press, texts };
 }
 
-const SENT = '메일로 받은 6자리 코드를 적어 주세요';
+const SENT = '메일로 받은 숫자 코드를 적어 주세요';
 
 beforeEach(() => {
   mockOtp.mockReset().mockResolvedValue({ error: null });
@@ -66,14 +66,23 @@ test('login: 코드는 공백을 지우고 verifyOtp(type email)로 확인한다
   expect(mockVerify).toHaveBeenCalledWith({ email: 'a@b.co', token: '123456', type: 'email' });
 });
 
-test('login: 6자리가 아니면 확인하지 않는다', async () => {
+test('login: 6~10자리 숫자가 아니면 확인하지 않는다', async () => {
   const { type, press, texts } = await setup();
   await type('이메일', 'a@b.co');
   await press('코드 받기');
   await type(SENT, '12345');
   await press('로그인');
   expect(mockVerify).not.toHaveBeenCalled();
-  expect(texts()).toContain('6자리');
+  expect(texts()).toContain('메일로 받은 숫자 코드를 그대로 적어 주세요');
+});
+
+test('login: Supabase 기본 8자리 코드도 그대로 확인한다', async () => {
+  const { type, press } = await setup();
+  await type('이메일', 'a@b.co');
+  await press('코드 받기');
+  await type(SENT, '7977 8423');
+  await press('로그인');
+  expect(mockVerify).toHaveBeenCalledWith({ email: 'a@b.co', token: '79778423', type: 'email' });
 });
 
 test('login: 틀리거나 만료된 코드는 정해 둔 문구', async () => {
