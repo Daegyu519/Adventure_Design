@@ -50,7 +50,6 @@
 
 | 작업 | 브랜치 | 상태 |
 |---|---|---|
-| T-02 Supabase dev 연결 | `t02-supabase-dev` | 클라우드에 마이그레이션 8개 적용·실제 DB 타입 생성 끝, 대시보드 확인 2개(Realtime "Allow public access" 끄기, Magic Link `{{ .Token }}`) 기다림 |
 
 보류(paused): 없음.
 
