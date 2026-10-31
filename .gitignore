@@ -14,4 +14,4 @@ web-build/
 supabase/.temp/
 
 # 파일럿 로컬 값(커밋하지 않는다)
-.env.pilot
+.env.pilot*
