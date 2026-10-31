@@ -78,7 +78,7 @@
 | 4 | T-33 헤지 요청, T-32 디스코드 앱 (선택) | 다른 AI | 엔진 쪽, 필수 아님 |
 | — | **T-02 Supabase dev 프로젝트**, **T-16 라벨 30쌍** | **사람** | -live 확인 6개와 실제 평가(T-17-live·T-20)가 여기에 막혀 있다(5장) |
 
-Claude가 이어서 할 것: 단계 1 끝 리뷰는 반영까지 끝났다(P-04, P-04b, P-05). 남은 필수 6개는 사람 입력·계정이 먼저 필요하다: T-16(라벨), T-18·T-20(로컬 모델·실제 평가), T-29(서버·Cloudflare), T-30(웹 호스팅·Expo·Firebase), T-31(파일럿 모집). T-02 끝 — 이제 -live 확인(실제 계정)을 할 수 있다.
+Claude가 이어서 할 것: 단계 1 끝 리뷰는 반영까지 끝났다(P-04, P-04b, P-05). 실제 모델은 P-06(NVIDIA), 로컬 SEED는 P-07(학교 GPU, `scripts/gpu up`). 남은 필수 6개는 사람 입력·계정이 먼저 필요하다: T-16(라벨), T-18·T-20(로컬 모델·실제 평가), T-29(서버·Cloudflare), T-30(웹 호스팅·Expo·Firebase), T-31(파일럿 모집). T-02 끝 — 이제 -live 확인(실제 계정)을 할 수 있다.
 
 - T-15는 T-14·T-03b도 선행(완료). 힌트 설정(`tone_hint_on`)이 꺼져 있으면 `/v1/hint`를 보내지 않는 테스트를 T-15에서 쓴다(T-37이 저장만 한다).
 - T-22는 T-15와 T-21(완료) 뒤. T-25는 T-09b와 T-24(완료) 뒤.
@@ -198,6 +198,7 @@ flowchart LR
 
 ### 엔진 모델
 - 모델은 laguna-xs-2.1(빠른 쪽)과 nemotron-3.5-bolt-e4b(깊은 쪽·폴백)로 — 이 NVIDIA 계정에서 실제 프롬프트로 JSON이 통과하고 지연이 가장 짧았다(1~3초). deepseek-v4.1-flash·kimi·mistral-large-4는 응답 없음, 추론 모델은 생각 토큰 때문에 3~15초(공급자에 모델별 추가 요청 옵션이 없어 `enable_thinking:false`는 못 씀). 지연은 1~3초, 부하 때 4~12초. **실시간 힌트는 지금 사실상 꺼짐(전문가가 1.2초 안에 못 옴 → 기권)**(P-06). 실제 평가는 8쌍(n=8)이라 게이트가 아니다. GitHub Models는 무료 등급 데이터 약관 미확인이라 사슬에서 뺐다.
+- 로컬 SEED(tone_hcx)는 학교 GPU 서버(P100, 공유 컨테이너)의 llama.cpp `llama-server`에서, 쓸 때만 `scripts/gpu up`/`down`(ssh 터널, 바깥 포트 없음, 접속 정보는 `~/.ssh/config`에만). Ollama 최신판은 P100에 드라이버 550+가 필요해 CPU로 떨어져서 뺐다(서버 535). 실시간 기권은 0.31→0.06으로 줄지만 재현율은 0.12 그대로 — 1.5B 혼자는 맥락을 못 읽는다(P-07).
 - 실제 대화(가린 문장)는 NVIDIA API 카탈로그 무료 등급으로 간다 — 파일럿을 위한 의도된 결정(원 설계 ARCHITECTURE의 공급자 선택), [NVIDIA API Trial 약관](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf)(내용은 사람이 확인 필요), Masker가 이름·개인정보를 먼저 가린다(규칙 16).
 
 ### 앱
@@ -261,6 +262,8 @@ flowchart LR
 
 ## 9. 미뤄 둔 것 (파일럿 전에 중요한 것만)
 
+- (P-07) 실시간 재현율이 낮다(8쌍 중 1): 맥락 전문가(NVIDIA)가 1.2초 안에 못 와서 SEED 1.5B 혼자 판단한다. 후보 — 학교 GPU의 빈 카드에 더 큰 로컬 맥락 모델(7~14B Q4), nemotron `enable_thinking: false`(공급자에 모델별 요청 옵션 추가, ~1.1초), 실시간 게이트 기준값 조정. 대조 세트 30쌍(T-16) 뒤에 비교해서 고른다.
+- (P-07) 엔진 시작 때 JWKS 미리 받기가 1초 제한에 걸린다(eu-west-1, 첫 TLS 연결). 첫 요청 때 다시 받으니 로그인은 된다. 서울 pilot 프로젝트면 사라질 것.
 - (P-06) deepseek-v4.1-flash(500·시간 초과)·kimi-k3(카탈로그에 없음)·kimi-k2.6(404)·mistral-large-4(시간 초과)를 나중에 다시 확인(`GET /v1/models` + models.yaml로 5역할 측정). 실시간 말투 전문가가 1.2초에 못 맞춰 기권이 많다 — 모델별 요청 옵션(`chat_template_kwargs: {enable_thinking: false}`로 nemotron 추론 끄기, 측정 ~1.1초)을 공급자에 더할지, 더 빠른 모델/로컬 모델을 쓸지 사람이 결정.
 - (T-02 뒤) 초대·멤버 상한의 동시성은 추론만 했다 — 실제 Postgres에서 경쟁 테스트. `_platform.sql`을 실제 프로젝트에서 재확인(Realtime을 먼저 켰으면 `alter publication` 실패). Storage 업로드는 `upsert: false`.
 - (T-02 뒤) 초대 코드 시도 횟수 제한은 공개 가입 전에 더한다.

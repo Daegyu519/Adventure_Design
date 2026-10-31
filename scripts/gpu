@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# 사용법: scripts/gpu up|down|status
+# 로컬 SEED 1.5B(tone_hcx)를 학교 GPU 서버에서 쓸 때만 켠다.
+#   up:     서버에 llama-server를 띄우고(가장 한가한 GPU 1장) 이 컴퓨터 127.0.0.1:11434로 ssh 터널을 연다.
+#   down:   터널을 닫고 서버 프로세스를 끈다(공유 GPU 반납).
+#   status: 서버·터널·GPU 상태.
+# 엔진은 USE_LOCAL_MODEL=1일 때 models.yaml의 local(base_url http://localhost:11434/v1)을 쓴다.
+# 접속은 ~/.ssh/config의 Host(기본 tone-gpu, GPU_SSH로 바꿈), 키 인증만. 서버 한 번 준비는 README "학교 GPU 서버".
+set -euo pipefail
+H="${GPU_SSH:-tone-gpu}"; PORT="${GPU_PORT:-11434}"; DIR="$(printf %q "${GPU_DIR:-/root/tone-chat-llm}")"
+case "$PORT" in ''|*[!0-9]*) echo "GPU_PORT must be a number" >&2; exit 2 ;; esac
+SOCK="${TMPDIR:-/tmp}/tone-gpu-${USER:-me}.sock"
+MODEL_ID=naver-hyperclovax/HyperCLOVAX-SEED-Text-Instruct-1.5B   # models.yaml tone_hcx의 local: 뒤 이름과 같아야 한다
+remote() { ssh -o BatchMode=yes -o ConnectTimeout=10 "$H" "$@"; }
+tunnel_up() { [ -S "$SOCK" ] && ssh -S "$SOCK" -O check "$H" 2>/dev/null; }
+
+case "${1:-}" in
+up)
+  # llama-server는 서버 컨테이너의 127.0.0.1에만 연다(컨테이너는 자기 네트워크 네임스페이스, 바깥 포트로 내보내지 않음).
+  # 기본 로그 수준은 요청 문장을 남기지 않는다 — -v·--verbose·--log-verbosity를 붙이지 않는다(문장이 server.log에 남음).
+  remote "bash -s" <<EOF
+set -e
+cd $DIR
+if ! tmux has-session -t tone-llm 2>/dev/null; then
+  G=\$(nvidia-smi --query-gpu=index,memory.used --format=csv,noheader,nounits | sort -t, -k2 -n | head -1 | cut -d, -f1)
+  tmux new-session -d -s tone-llm "CUDA_VISIBLE_DEVICES=\$G ./llama.cpp/build/bin/llama-server -m hcx-seed-1.5b-q4_k_m.gguf --host 127.0.0.1 --port $PORT -ngl 99 -np 4 -c 16384 --no-slots --alias $MODEL_ID > server.log 2>&1"
+  echo "server started on GPU \$G"
+fi
+EOF
+  # 남은 소켓 파일이 있으면 지운다(없으면 -M이 멀티플렉싱 없이 터널을 열어 down이 못 닫는다)
+  tunnel_up || { rm -f "$SOCK"; ssh -f -N -M -S "$SOCK" -o BatchMode=yes -o ExitOnForwardFailure=yes -L "127.0.0.1:$PORT:127.0.0.1:$PORT" "$H"; }
+  for _ in $(seq 60); do
+    if curl -sf "http://127.0.0.1:$PORT/health" >/dev/null; then
+      echo "ready: http://127.0.0.1:$PORT/v1  (engine: USE_LOCAL_MODEL=1)"; exit 0
+    fi
+    sleep 1
+  done
+  echo "llama-server not ready after 60s: scripts/gpu status, server log $DIR/server.log" >&2; exit 1 ;;
+down)
+  tunnel_up && ssh -S "$SOCK" -O exit "$H" 2>/dev/null || true
+  remote "tmux kill-session -t tone-llm 2>/dev/null || true"
+  echo "down: tunnel closed, GPU released" ;;
+status)
+  remote "tmux has-session -t tone-llm 2>/dev/null && echo 'server: running' || echo 'server: stopped'; nvidia-smi --query-gpu=index,memory.used,utilization.gpu --format=csv,noheader"
+  if tunnel_up; then echo "tunnel: open (127.0.0.1:$PORT)"; else echo "tunnel: closed"; fi
+  curl -sf "http://127.0.0.1:$PORT/health" >/dev/null && echo "local :$PORT: ok" || echo "local :$PORT: not answering" ;;
+*) echo "usage: $0 up|down|status" >&2; exit 2 ;;
+esac

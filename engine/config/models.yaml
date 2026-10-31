@@ -18,7 +18,7 @@ providers:
     api_key_env: GITHUB_TOKEN
     rpm: 10            # 하루 50~150회, 요청당 입력 8K 토큰
   local:
-    base_url: http://localhost:11434/v1  # Ollama. vLLM이면 http://localhost:8000/v1
+    base_url: http://localhost:11434/v1  # scripts/gpu up(학교 GPU llama-server 터널) 또는 Ollama. vLLM이면 http://localhost:8000/v1
     api_key_env: LOCAL_API_KEY           # 비어 있어도 됨
     rpm: 600
     allow_no_key: true
