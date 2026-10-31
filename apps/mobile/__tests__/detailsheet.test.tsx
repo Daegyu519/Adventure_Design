@@ -8,6 +8,11 @@ import type { DetailRes } from '../lib/engine';
 jest.mock('lucide-react-native/icons/check', () => () => null);
 jest.mock('../lib/motion', () => ({ MOTION_MS: 200, useReducedMotion: () => true }));
 jest.mock('../lib/supabase', () => ({ supabase: null }));
+// 시트 안 안내는 시트 자기 영역(Sheet의 useAnnounce)으로 간다: 화면의 say를 받지 않는다(AI-2).
+const mockSay = jest.fn();
+jest.mock('../lib/announce', () => ({ ...jest.requireActual('../lib/announce'), useAnnounce: () => ({ say: mockSay, region: null }) }));
+const mockFocusNode = jest.fn();
+jest.mock('../lib/focus', () => ({ ...jest.requireActual('../lib/focus'), focusNode: (...a: unknown[]) => mockFocusNode(...a) }));
 const mockDetail = jest.fn();
 jest.mock('../lib/engine', () => ({ ...jest.requireActual('../lib/engine'), engine: { isMock: true, detail: (...a: unknown[]) => mockDetail(...a) } }));
 
@@ -32,7 +37,7 @@ const textOf = (n: TestNode): string => (typeof n === 'string' ? n : n.children.
 const TEXT = '안 돼요. 다들 맞춰서 하는 중이에요.';
 
 async function setup(over: Record<string, unknown> = {}) {
-  const p = { visible: true, roomId: 'r1', text: TEXT, replyTo: null as number | null, hintTitle: '차갑게 느껴질 수도 있어요' as string | null, say: jest.fn(), onClose: jest.fn(), onApply: jest.fn(), onSendAsIs: jest.fn(), ...over };
+  const p = { visible: true, roomId: 'r1', text: TEXT, replyTo: null as number | null, hintTitle: '차갑게 느껴질 수도 있어요' as string | null, onClose: jest.fn(), onApply: jest.fn(), onSendAsIs: jest.fn(), ...over };
   const root = createRoot();
   await act(async () => root.render(<DetailSheet {...p} />));
   const all = () => root.container.queryAll(() => true);
@@ -44,6 +49,8 @@ const flush = () => act(async () => void (await Promise.resolve()));
 
 beforeEach(() => {
   mockDetail.mockReset();
+  mockSay.mockReset();
+  mockFocusNode.mockReset();
   jest.replaceProperty(Platform, 'OS', 'android');
 });
 
@@ -62,7 +69,7 @@ test('열면 살펴보는 중 → 의도 없이 한 번 요청하고(9초) 결�
   expect(texts()).toContain('지킨 것: 거절하는 뜻');
   expect(texts()).toContain('바꾼 것: 이유를 더했어요');
   expect(texts()).toContain('틀릴 수도 있어요.');
-  expect(p.say.mock.calls.map((c: string[]) => c[0])).toEqual(['살펴보는 중', '살펴보기 결과가 나왔어요, 후보 2개']); // 요청마다 한 번, 결과는 개수와 함께 한 번
+  expect(mockSay.mock.calls.map((c: string[]) => c[0])).toEqual(['살펴보는 중', '살펴보기 결과가 나왔어요, 후보 2개']); // 요청마다 한 번, 결과는 개수와 함께 한 번
 });
 
 test('후보 문장은 바뀐 어절을 강조하는 DiffText로 읽힌다', async () => {
@@ -150,7 +157,7 @@ test('실패: 서버 글은 숨기고 고정 문구 + 다시 해 보기, 다시 
   await flush();
   expect(texts()).toContain('요청이 많아요. 잠시 뒤 다시 해 주세요.');
   expect(texts()).not.toContain('내부 사정');
-  expect(p.say.mock.calls.map((c: string[]) => c[0])).toEqual(['살펴보는 중']); // 오류 문구는 안드로이드·웹에서 role=alert가 읽는다
+  expect(mockSay.mock.calls.map((c: string[]) => c[0])).toEqual(['살펴보는 중']); // 오류 문구는 안드로이드·웹에서 role=alert가 읽는다
   mockDetail.mockResolvedValueOnce(res());
   await click(byLabel('다시 해 보기')[0] as never);
   expect(texts()).toContain('이유 없이 짧게 끊으면');
@@ -161,7 +168,7 @@ test('iOS: 실패 문구는 say로 한 번 읽는다', async () => {
   mockDetail.mockRejectedValue(new Error('x'));
   const { p } = await setup();
   await flush();
-  expect(p.say).toHaveBeenCalledWith('지금은 살펴보기 어려워요. 잠시 뒤 다시 해 주세요.');
+  expect(mockSay).toHaveBeenCalledWith('지금은 살펴보기 어려워요. 잠시 뒤 다시 해 주세요.');
 });
 
 test('iOS: 같은 오류가 다시 나도 다시 읽는다(다시 해 보기 뒤)', async () => {
@@ -170,7 +177,7 @@ test('iOS: 같은 오류가 다시 나도 다시 읽는다(다시 해 보기 뒤
   const { p, byLabel, click } = await setup();
   await flush();
   await click(byLabel('다시 해 보기')[0] as never);
-  const errs = p.say.mock.calls.filter((c: string[]) => c[0].startsWith('지금은 살펴보기')).length;
+  const errs = mockSay.mock.calls.filter((c: string[]) => c[0].startsWith('지금은 살펴보기')).length;
   expect(errs).toBe(2);
 });
 
@@ -209,7 +216,7 @@ test('칩 요청마다 살펴보는 중을 한 번 읽고, 받아 둔 응답을 
   mockDetail.mockResolvedValueOnce(res({ options: [] }));
   await click(byLabel('가볍게')[0] as never);
   await click(byLabel('가볍게')[0] as never); // 해제 → 캐시
-  const said = p.say.mock.calls.map((c: string[]) => c[0]);
+  const said = mockSay.mock.calls.map((c: string[]) => c[0]);
   expect(said).toEqual(['살펴보는 중', '살펴보기 결과가 나왔어요, 후보 2개', '살펴보는 중', '후보가 없어요', '후보를 바꿨어요']);
 });
 
@@ -230,4 +237,31 @@ test('보낼 글이 공백뿐이면 요청하지 않는다', async () => {
 test('닫혀 있으면 요청하지 않는다', async () => {
   await setup({ visible: false });
   expect(mockDetail).not.toHaveBeenCalled();
+});
+
+// 같은 오류로 또 실패하면 alert를 다시 붙여(key) 웹·안드로이드에서도 다시 읽힌다. 다시 해 보기가 성공하면 사라지는 버튼 대신 보낼 문장으로 포커스(T-22).
+test('같은 오류로 다시 실패하면 alert 글자를 새로 붙인다', async () => {
+  mockDetail.mockRejectedValue(new Error('x'));
+  const { root, byLabel, click } = await setup();
+  await flush();
+  const alert = () => root.container.queryAll((n) => n.props.accessibilityRole === 'alert')[0];
+  const first = alert();
+  await click(byLabel('다시 해 보기')[0] as never);
+  await flush();
+  expect(alert()).toBeDefined();
+  expect(alert()).not.toBe(first);
+});
+
+test('다시 해 보기가 성공하면 보낼 문장(detail-text)으로 포커스, 처음 성공에는 옮기지 않는다', async () => {
+  mockDetail.mockResolvedValueOnce(res());
+  await setup();
+  await flush();
+  expect(mockFocusNode).not.toHaveBeenCalled();
+  mockDetail.mockRejectedValueOnce(new Error('x')).mockResolvedValueOnce(res());
+  const second = await setup();
+  await flush();
+  await second.click(second.byLabel('다시 해 보기')[0] as never);
+  await flush();
+  expect(mockFocusNode).toHaveBeenCalledTimes(1);
+  expect((mockFocusNode.mock.calls[0][0] as { current: { props?: unknown } | null }).current).not.toBeNull();
 });

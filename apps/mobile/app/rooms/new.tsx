@@ -1,7 +1,7 @@
 import { Redirect, useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import ArrowLeft from 'lucide-react-native/icons/arrow-left';
 import { useEffect, useRef, useState, type ComponentRef } from 'react';
-import { AccessibilityInfo, findNodeHandle, KeyboardAvoidingView, Platform, Pressable, ScrollView, Share, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '../../components/AppText';
@@ -9,8 +9,8 @@ import { Button } from '../../components/Button';
 import { ChipRow } from '../../components/ChipRow';
 import { TextField } from '../../components/TextField';
 import { useAnnounce } from '../../lib/announce';
-import { dbErrorMessage, isUnreachable, NETWORK_MESSAGE } from '../../lib/dbErrors';
-import { GROUP_MAX, inviteErrorMessage, normalizeInviteCode, RELATIONS, validateGroupTitle, type Relation } from '../../lib/invite';
+import { focusNode } from '../../lib/focus';
+import { GROUP_MAX, MAKE_FAILED, normalizeInviteCode, RELATIONS, rpcText, shareInviteCode, validateGroupTitle, type Relation } from '../../lib/invite';
 import { useSession } from '../../lib/session';
 import { supabase } from '../../lib/supabase';
 import { focusRing, useTheme } from '../../lib/theme';
@@ -18,33 +18,6 @@ import { focusRing, useTheme } from '../../lib/theme';
 const TABS = ['direct', 'group', 'join'] as const;
 type Tab = (typeof TABS)[number];
 const TAB_LABELS: Record<Tab, string> = { direct: '1:1 초대', group: '그룹 만들기', join: '코드 입력' };
-
-type Outcome = { ok: true; data: string } | { ok: false; message: string };
-type Reply = { data: unknown; error: { message: string } | null; status: number };
-
-// RPC 한 번을 부른다. 성공하면 문자열 결과(코드·방 id), 아니면 화면에 낼 문구만 돌려준다.
-// 서버 글은 그대로 내지 않는다(문구는 raise exception 코드로만 고른다). 서버에 닿지 못했으면(상태 0·5xx·던짐) 코드 탓을 하지 않는다.
-async function call(rpc: PromiseLike<Reply>, toMessage: (err: { message: string } | null) => string): Promise<Outcome> {
-  try {
-    const { data, error, status } = await rpc;
-    if (error || typeof data !== 'string' || !data) return { ok: false, message: isUnreachable(status) ? NETWORK_MESSAGE : toMessage(error) };
-    return { ok: true, data };
-  } catch {
-    return { ok: false, message: NETWORK_MESSAGE };
-  }
-}
-
-// 웹은 tabIndex=-1인 View에 focus()를, 네이티브는 접근성 포커스를 옮긴다. 실패해도 화면은 그대로 쓸 수 있어 조용히 넘어간다.
-function focusNode(node: ComponentRef<typeof View> | null) {
-  if (!node) return;
-  try {
-    if (Platform.OS === 'web') (node as unknown as { focus?: () => void }).focus?.();
-    else {
-      const h = findNodeHandle(node);
-      if (h) AccessibilityInfo.setAccessibilityFocus(h);
-    }
-  } catch {}
-}
 
 // 방 id는 서버가 준 uuid다. 경로에는 그대로 넣되 타입 라우트가 아직 모르는 경로(Task 7)라 Href로 단언한다.
 const roomHref = (id: string) => `/room/${id}` as Href;
@@ -74,11 +47,11 @@ export default function NewRoom() {
   const madeIsGroup = made?.roomId != null;
   useEffect(() => {
     if (!madeCode) return;
-    focusNode(codeRef.current);
+    focusNode(codeRef);
     say(`초대 코드를 만들었어요. ${madeIsGroup ? '72시간 안에 쓸 수 있어요' : '72시간 안에 한 번 쓸 수 있어요'}`);
   }, [madeCode, madeIsGroup, say]);
   useEffect(() => {
-    if (formFocus > 0) focusNode(formRef.current);
+    if (formFocus > 0) focusNode(formRef);
   }, [formFocus]);
 
   // 게이트가 앱 화면 묶음만 열어 주지만 이 경로는 주소로도 열 수 있다. 로그인·프로필이 없으면 되돌린다.
@@ -108,14 +81,14 @@ export default function NewRoom() {
 
   const makeDirect = () =>
     run(async () => {
-      const res = await call(supabase!.rpc('create_invite', { relation }), (e) => dbErrorMessage(e, '코드를 만들지 못했어요. 잠시 뒤 다시 해 주세요.'));
+      const res = await rpcText(supabase!.rpc('create_invite', { relation }), MAKE_FAILED);
       if (res.ok) setMade({ code: res.data, roomId: null });
       else setError(res.message);
     });
 
   const makeInvite = (roomId: string) =>
     run(async () => {
-      const res = await call(supabase!.rpc('create_invite', { room: roomId, relation }), (e) => dbErrorMessage(e, '코드를 만들지 못했어요. 잠시 뒤 다시 해 주세요.'));
+      const res = await rpcText(supabase!.rpc('create_invite', { room: roomId, relation }), MAKE_FAILED);
       setMade({ code: res.ok ? res.data : null, roomId });
       if (!res.ok) setError(res.message);
     });
@@ -124,9 +97,9 @@ export default function NewRoom() {
     const checked = validateGroupTitle(title);
     if (!checked.ok) return setError(checked.message);
     return run(async () => {
-      const room = await call(supabase!.rpc('create_group', { title: checked.value, relation }), (e) => dbErrorMessage(e, '방을 만들지 못했어요. 잠시 뒤 다시 해 주세요.'));
+      const room = await rpcText(supabase!.rpc('create_group', { title: checked.value, relation }), '방을 만들지 못했어요. 잠시 뒤 다시 해 주세요.');
       if (!room.ok) return setError(room.message);
-      const res = await call(supabase!.rpc('create_invite', { room: room.data, relation }), (e) => dbErrorMessage(e, '코드를 만들지 못했어요. 잠시 뒤 다시 해 주세요.'));
+      const res = await rpcText(supabase!.rpc('create_invite', { room: room.data, relation }), MAKE_FAILED);
       setMade({ code: res.ok ? res.data : null, roomId: room.data });
       if (!res.ok) setError(res.message);
     });
@@ -136,28 +109,16 @@ export default function NewRoom() {
     const normalized = normalizeInviteCode(code);
     if (!normalized) return setError('코드는 영문과 숫자 8자예요. 다시 확인해 주세요');
     return run(async () => {
-      const res = await call(supabase!.rpc('accept_invite', { code: normalized }), inviteErrorMessage);
+      const res = await rpcText(supabase!.rpc('accept_invite', { code: normalized }), '코드를 확인해 주세요');
       if (res.ok) router.replace(roomHref(res.data));
       else setError(res.message);
     });
   };
 
-  // 웹 데스크톱에는 공유 창(navigator.share)이 없을 수 있다. 그때는 복사로 바꾸고 결과를 알린다. 복사도 안 되면 직접 고르라고 알린다.
   const send = async () => {
     if (!made?.code) return;
-    const message = `초대 코드: ${made.code}`;
     setNotice(null);
-    try {
-      if (Platform.OS !== 'web') await Share.share({ message });
-      else if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') await navigator.share({ text: message });
-      else {
-        await navigator.clipboard.writeText(made.code);
-        setNotice('복사했어요');
-      }
-    } catch (e) {
-      if ((e as { name?: string })?.name === 'AbortError') return; // 공유 창을 닫은 것
-      setNotice('복사하지 못했을 수도 있어요. 위의 코드를 눌러 직접 복사해 주세요.');
-    }
+    setNotice(await shareInviteCode(made.code));
   };
 
   const group = made?.roomId != null;

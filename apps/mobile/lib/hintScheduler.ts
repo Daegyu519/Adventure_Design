@@ -3,7 +3,7 @@ import type { HintRes } from './engine';
 export type Hint = NonNullable<HintRes['hint']>;
 type Result = { hint: Hint | null; traceId: string | null };
 const NONE: Result = { hint: null, traceId: null };
-const BACKOFF_MS = 5000; // 429(Retry-After 없음)·503·네트워크 오류 뒤 기본 대기
+const BACKOFF_MS = 5000; // 실패(429 Retry-After 없음·503·네트워크·그 밖의 상태) 뒤 기본 대기
 const BACKOFF_MAX_MS = 60_000;
 
 // 입력 중 힌트 요청 스케줄러(규칙 8: seq + AbortController로 오래된 결과를 버린다).
@@ -41,11 +41,12 @@ export function createHintScheduler(o: {
     } catch (e) {
       if (dead || mine !== seq || c.signal.aborted) return;
       const err = e as { status?: number; retryAfterMs?: number };
-      if (err.status === 429 || err.status === 503 || err.status === 0) {
-        const wait = err.retryAfterMs && err.retryAfterMs > 0 ? err.retryAfterMs : BACKOFF_MS;
-        blockedUntil = Date.now() + Math.min(wait, BACKOFF_MAX_MS);
-      }
-      o.onResult(NONE); // 시간 초과·네트워크·503·429: 조용히 힌트 없음. 서버 문구는 보이지 않는다.
+      // 어떤 실패든 쉰다(401·403·422·500도: 쉬지 않으면 글자마다 실패 요청이 나간다). 429는 Retry-After만큼.
+      const wait = err.retryAfterMs && err.retryAfterMs > 0 ? err.retryAfterMs : BACKOFF_MS;
+      blockedUntil = Date.now() + Math.min(wait, BACKOFF_MAX_MS);
+      // ponytail: 개발 중 경고만(상태만, 서버 글 없음). tone_events.kind에 hint_error가 없어 파일럿 기록은 마이그레이션이 생기면.
+      if (__DEV__ && err.status !== undefined && err.status !== 0 && err.status !== 429 && err.status !== 503) console.warn(`[hint] engine error ${err.status}`);
+      o.onResult(NONE); // 조용히 힌트 없음. 서버 문구는 보이지 않는다.
     }
   };
 

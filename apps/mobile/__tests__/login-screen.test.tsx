@@ -156,3 +156,13 @@ test('login: 확인하는 중에 다시 제출(Enter)해도 한 번만 확인한
   await act(async () => field(SENT).props.onSubmitEditing());
   expect(mockVerify).toHaveBeenCalledTimes(1);
 });
+
+// "이메일 다시 적기"를 누르면 그 버튼이 사라진다: 포커스가 body로 떨어지지 않게 이메일 칸으로(T-07). 처음 열 때는 자동 포커스 없음.
+test('login: 이메일 다시 적기 뒤에는 이메일 칸에 포커스, 처음에는 없음', async () => {
+  const { type, press, field } = await setup();
+  expect(field('이메일').props.autoFocus).toBeFalsy();
+  await type('이메일', 'a@b.co');
+  await press('코드 받기');
+  await press('이메일 다시 적기');
+  expect(field('이메일').props.autoFocus).toBe(true);
+});

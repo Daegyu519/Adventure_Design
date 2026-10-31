@@ -247,3 +247,18 @@ test('fix2-3: 카드를 새로 받는 동안은 푼 개수를 그대로 두고, 
   await act(async () => release({ cards: CARDS }));
   expect(text()).toContain('오늘 푼 카드 0 / 3');
 });
+
+// 안내 영역은 화면마다 하나(AM-9): 다시 받은 카드 묶음(FocusBox) 안의 결과 상자(FocusBox)가 영역을 겹쳐 그리지 않는다.
+test('am-9: 안드로이드에서 카드 묶음·결과 상자가 겹쳐도 안내 영역은 화면에 하나이고, 결과 상자 이름이 그 영역에 들어간다', async () => {
+  jest.replaceProperty(Platform, 'OS', 'android');
+  answer.mockResolvedValue({ readings: READINGS, inner_voice: null, options: [] });
+  today.mockReset().mockRejectedValueOnce(new EngineError(0)).mockResolvedValue({ cards: CARDS });
+  const { root, btn } = await setup();
+  await click(btn('다시 시도')); // 다시 받은 카드 묶음은 FocusBox(라벨 "오늘의 카드")
+  const input = root.container.queryAll((n) => n.props.accessibilityLabel === '답장' && n.props.onChangeText)[0];
+  await act(async () => input.props.onChangeText('안 돼요.'));
+  await click(btn('보내기'));
+  const regions = root.container.queryAll((n) => n.props.accessibilityLiveRegion === 'polite' && n.props.style?.opacity === 0.01);
+  expect(regions).toHaveLength(1);
+  expect(textOf(regions[0])).toContain('역할극 결과');
+});

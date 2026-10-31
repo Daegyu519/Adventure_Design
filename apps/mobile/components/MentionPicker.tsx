@@ -19,14 +19,15 @@ export function MentionPicker({ candidates, active, onSelect }: Props) {
       {candidates.map((c, i) => (
         <Pressable
           key={c.user_id}
-          {...(web ? ({ role: 'option', nativeID: mentionOptionId(i), tabIndex: -1 } as object) : {})}
+          {...(web ? ({ role: 'option', nativeID: mentionOptionId(i), tabIndex: -1, 'aria-selected': i === active } as object) : {})}
           accessibilityState={{ selected: i === active }}
           onPress={() => onSelect(c.name)}
           accessibilityRole={web ? undefined : 'button'}
           accessibilityLabel={`${c.name} 언급`}
-          style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: space[3], backgroundColor: i === active ? colors.bubbleOther : 'transparent', ...focusRing(colors.primary) }}
+          // 활성 줄은 색만으로 알리지 않는다(바탕 대비가 1:1에 가깝다): 왼쪽 막대 + 굵은 글자. 다른 줄은 투명 막대로 자리를 맞춘다.
+          style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: space[3], borderLeftWidth: 3, borderLeftColor: i === active ? colors.primary : 'transparent', backgroundColor: i === active ? colors.bubbleOther : 'transparent', ...focusRing(colors.primary) }}
         >
-          <AppText accessibilityElementsHidden importantForAccessibility="no-hide-descendants">{`@${c.name}`}</AppText>
+          <AppText weight={i === active ? '600' : '400'} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">{`@${c.name}`}</AppText>
         </Pressable>
       ))}
     </View>

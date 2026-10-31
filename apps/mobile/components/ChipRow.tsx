@@ -32,8 +32,9 @@ export function ChipRow<T extends string>({ options, value, onChange, accessibil
             aria-checked={checked} // react-native-web은 accessibilityState를 aria-*로 옮기지 않는다
             // react-native-web의 Pressable은 role=radio에서 Space를 누름으로 바꿔 주지 않는다. 키보드로 고를 수 있게 직접 잇는다(WCAG 2.1.1).
             {...({
-              onKeyDown: (e: { key: string; preventDefault(): void }) => {
-                if (e.key === ' ') {
+              // 눌러 둔 Space의 반복 keydown은 무시한다(살펴보기 의도 칩에서 요청이 줄줄이 나가지 않게)
+              onKeyDown: (e: { key: string; repeat?: boolean; preventDefault(): void }) => {
+                if (e.key === ' ' && !e.repeat) {
                   e.preventDefault();
                   onChange(checked && allowNone ? null : o);
                 }

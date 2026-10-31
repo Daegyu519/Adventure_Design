@@ -1,31 +1,25 @@
 import { useEffect, useRef, useState, type ComponentRef, type ReactNode } from 'react';
-import { AccessibilityInfo, findNodeHandle, Platform, View } from 'react-native';
+import { Platform, View } from 'react-native';
 
-import { useAnnounce } from '../../lib/announce';
 import { engine, type MirrorAnswerReq, type MirrorAnswerRes } from '../../lib/engine';
+import { focusNode } from '../../lib/focus';
 import { isStaleCard, mirrorErrorCopy, type Card } from '../../lib/mirror';
 import { useTheme } from '../../lib/theme';
 import { AppText } from '../AppText';
 import { Button } from '../Button';
 
-export type CardProps = { card: Card; onDone(): void; onRefresh(): void };
+export type CardProps = { card: Card; onDone(): void; onRefresh(): void; say(t: string): void }; // say: 화면의 useAnnounce().say(영역은 화면에 하나)
 
 const KIND: Record<Card['kind'], string> = { roleplay: '역할극', receive: '되돌려 받기', predict: '예측 맞히기' };
 
 // 폼이 사라지고 결과가 나타날 때 포커스가 <body>로 떨어지지 않게, 나타나는 순간 이 상자로 옮긴다(WCAG 2.4.3).
-// label이 있으면 웹은 이름 있는 group(포커스가 오면 이름을 읽는다), 네이티브는 포커스와 함께 한 번 알려 준다.
+// label이 있으면 웹은 이름 있는 group(포커스가 오면 이름을 읽는다), 네이티브는 포커스와 함께 화면의 say로 한 번 알려 준다.
 // 네이티브에서 accessible로 묶으면 안의 읽힘·버튼이 하나로 합쳐져 따로 읽히지 않아서 묶지 않는다.
-export function FocusBox({ children, label }: { children: ReactNode; label?: string }) {
+export function FocusBox({ children, label, say }: { children: ReactNode; label?: string; say?(t: string): void }) {
   const ref = useRef<ComponentRef<typeof View>>(null);
-  const { say, region } = useAnnounce();
   useEffect(() => {
-    const node = ref.current as unknown as { focus?: () => void } | null;
-    if (Platform.OS === 'web') node?.focus?.();
-    else {
-      const h = findNodeHandle(ref.current);
-      if (h) AccessibilityInfo.setAccessibilityFocus(h);
-      if (label) say(label);
-    }
+    focusNode(ref);
+    if (label && Platform.OS !== 'web') say?.(label);
   }, [label, say]);
   return (
     <View
@@ -35,7 +29,6 @@ export function FocusBox({ children, label }: { children: ReactNode; label?: str
       {...({ tabIndex: -1 } as object)}
       style={{ gap: 12, outlineStyle: 'none' } as object}
     >
-      {region}
       {children}
     </View>
   );

@@ -15,7 +15,7 @@ jest.mock('expo-router', () => {
   const { View } = jest.requireActual('react-native');
   const Stack = ({ children }: { children: unknown }) => <View>{children}</View>;
   Stack.Protected = ({ guard, children }: { guard: boolean; children: unknown }) => (guard ? children : null);
-  Stack.Screen = ({ name }: { name: string }) => <View testID={`screen:${name}`} />;
+  Stack.Screen = ({ name, dangerouslySingular }: { name: string; dangerouslySingular?: unknown }) => <View testID={`screen:${name}`} singular={dangerouslySingular} />;
   return { Stack };
 });
 
@@ -164,4 +164,14 @@ test('layout: notification taps are listened to once in the app', async () => {
   await fake.session(SESSION);
   await fake.profile(ROW);
   expect(mockPushTaps).toHaveBeenCalled();
+});
+
+// 같은 방 화면이 두 번 쌓이면 Realtime 채널을 나눠 써서 한쪽이 던지거나 조용히 멈춘다(AC-1). 방 화면은 id마다 하나.
+test('layout: the room route is singular per room id (search params at/k do not make a second one)', async () => {
+  mockConsented = true;
+  const { root } = await mount();
+  const singular = root.container.queryAll((n) => n.props.testID === 'screen:room/[id]/index')[0].props.singular as (name: string, p: Record<string, string>) => string;
+  expect(typeof singular).toBe('function');
+  expect(singular('room/[id]/index', { id: 'r1', at: '5', k: '9' })).toBe(singular('room/[id]/index', { id: 'r1' }));
+  expect(singular('room/[id]/index', { id: 'r1' })).not.toBe(singular('room/[id]/index', { id: 'r2' }));
 });

@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, type ComponentRef, type RefObject } from '
 import { Platform, TextInput, View } from 'react-native';
 
 import { shouldSubmitOnKey } from '../lib/composer';
+import { retryFocus } from '../lib/focus';
 import { focusRing, useTheme } from '../lib/theme';
 import type { Hint } from '../lib/hintScheduler';
 import { AppText } from './AppText';
@@ -44,10 +45,7 @@ export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, 
   const replyId = replyTo?.id ?? null;
   useEffect(() => {
     // 시트가 닫히며 포커스를 돌려주는 것보다 나중에 입력창으로. 같은 사람의 다른 메시지로 바꿔도 다시 온다.
-    if (replyId !== null) {
-      const id = setTimeout(() => ref.current?.focus(), 50);
-      return () => clearTimeout(id);
-    }
+    if (replyId !== null) return retryFocus(() => ref.current, { delay: 50 });
   }, [replyId, ref]);
   const [active, setActive] = useState(0);
   const [lastCount, setLastCount] = useState(0);
@@ -174,7 +172,6 @@ export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, 
                       return setDismissed(value);
                     }
                   }
-                  if (picking && k.isComposing && k.key === 'Enter') return;
                   if (shouldSubmitOnKey(e.nativeEvent as Parameters<typeof shouldSubmitOnKey>[0])) {
                     e.preventDefault();
                     onSend();

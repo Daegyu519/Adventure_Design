@@ -9,6 +9,7 @@ import { AppText } from '../../components/AppText';
 import { Button } from '../../components/Button';
 import { IconButton } from '../../components/IconButton';
 import { formatStamp } from '../../lib/messages';
+import { freshTopic, watchStatus } from '../../lib/realtime';
 import { fetchRoomList, type RoomListItem } from '../../lib/rooms';
 import { useSession } from '../../lib/session';
 import { supabase } from '../../lib/supabase';
@@ -20,6 +21,7 @@ export default function Chats() {
   const { userId } = useSession();
   const [rooms, setRooms] = useState<RoomListItem[] | null>(null);
   const [failed, setFailed] = useState(false);
+  const [gen, setGen] = useState(0); // 다시 불러오기마다 채널도 새로(서버가 닫은 채널은 다시 들어가지 않는다)
   const seq = useRef(0);
 
   // 화면이 앞에 올 때마다 다시 불러오고, 그동안 새 메시지(RLS가 내 방만 준다)가 오면 다시 불러온다.
@@ -31,15 +33,22 @@ export default function Chats() {
       .catch(() => n === seq.current && setFailed(true));
   }, [userId]);
 
+  // Realtime이 끊기면 같은 실패 줄을 보인다(새 메시지가 와도 목록이 안 바뀐다).
   useFocusEffect(
     useCallback(() => {
       if (!supabase) return;
+      const c = supabase;
+      let alive = true;
       load();
-      const ch = supabase.channel('rooms-list').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, load).subscribe();
+      const ch = c
+        .channel(freshTopic(`rooms-list:${gen}`)) // gen이 바뀌면(다시 불러오기) 이 콜백이 바뀌어 채널을 새로 연다
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, load)
+        .subscribe((s) => alive && watchStatus(s, 'rooms-list', () => {}, () => setFailed(true)));
       return () => {
-        void supabase?.removeChannel(ch);
+        alive = false;
+        void c.removeChannel(ch);
       };
-    }, [load]),
+    }, [load, gen]),
   );
 
   const header = (
@@ -59,7 +68,7 @@ export default function Chats() {
           <AppText accessibilityRole="alert" color="danger">
             대화를 불러오지 못했어요. 연결이 불안정할 수도 있어요.
           </AppText>
-          <Button label="다시 불러오기" kind="secondary" onPress={load} />
+          <Button label="다시 불러오기" kind="secondary" onPress={() => setGen((g) => g + 1)} />
         </View>
       )}
       {rooms !== null && rooms.length > 0 ? (
