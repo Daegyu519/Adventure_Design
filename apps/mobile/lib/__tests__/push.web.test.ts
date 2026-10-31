@@ -152,3 +152,29 @@ test('token rotation on web: a different stored subscription row is released fir
   expect(delEq2).toHaveBeenCalledTimes(1);
   expect(rpc).toHaveBeenCalled();
 });
+
+// 토큰이 바뀌면 새 토큰을 먼저 등록하고 이전 행은 그 뒤에 지운다: RPC가 실패하면 이전 행이 남아 알림이 끊기지 않는다(T-28a).
+test('token rotation: the new token is registered before the old row is released; a failed RPC keeps the old row', async () => {
+  const order: string[] = [];
+  rpc.mockImplementation(async () => (order.push('rpc'), { error: null }));
+  delEq2.mockImplementation(async () => (order.push('drop'), { error: null }));
+  await AsyncStorage.setItem('push.token.v1', '{"endpoint":"https://fcm.googleapis.com/old"}');
+  await enablePush('u1');
+  expect(order).toEqual(['rpc', 'drop']);
+  order.length = 0;
+  rpc.mockImplementation(async () => (order.push('rpc'), { error: { message: 'x' } }));
+  await AsyncStorage.setItem('push.token.v1', '{"endpoint":"https://fcm.googleapis.com/older"}');
+  await expect(enablePush('u1')).resolves.toBe('error');
+  expect(order).toEqual(['rpc']);
+});
+
+// 서비스 워커가 바로 준비돼도 10초 경주 타이머가 남으면 jest가 "worker failed to exit"로 끝난다(AM-4).
+test('swReady clears its timeout once the service worker is ready', async () => {
+  jest.useFakeTimers();
+  try {
+    await expect(enablePush('u1')).resolves.toBe('enabled');
+    expect(jest.getTimerCount()).toBe(0);
+  } finally {
+    jest.useRealTimers();
+  }
+});

@@ -3,10 +3,13 @@ import { AccessibilityInfo, Platform } from 'react-native';
 import { createRoot, type TestInstance, type TestNode } from 'test-renderer';
 
 import RoomSearch from '../app/room/[id]/search';
+import { fakeStack } from '../test-utils/router';
 
 jest.mock('lucide-react-native/icons/arrow-left', () => () => null);
 jest.mock('react-native-safe-area-context', () => ({ SafeAreaView: ({ children }: { children: unknown }) => children }));
-const mockRouter = { navigate: jest.fn(), back: jest.fn(), replace: jest.fn(), canGoBack: () => true };
+// 대화방 → 방 정보 → 검색까지 쌓인 스택(실제 StackRouter처럼 움직이는 가짜).
+const start = () => fakeStack([{ name: '/(tabs)', params: {} }, { name: '/room/[id]', params: { id: 'r1' } }, { name: '/room/[id]/info', params: { id: 'r1' } }, { name: '/room/[id]/search', params: { id: 'r1' } }]);
+let mockRouter = start();
 jest.mock('expo-router', () => ({ useRouter: () => mockRouter, useLocalSearchParams: () => ({ id: 'r1' }) }));
 jest.mock('../lib/session', () => ({ useSession: () => ({ userId: 'me' }) }));
 const mockFrom = jest.fn();
@@ -41,7 +44,7 @@ async function setup(rows: unknown[]) {
 beforeEach(() => {
   Platform.OS = 'web';
   Object.keys(calls).forEach((k) => delete calls[k]);
-  mockRouter.navigate.mockReset();
+  mockRouter = start();
   mockFrom.mockReset();
 });
 
@@ -73,14 +76,13 @@ test('와일드카드 *로 걸린 가짜 결과는 거른다', async () => {
   expect(texts()).toContain('1개 찾았어요');
 });
 
-test('결과를 누르면 대화방의 그 메시지로(?at=)', async () => {
+test('결과를 누르면 아래에 있던 그 대화방으로 돌아가 그 메시지로(?at=): 방이 두 번 쌓이지 않고, 뒤로 가면 검색이 아니라 대화 목록', async () => {
   const { search, find } = await setup([row(5, 'u2', '오늘 50% 할인')]);
   await search('50%');
   await act(async () => find((n) => n.props.accessibilityRole === 'button' && String(n.props.accessibilityLabel).startsWith('민수'))[0].props.onClick({ stopPropagation() {}, nativeEvent: {} }));
-  const arg = mockRouter.navigate.mock.calls[0][0];
-  expect(arg.pathname).toBe('/room/[id]');
-  expect(arg.params.id).toBe('r1');
-  expect(arg.params.at).toBe('5');
+  expect(mockRouter.dismissTo).toHaveBeenCalledWith({ pathname: '/room/[id]', params: { id: 'r1', at: '5', k: expect.any(String) } });
+  expect(mockRouter.stack.map((r) => r.name)).toEqual(['/(tabs)', '/room/[id]']);
+  expect(mockRouter.stack[1].params).toMatchObject({ id: 'r1', at: '5' });
 });
 
 test('빈 검색어는 요청하지 않는다', async () => {

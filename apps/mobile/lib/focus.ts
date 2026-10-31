@@ -16,15 +16,18 @@ export function focusNode(ref: RefObject<ComponentRef<typeof View> | null>, inne
   } catch {}
 }
 
-/** 웹: Modal이 닫히며 자기 포커스 복원을 끝낸 뒤에 목표로 옮긴다. 닿을 때까지 50ms 간격으로 최대 10번(고정 지연 한 번에 기대지 않는다). delay 0 = 바로 첫 시도(동작 줄이기). 네이티브는 한 번. */
-export function retryFocus(get: () => { focus(): void } | null, { delay }: { delay: number }) {
-  if (Platform.OS !== 'web' || typeof document === 'undefined') return void get()?.focus();
+/** delay 뒤 목표로 포커스. 웹은 Modal이 닫히며 자기 포커스 복원을 끝낸 뒤에 닿도록 닿을 때까지 50ms 간격으로 최대 10번(고정 지연 한 번에 기대지 않는다),
+ * 네이티브는 한 번. delay 0 = 바로 첫 시도(동작 줄이기). 돌려준 함수로 남은 시도를 취소한다(effect 정리용). */
+export function retryFocus(get: () => { focus(): void } | null, { delay }: { delay: number }): () => void {
+  const web = Platform.OS === 'web' && typeof document !== 'undefined';
   let tries = 0;
+  let timer: ReturnType<typeof setTimeout> | undefined;
   const step = () => {
     const el = get();
     el?.focus();
-    if (document.activeElement !== el && ++tries < 10) setTimeout(step, 50);
+    if (web && document.activeElement !== el && ++tries < 10) timer = setTimeout(step, 50);
   };
-  if (delay > 0) setTimeout(step, delay);
+  if (delay > 0) timer = setTimeout(step, delay);
   else step();
+  return () => clearTimeout(timer);
 }

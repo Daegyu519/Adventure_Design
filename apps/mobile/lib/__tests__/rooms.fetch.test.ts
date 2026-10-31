@@ -1,4 +1,4 @@
-import { fetchRoomList, markRead } from '../rooms';
+import { fetchRoomList, markRead, setMuted } from '../rooms';
 
 // 진짜 fetchRoomList·markRead를 가짜 클라이언트에 대고 돌린다. 가짜는 부른 질의를 그대로 기록한다.
 type Call = { table: string; ops: [string, ...unknown[]][]; head: boolean };
@@ -12,12 +12,14 @@ function mockFrom(table: string) {
   calls.push(call);
   const b: Record<string, unknown> = {};
   for (const op of ['eq', 'neq', 'gt', 'in', 'order', 'limit', 'update']) b[op] = (...a: unknown[]) => (call.ops.push([op, ...a]), b);
-  b.select = (_c: string, o?: { head?: boolean }) => ((call.head = !!o?.head), b);
+  b.select = (c: string, o?: { head?: boolean }) => (call.ops.push(['select', c]), (call.head = !!o?.head), b);
   b.single = () => b;
   b.then = (res: (v: unknown) => unknown, rej?: (e: unknown) => unknown) => {
     if (failTable === table) return Promise.resolve({ data: null, error: { message: 'boom' }, count: null }).then(res, rej);
     const eqRoom = call.ops.find((o) => o[0] === 'eq' && o[1] === 'room_id')?.[2];
     const rows = (tables[table] ?? []) as Record<string, unknown>[];
+    // update(...).eq(...).select(col): 고친 행만(eq가 맞는 행) 돌려준다
+    if (call.ops.some((o) => o[0] === 'update')) return Promise.resolve({ data: rows.filter((r) => call.ops.every((o) => o[0] !== 'eq' || r[o[1] as string] === o[2])), error: null }).then(res, rej);
     const data = call.head ? null : eqRoom && table === 'messages' ? rows.filter((r) => r.room_id === eqRoom).slice(0, 1) : rows;
     return Promise.resolve({ data, error: null, count: call.head ? counts[String(eqRoom)] ?? 0 : null }).then(res, rej);
   };
@@ -102,4 +104,17 @@ test('markRead: 그 방 · 내 행의 last_read_at만 서버 시각으로 고친
 test('markRead: 오류는 던진다', async () => {
   failTable = 'room_members';
   await expect(markRead('r1', 'me', 'x')).rejects.toMatchObject({ message: 'boom' });
+});
+
+// 0행 업데이트(행 없음·RLS)는 오류 없이 성공처럼 온다(S-I6). 고친 행을 돌려받아 없으면 실패로 본다.
+test.each([
+  ['markRead', () => markRead('r9', 'me', 'x')],
+  ['setMuted', () => setMuted('r9', 'me', true)],
+])('%s: 고친 행을 돌려받고(select), 0행이면 던진다', async (_n, run) => {
+  await expect(run()).rejects.toThrow(/not_updated/);
+  expect(calls[0].ops).toContainEqual(['select', 'room_id']);
+});
+test('setMuted: 내 행이 있으면 성공', async () => {
+  await expect(setMuted('r1', 'me', true)).resolves.toBeUndefined();
+  expect(calls[0].ops).toContainEqual(['update', { muted: true }]);
 });

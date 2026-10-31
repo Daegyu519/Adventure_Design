@@ -27,7 +27,8 @@ const room = (kind: 'group' | 'direct') =>
       { user_id: 'u2', name: '민수', last_read_at: null, muted: false },
     ],
   });
-const eqChain = (result: unknown) => ({ update: () => ({ eq: () => ({ eq: () => Promise.resolve(result) }) }) });
+// update(...).eq().eq().select('room_id'): 고친 행을 돌려받는다(0행이면 setMuted가 실패로 본다)
+const eqChain = (result: unknown) => ({ update: () => ({ eq: () => ({ eq: () => ({ select: () => Promise.resolve(result) }) }) }) });
 
 async function setup(kind: 'group' | 'direct' = 'group') {
   mockFetchRoom.mockImplementation(() => room(kind));
@@ -45,7 +46,7 @@ beforeEach(() => {
   Platform.OS = 'web'; // 안내 영역은 웹·안드로이드 방식. iOS는 아래 한 테스트에서만
   mockRouter.push.mockReset();
   mockRpc.mockReset();
-  mockUpdate.mockReset().mockImplementation(() => eqChain({ error: null }));
+  mockUpdate.mockReset().mockImplementation(() => eqChain({ data: [{ room_id: 'r1' }], error: null }));
   jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {});
 });
 afterEach(() => {
@@ -76,7 +77,7 @@ test('알림 끄기: room_members.update({muted}) 후 켜짐 상태', async () =
 });
 
 test('알림 끄기 실패하면 되돌리고 알린다', async () => {
-  mockUpdate.mockImplementation(() => eqChain({ error: { message: 'x' } }));
+  mockUpdate.mockImplementation(() => eqChain({ data: null, error: { message: 'x' } }));
   const { sw, find } = await setup();
   await act(async () => (sw().props.onChange as (e: unknown) => void)({ nativeEvent: { value: true }, target: { value: true } }));
   expect(sw().props.value).toBe(false);
@@ -192,4 +193,13 @@ test('알림 글자는 탭 순서와 접근성 트리에서 뺀다(스위치만 
   expect(p['aria-hidden']).toBe(true);
   expect(p.accessibilityElementsHidden).toBe(true);
   expect(p.importantForAccessibility).toBe('no-hide-descendants');
+});
+
+// 0행 업데이트(행이 없거나 RLS)는 오류 없이 오지만 저장된 것이 아니다: 되돌리고 알린다(S-I6).
+test('알림 끄기가 0행에 닿으면 실패로 보고 되돌린다', async () => {
+  mockUpdate.mockImplementation(() => eqChain({ data: [], error: null }));
+  const { root } = await setup();
+  const sw = () => root.container.queryAll((n) => n.props.accessibilityRole === 'switch')[0];
+  await act(async () => (sw().props.onChange as (e: unknown) => void)({ nativeEvent: { value: true }, target: { value: true } }));
+  expect(textOf(root.container as unknown as TestNode)).toContain('바꾸지 못했어요');
 });

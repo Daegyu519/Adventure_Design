@@ -158,3 +158,10 @@ test('report: 숫자가 이미 떠 있는데 다시 읽기가 실패하면 숫�
   expect(textOf(root.container)).not.toContain('지금은 불러오지 못했어요');
   expect(labels(root)).toContain('스스로 고친 비율 50%');
 });
+
+// 글이 들어 있는 채로 붙는 live 영역은 웹에서 읽히지 않는다: 실패 글자 자체가 alert(AM-6).
+test('report: 불러오기 실패 글은 alert다', async () => {
+  stats.mockRejectedValueOnce(new Error('engine down'));
+  const root = await setup();
+  expect(root.container.queryAll((n) => n.props.accessibilityRole === 'alert' && textOf(n).includes('지금은 불러오지 못했어요'))).not.toHaveLength(0);
+});

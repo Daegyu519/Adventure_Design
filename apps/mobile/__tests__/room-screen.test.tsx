@@ -54,10 +54,10 @@ const mockRetryPhoto = jest.fn();
 
 let mockReactionRows: { message_id: number; user_id: string; emoji: string; created_at: string }[] = [];
 const mockToggle = jest.fn();
-jest.mock('../lib/useReactions', () => ({ useReactions: () => ({ rows: mockReactionRows, toggle: (...a: unknown[]) => mockToggle(...a) }) }));
+jest.mock('../lib/useReactions', () => ({ useReactions: () => ({ rows: mockReactionRows, toggle: (...a: unknown[]) => mockToggle(...a), error: false, reload: jest.fn() }) }));
 let mockMembersLastRead: Record<string, string | null> = {};
 jest.mock('../lib/useMembers', () => ({
-  useMembers: (_id: string, initial: { user_id: string; last_read_at: string | null }[] = []) => initial.map((x) => ({ ...x, last_read_at: x.user_id in mockMembersLastRead ? mockMembersLastRead[x.user_id] : x.last_read_at })),
+  useMembers: (_id: string, initial: { user_id: string; last_read_at: string | null }[] = []) => ({ members: initial.map((x) => ({ ...x, last_read_at: x.user_id in mockMembersLastRead ? mockMembersLastRead[x.user_id] : x.last_read_at })), error: false, reload: jest.fn() }),
 }));
 
 const mockFeedback = jest.fn();
@@ -501,6 +501,7 @@ describe('웹: 로빙 tabindex', () => {
     const ids: string[] = [];
     (globalThis as unknown as { document: object }).document = { getElementById: (id: string) => (ids.push(id), { focus }), activeElement: null };
     try {
+      mockFocusUntil.mockImplementation(jest.requireActual('../lib/focus').retryFocus); // 시트도 lib/focus의 retryFocus로 옮긴다
       const { root } = await setup();
       await click(buttons(root, '메시지 메뉴')[1]);
       await act(async () => void jest.advanceTimersByTime(100));
@@ -742,15 +743,20 @@ describe('T-09c 입력 중 · 사진 · 멘션', () => {
     expect(texts()).toContain('사진이 너무 커요 (5MB 이하)');
   });
 
-  test('같은 실패가 연달아도 다시 읽히도록 문구가 달라진다', async () => {
-    mockPickImage.mockResolvedValue('failed');
+  test('같은 실패가 연달아도 다시 읽힌다: 고르는 동안 오류를 지워 alert가 새로 붙는다', async () => {
+    let done!: (r: string) => void;
+    mockPickImage.mockImplementation(() => new Promise((r) => (done = r)));
     const { press, root } = await setup();
-    const alertText = () => textOf(root.container.queryAll((n) => n.props.accessibilityRole === 'alert')[0] as unknown as TestNode);
+    const alert = () => root.container.queryAll((n) => n.props.accessibilityRole === 'alert')[0];
     await press('사진 보내기');
-    const a = alertText();
-    await press('사진 보내기');
-    expect(alertText()).not.toBe(a);
-    expect(alertText().replace('\u200b', '')).toBe(a.replace('\u200b', ''));
+    await act(async () => done('failed'));
+    const a = alert();
+    expect(textOf(a as unknown as TestNode)).toBe('사진을 보내지 못했어요');
+    await press('사진 보내기'); // 파일을 고르는 동안(사람이 고르는 시간) 오류 줄은 없다
+    expect(alert()).toBeUndefined();
+    await act(async () => done('failed'));
+    expect(alert()).not.toBe(a);
+    expect(textOf(alert() as unknown as TestNode)).toBe('사진을 보내지 못했어요');
   });
 
   test('이름이 같은 멤버는 후보에 없다', async () => {
@@ -945,6 +951,9 @@ test('털어놓기: 같은 틱에 남기기를 두 번 눌러도 한 번만 보�
   });
   expect(mockFeedback).toHaveBeenCalledTimes(1);
   expect(texts()).toContain('보내는 중');
+  // 시트가 열린 동안 웹은 Modal 밖 화면 영역을 가린다: "보내는 중"은 시트(dialog) 안의 영역에 있어야 한다(AI-2)
+  const sheet = root.container.queryAll((n) => n.props.role === 'dialog' && n.props['aria-label'] === 'AI에게만 털어놓기')[0];
+  expect(sheet.queryAll((n) => n.props.accessibilityLiveRegion === 'polite').map((n) => textOf(n as unknown as TestNode)).join('|')).toContain('보내는 중');
   await act(async () => done({ ack: 'ok' }));
 });
 
@@ -1041,3 +1050,44 @@ test('살펴보기: 힌트 제목을 시트에 넘긴다', async () => {
   const { texts } = await openDetail();
   expect(texts()).toContain('차갑게 느껴질 수도 있어요');
   });
+
+// ── P-05 ──
+// 받은 메시지의 "안 읽음"에 나는 넣지 않는다(1:1에서 받은 말에 "상대가 안 읽음"이 잠깐 들리던 것, T-09b).
+test('받은 메시지에는 내가 안 읽은 것을 세지 않는다(1:1)', async () => {
+  mockFetchRoom.mockImplementation(() => okRoom().then((r) => ({ ...r, room: { ...r.room, kind: 'direct' } })));
+  mockMessages = [m(1, 'u2', '안녕')];
+  mockMembersLastRead = { me: null, u2: null };
+  const { root } = await setup();
+  expect(root.container.queryAll((n) => String(n.props.accessibilityLabel).includes('상대가 안 읽음'))).toHaveLength(0);
+});
+
+// 읽음 표시를 끝내 못 하면 조용히 멈추지 않는다: 개발 중 경고 + 다시 불러오기 줄(누르면 다시 시도, S-I7).
+test('읽음 표시를 3번 다시 해도 실패하면 개발 중 경고와 다시 불러오기 줄, 누르면 다시 보낸다', async () => {
+  jest.useFakeTimers();
+  const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+  try {
+    mockMarkRead.mockRejectedValue(new Error('x'));
+    const { texts, press } = await setup();
+    for (let i = 0; i < 6; i++) await act(async () => void jest.advanceTimersByTime(10000));
+    expect(mockMarkRead).toHaveBeenCalledTimes(4);
+    expect(warn).toHaveBeenCalledWith('[room] markRead failed after retries');
+    expect(texts()).toContain('연결이 불안정할 수도 있어요');
+    mockMarkRead.mockResolvedValue(undefined);
+    await press('다시 불러오기');
+    expect(mockMarkRead).toHaveBeenCalledTimes(5);
+    expect(texts()).not.toContain('연결이 불안정할 수도 있어요');
+  } finally {
+    warn.mockRestore();
+    jest.useRealTimers();
+  }
+});
+
+// 시트(메뉴·털어놓기·살펴보기)가 열린 동안 웹은 Modal 밖 화면 영역을 가린다: 새 메시지 안내는 열린 시트의 영역으로.
+test('시트가 열린 동안 받은 새 메시지는 그 시트(dialog) 안 영역으로 알린다', async () => {
+  const { root } = await setup();
+  await click(buttons(root, '메시지 메뉴')[1]);
+  mockMessages = [...mockMessages, m(4, 'u2', '새 소식')];
+  await act(async () => root.render(<Room />));
+  const dialog = root.container.queryAll((n) => n.props.role === 'dialog')[0];
+  expect(dialog.queryAll((n) => n.props.accessibilityLiveRegion === 'polite').map((n) => textOf(n as unknown as TestNode)).join('|')).toContain('민수: 새 소식');
+});

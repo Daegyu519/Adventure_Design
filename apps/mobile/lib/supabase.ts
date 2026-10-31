@@ -7,7 +7,7 @@ import type { Database } from './types/db';
 const url = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const anonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
-// ponytail: 키 없이 화면 작업용, T-07에서 필수로 바꿈
+// 키가 없으면 null: 화면은 "Supabase 키가 없어요" 안내로 돈다(키 없이 화면 작업·테스트용).
 export const supabase: SupabaseClient<Database> | null =
   url && anonKey
     ? createClient<Database>(url, anonKey, {

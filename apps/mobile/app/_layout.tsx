@@ -79,7 +79,8 @@ function Gated() {
         </Stack.Protected>
         <Stack.Protected guard={g === 'app'}>
           <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="room/[id]/index" />
+          {/* 방 화면은 id마다 하나(at·k가 달라도). 둘이 쌓이면 같은 이름의 Realtime 채널을 나눠 써서 한쪽이 던지거나 조용히 멈춘다(알림 탭·두 번 누름). */}
+          <Stack.Screen name="room/[id]/index" dangerouslySingular={(_, p) => String(p.id)} />
           <Stack.Screen name="room/[id]/info" />
           <Stack.Screen name="room/[id]/search" />
         </Stack.Protected>
