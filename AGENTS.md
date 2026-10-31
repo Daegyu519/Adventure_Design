@@ -52,7 +52,7 @@
 
 | 작업 | 누가 | 상태 |
 |---|---|---|
-| P-12 실시간 말투 모델 교체 | Claude | 학교 GPU에서 로컬 모델 비교 실험 중(브랜치 아직 없음). `engine/config/models.yaml`의 실시간 전문가·게이트를 바꿀 예정이니 이 파일은 잠시 피한다 |
+| P-12 실시간 말투 모델 교체 | Claude | 브랜치 `p12-rt-model`. 비교 결과: 큰 모델(Gemma3-4B·Qwen2.5-7B)이 정확하지만 긴 JSON 답 때문에 1.2초를 넘음 → 실시간은 읽힘 점수만 짧게(`prompts/tone_fast.md`) 받도록 바꾸는 중. `engine/config/models.yaml`의 실시간 전문가·게이트를 바꿀 예정이니 이 파일은 잠시 피한다 |
 
 보류(paused): 없음.
 
