@@ -21,6 +21,8 @@
 
 `docs/tasks.md` 기준으로 직접 센 값이다(`-live` 행과 선택은 따로).
 
+**배포 상태(2026-10-31):** 웹 `https://tone-chat.expo.app`, Android APK(EAS preview), 엔진은 학교 GPU 서버 상시 + Tailscale Funnel, DB는 서울 pilot 프로젝트(T-29b·T-29c·T-30a). 남은 것: pilot SMTP(로그인 메일), 실제 메시지 웹훅 확인, Android 푸시(FCM).
+
 **필수 작업 48개 중 42개 완료.** `-live` 12개(전부 T-02 필요, 0개 완료). 선택 3개 중 1개 완료(T-38).
 
 | 단계 | 필수 완료 | 남은 것 |
@@ -99,7 +101,7 @@ T-02 뒤에: T-07-live, T-08-live, T-09a-live, T-09b-live, T-09c-live, T-09d-liv
    - Auth → Sign In / Providers → Email → **Email OTP Length = 6** 권장(새 프로젝트 기본은 8자리. 앱은 6~10자리를 모두 받지만(P-08) 6자리가 입력하기 편하다). SMTP는 직접 설정(기본 SMTP는 템플릿 수정 불가) — Brevo면 Security → Authorized IPs에서 **모르는 IP 차단을 끈다**(Supabase 발송 IP가 바뀌어 `525 5.7.1 Unauthorized IP address`), Gmail이면 2단계 인증 + 앱 비밀번호(일반 비밀번호는 `535 5.7.8`).
    - 루트 `.env`(`.env.example` 복사): `SUPABASE_URL`, `SUPABASE_DB_URL`, `HOOK_SECRET`(`openssl rand -hex 32`), `MIRROR_SECRET`(32바이트 이상). `apps/mobile/.env`(`apps/mobile/.env.example` 복사): `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`, `EXPO_PUBLIC_ENGINE_URL`.
    - DB 웹훅은 `README.md`의 "dev 웹훅 연결" 순서(T-10-live).
-2. **T-29 배포 자원** — 서버/VM, Cloudflare 계정+도메인, pilot Supabase 프로젝트. 순서는 README "배포".
+2. **배포(T-29·T-30, 대부분 끝)** — 학교 GPU 서버(`ssh tone-gpu`), Tailscale(Funnel 켬), 서울 pilot Supabase, Expo 계정(@daegyu_oh)은 준비됨. 사람이 남은 것: **pilot Supabase SMTP**(Brevo의 SMTP Login `…@smtp-brevo.com` + SMTP key, API key 아님 — 틀리면 Auth 로그에 `535 Authentication failed`), Email Templates `{{ .Token }}`, Realtime public access 끄기, **pilot DB 비밀번호 재설정**(대화에 노출됨, 바꾼 뒤 `.env.pilot`·`.env.pilot.engine` 갱신하고 `scripts/deploy-school --env .env.pilot.engine`), Android 푸시용 Firebase 프로젝트. 파일럿 값은 루트 `.env.pilot`(Supabase)·`.env.pilot.engine`(서버 엔진 env, KEY=value만)에 있다(git 제외).
    **`NVIDIA_API_KEY`** (build.nvidia.com, `nvapi-`로 시작) — 없으면 그 모델은 쓰이지 않고(시작 경고·`/health` down) 기권한다. 로컬 시연은 `FORCE_MOCK=1`.
 3. **T-16 라벨** — 같은 문장, 다른 맥락 30쌍. 두 사람이 각자 블라인드로 라벨한 뒤 합의.
 4. 나중에: Expo 계정(EAS 빌드), Firebase 프로젝트(Android FCM `google-services.json`), 웹 푸시 VAPID 키(`npx web-push generate-vapid-keys`; 개인키는 엔진 `.env`, 공개키는 `apps/mobile/.env`), 선택으로 Apple Developer(네이티브 iOS를 할 때만. 기본 아이폰 경로는 웹 + 웹 푸시).
@@ -196,6 +198,11 @@ flowchart LR
 - Supabase는 클라우드 서울 리전, dev와 pilot 프로젝트를 따로.
 - 디자인 목업(`design/mockups/index.html`)은 사용자 승인됨. 화면은 MASTER와 목업을 따른다.
 - 저장소는 GitHub 비공개 `Daegyu519/Adventure_Design`.
+
+### 배포
+- 엔진은 학교 GPU 서버 컨테이너에서 상시(`scripts/deploy-school`, tmux `tone-llm`·`tone-engine`·`tone-ts`), 공개 HTTPS는 Tailscale Funnel(`https://tone-chat.<tailnet>.ts.net`, 도메인 불필요·주소 고정), 아이폰은 웹앱(홈 화면 추가), Android는 EAS preview APK, pilot DB는 서울 Supabase(엔진이 힌트마다 DB를 보므로 지연 때문에) — 2026-10-31 사용자 결정.
+- 앱 공개값(Supabase URL·publishable key·엔진 URL·VAPID 공개키)은 저장소가 아니라 **EAS env**(preview/production)에 둔다. 웹 배포는 같은 값을 셸 env로 넣고 `npx expo export -p web` → `eas deploy --prod`.
+- pilot 메시지 웹훅은 대시보드가 아니라 `scripts/pilot-webhook <엔진 URL> .env.pilot.engine`(pg_net 트리거, 비밀값은 env 파일에서 DB로만). HOOK_SECRET을 바꾸면 다시 실행.
 
 ### 엔진 모델
 - 모델은 laguna-xs-2.1(빠른 쪽)과 nemotron-3.5-bolt-e4b(깊은 쪽·폴백)로 — 이 NVIDIA 계정에서 실제 프롬프트로 JSON이 통과하고 지연이 가장 짧았다(1~3초). deepseek-v4.1-flash·kimi·mistral-large-4는 응답 없음, 추론 모델은 생각 토큰 때문에 3~15초(공급자에 모델별 추가 요청 옵션이 없어 `enable_thinking:false`는 못 씀). 지연은 1~3초, 부하 때 4~12초. **실시간 힌트는 지금 사실상 꺼짐(전문가가 1.2초 안에 못 옴 → 기권)**(P-06). 실제 평가는 8쌍(n=8)이라 게이트가 아니다. GitHub Models는 무료 등급 데이터 약관 미확인이라 사슬에서 뺐다.
