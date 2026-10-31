@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Animated, Modal, Platform, Pressable, View } from 'react-native';
 
 import { useAnnounce } from '../lib/announce';
+import { retryFocus } from '../lib/focus';
 import { MOTION_MS, useReducedMotion } from '../lib/motion';
 import { focusRing, useTheme } from '../lib/theme';
 import { AppText } from './AppText';
@@ -25,8 +26,7 @@ export function Sheet({ visible, onClose, title, children, initialFocus }: { vis
   // 웹 Modal은 포커스를 안에 가두지만 처음 포커스를 첫 포커스 요소(배경)에 둔다. 첫 공감 버튼(nativeID)으로 옮긴다.
   useEffect(() => {
     if (!visible || !initialFocus || Platform.OS !== 'web' || typeof document === 'undefined') return;
-    const id = setTimeout(() => document.getElementById(initialFocus)?.focus(), 30);
-    return () => clearTimeout(id);
+    return retryFocus(() => document.getElementById(initialFocus), { delay: 30 });
   }, [visible, initialFocus]);
   return (
     <Modal transparent animationType="none" visible={visible} onRequestClose={onClose}>

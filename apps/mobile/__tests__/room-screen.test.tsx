@@ -501,6 +501,7 @@ describe('웹: 로빙 tabindex', () => {
     const ids: string[] = [];
     (globalThis as unknown as { document: object }).document = { getElementById: (id: string) => (ids.push(id), { focus }), activeElement: null };
     try {
+      mockFocusUntil.mockImplementation(jest.requireActual('../lib/focus').retryFocus); // 시트도 lib/focus의 retryFocus로 옮긴다
       const { root } = await setup();
       await click(buttons(root, '메시지 메뉴')[1]);
       await act(async () => void jest.advanceTimersByTime(100));
@@ -742,15 +743,20 @@ describe('T-09c 입력 중 · 사진 · 멘션', () => {
     expect(texts()).toContain('사진이 너무 커요 (5MB 이하)');
   });
 
-  test('같은 실패가 연달아도 다시 읽히도록 문구가 달라진다', async () => {
-    mockPickImage.mockResolvedValue('failed');
+  test('같은 실패가 연달아도 다시 읽힌다: 고르는 동안 오류를 지워 alert가 새로 붙는다', async () => {
+    let done!: (r: string) => void;
+    mockPickImage.mockImplementation(() => new Promise((r) => (done = r)));
     const { press, root } = await setup();
-    const alertText = () => textOf(root.container.queryAll((n) => n.props.accessibilityRole === 'alert')[0] as unknown as TestNode);
+    const alert = () => root.container.queryAll((n) => n.props.accessibilityRole === 'alert')[0];
     await press('사진 보내기');
-    const a = alertText();
-    await press('사진 보내기');
-    expect(alertText()).not.toBe(a);
-    expect(alertText().replace('\u200b', '')).toBe(a.replace('\u200b', ''));
+    await act(async () => done('failed'));
+    const a = alert();
+    expect(textOf(a as unknown as TestNode)).toBe('사진을 보내지 못했어요');
+    await press('사진 보내기'); // 파일을 고르는 동안(사람이 고르는 시간) 오류 줄은 없다
+    expect(alert()).toBeUndefined();
+    await act(async () => done('failed'));
+    expect(alert()).not.toBe(a);
+    expect(textOf(alert() as unknown as TestNode)).toBe('사진을 보내지 못했어요');
   });
 
   test('이름이 같은 멤버는 후보에 없다', async () => {

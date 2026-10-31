@@ -1,23 +1,21 @@
 import { useIsFocused, useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import ArrowLeft from 'lucide-react-native/icons/arrow-left';
 import { useCallback, useEffect, useRef, useState, type ComponentRef } from 'react';
-import { Platform, Pressable, ScrollView, Share, Switch, View } from 'react-native';
+import { Platform, Pressable, ScrollView, Switch, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '../../../components/AppText';
 import { Button } from '../../../components/Button';
 import { IconButton } from '../../../components/IconButton';
-import { dbErrorMessage, NETWORK_MESSAGE } from '../../../lib/dbErrors';
+import { loadErrorMessage } from '../../../lib/dbErrors';
 import { useAnnounce } from '../../../lib/announce';
 import { focusNode } from '../../../lib/focus';
-import { createGroupInvite, GROUP_MAX } from '../../../lib/invite';
+import { GROUP_MAX, MAKE_FAILED, rpcText, shareInviteCode } from '../../../lib/invite';
 import { fetchRoom, roomTitle, setMuted, type Member } from '../../../lib/rooms';
 import { useSession } from '../../../lib/session';
 import { supabase } from '../../../lib/supabase';
 import { useTheme } from '../../../lib/theme';
 import type { Tables } from '../../../lib/types/db';
-
-const loadMessage = (e: unknown) => ((e as { code?: string })?.code ? dbErrorMessage(e as { message: string }, '방 정보를 불러오지 못했어요. 다시 시도해 주세요.') : NETWORK_MESSAGE);
 
 export default function RoomInfo() {
   const { colors, space, radius } = useTheme();
@@ -63,15 +61,14 @@ export default function RoomInfo() {
         setMutedState(r.members.find((m) => m.user_id === me)?.muted ?? false);
         setLoadError(null);
         // 다시 불러오기 줄이 사라지면 포커스가 body로 떨어지므로 제목으로 옮긴다
-        if (refocus.current && Platform.OS === 'web') (titleRef.current as unknown as { focus?: () => void } | null)?.focus?.();
+        if (refocus.current && Platform.OS === 'web') focusNode(titleRef);
         refocus.current = false;
       })
-      .catch((e) => alive && setLoadError(loadMessage(e)));
+      .catch((e) => alive && setLoadError(loadErrorMessage(e, '방 정보를 불러오지 못했어요. 다시 시도해 주세요.')));
     return () => {
       alive = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- say는 안정적이다
-  }, [id, me, tick]);
+  }, [id, me, tick, say]);
 
   const toggleMute = useCallback(
     async (next: boolean) => {
@@ -97,29 +94,18 @@ export default function RoomInfo() {
     setBusy(true);
     setInviteError(null);
     setNotice(null);
-    const res = await createGroupInvite(supabase.rpc('create_invite', { room: data.room.id, relation: data.room.relation }));
+    const res = await rpcText(supabase.rpc('create_invite', { room: data.room.id, relation: data.room.relation }), MAKE_FAILED);
     setBusy(false);
     if (res.ok) {
-      setCode(res.code);
+      setCode(res.data);
       say('초대 코드를 만들었어요. 72시간 안에 쓸 수 있어요');
     } else setInviteError(res.message);
   };
 
   const sendCode = async () => {
     if (!code) return;
-    const message = `초대 코드: ${code}`;
     setNotice(null);
-    try {
-      if (Platform.OS !== 'web') await Share.share({ message });
-      else if (typeof navigator !== 'undefined' && typeof navigator.share === 'function') await navigator.share({ text: message });
-      else {
-        await navigator.clipboard.writeText(code);
-        setNotice('복사했어요');
-      }
-    } catch (e) {
-      if ((e as { name?: string })?.name === 'AbortError') return;
-      setNotice('복사하지 못했을 수도 있어요. 위의 코드를 눌러 직접 복사해 주세요.');
-    }
+    setNotice(await shareInviteCode(code));
   };
 
   // 코드가 그려진 뒤 포커스를 코드 블록으로(누른 버튼은 그대로 있지만 읽는 위치를 코드로 옮긴다).

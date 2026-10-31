@@ -18,9 +18,9 @@ import { IconButton } from '../../../components/IconButton';
 import { pickAndSendImage } from '../../../lib/images';
 import { activeMentionQuery, extractMentions, insertMention, mentionCandidates } from '../../../lib/mentions';
 import { useAnnounce } from '../../../lib/announce';
-import { retryFocus as focusUntilHeld } from '../../../lib/focus';
+import { retryFocus } from '../../../lib/focus';
 import { useReducedMotion } from '../../../lib/motion';
-import { dbErrorMessage, isUnreachable, NETWORK_MESSAGE } from '../../../lib/dbErrors';
+import { dbErrorMessage, isUnreachable, loadErrorMessage, NETWORK_MESSAGE } from '../../../lib/dbErrors';
 import { REACTION_LABELS, shouldMarkRead, summarizeReactions, unreadCount, type Emoji, type Msg } from '../../../lib/messages';
 import { fetchRoom, markRead, roomTitle, type Member } from '../../../lib/rooms';
 import { useMembers } from '../../../lib/useMembers';
@@ -34,8 +34,6 @@ import { supabase } from '../../../lib/supabase';
 import { useTheme } from '../../../lib/theme';
 import type { Tables } from '../../../lib/types/db';
 
-// 방 정보를 못 받았을 때 줄 문구: 코드가 있는 DB 오류는 고정 문구, 그 밖(연결 끊김 등)은 연결 문구. 서버 글은 내지 않는다.
-const loadMessage = (e: unknown) => ((e as { code?: string })?.code ? dbErrorMessage(e as { message: string }, '대화방을 불러오지 못했어요. 다시 시도해 주세요.') : NETWORK_MESSAGE);
 
 // 시작 직후 currentState가 비어(null/unknown) 올 수 있다. 배경·비활성일 때만 "앞이 아님"으로 본다.
 const isActive = (s: string | null | undefined) => s !== 'background' && s !== 'inactive';
@@ -82,7 +80,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
   const unmounted = useRef(false);
   const inputRef = useRef<InputHandle>(null);
   const listRef = useRef<FlatList<Msg>>(null);
-  const retryFocus = useRef(false); // 포커스가 있던 "다시 불러오기" 줄이 사라지면 입력창으로 옮긴다(웹 키보드가 body로 떨어지지 않게)
+  const refocusInput = useRef(false); // 포커스가 있던 "다시 불러오기" 줄이 사라지면 입력창으로 옮긴다(웹 키보드가 body로 떨어지지 않게)
   const [menuFor, setMenuFor] = useState<Msg | null>(null);
   const [ventFor, setVentFor] = useState<Msg | null>(null);
   const [detailText, setDetailText] = useState<string | null>(null); // 살펴보기 시트: 열 때의 입력창 글(null = 닫힘)
@@ -101,7 +99,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
         setInfo(r);
         setInfoError(null);
       })
-      .catch((e) => alive && setInfoError(loadMessage(e)));
+      .catch((e) => alive && setInfoError(loadErrorMessage(e, '대화방을 불러오지 못했어요. 다시 시도해 주세요.')));
     return () => {
       alive = false;
     };
@@ -154,7 +152,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
   const reducedMotion = useReducedMotion();
   const closeDetail = useCallback(() => {
     setDetailText(null);
-    focusUntilHeld(() => (unmounted.current ? null : inputRef.current), { delay: reducedMotion ? 0 : 30 });
+    retryFocus(() => (unmounted.current ? null : inputRef.current), { delay: reducedMotion ? 0 : 30 });
   }, [reducedMotion]);
   const title = info ? roomTitle(info.room, info.members, me) : '대화방';
 
@@ -193,8 +191,8 @@ function RoomBody({ id, me }: { id: string; me: string }) {
   // 다시 불러오기 줄이 성공으로 사라졌는데 포커스가 body로 떨어졌으면 입력창으로(웹만: 네이티브는 키보드가 올라온다).
   const retryRowShown = failed || olderError;
   useEffect(() => {
-    if (retryRowShown || !retryFocus.current) return;
-    retryFocus.current = false;
+    if (retryRowShown || !refocusInput.current) return;
+    refocusInput.current = false;
     if (Platform.OS === 'web' && (typeof document === 'undefined' || document.activeElement === document.body || !document.activeElement)) inputRef.current?.focus();
   }, [retryRowShown]);
 
@@ -258,8 +256,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
 
   const photoBusy = useRef(false);
   const [photoSending, setPhotoSending] = useState(false);
-  const errCount = useRef(0);
-  const fail = useCallback((t: string) => setSendError(t + (errCount.current++ % 2 ? '\u200b' : '')), []); // 같은 문구가 연달아도 다시 읽히도록
+  const fail = setSendError; // 같은 문구가 연달아도 다시 읽힌다: 고를 때 먼저 지워서(setSendError(null)) alert가 새로 붙는다
   const pickImage = useCallback(async () => {
     if (photoBusy.current) return; // 보내는 중 두 번 눌러도 한 번만
     photoBusy.current = true; // 고르는 동안의 중복 누름만 막는다. 버튼이 busy가 되는 것은 사진을 고른 뒤(onStart)
@@ -301,15 +298,8 @@ function RoomBody({ id, me }: { id: string; me: string }) {
   // 웹: 메시지 본문으로 포커스를 옮긴다(가상화된 목록이라 그려진 뒤에).
   const focusItem = useCallback((id: number) => {
     setActiveId(id); // 로빙 tabindex: 포커스를 받은 메시지가 탭 순서에 있어야 Tab이 거기서 이어진다
-    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
-    // Modal이 닫히며 자기 포커스 복원을 끝낸 뒤에 옮긴다: 목표에 닿을 때까지 몇 번 다시 시도(고정 지연 한 번에 기대지 않는다).
-    let tries = 0;
-    const step = () => {
-      const el = document.getElementById(`msg-body-${id}`);
-      el?.focus();
-      if (document.activeElement !== el && ++tries < 10) setTimeout(step, 50);
-    };
-    setTimeout(step, 30);
+    // Modal이 닫히며 자기 포커스 복원을 끝낸 뒤에 옮긴다(닿을 때까지 몇 번 다시 시도).
+    if (Platform.OS === 'web' && typeof document !== 'undefined') retryFocus(() => document.getElementById(`msg-body-${id}`), { delay: 30 });
   }, []);
   const scrollTo = useCallback((index: number) => {
     try {
@@ -326,7 +316,6 @@ function RoomBody({ id, me }: { id: string; me: string }) {
       const j = i - dir; // data는 새 것부터
       if (i < 0 || j < 0) return;
       if (j >= data.length) return void (hasMore && !olderError && void loadOlder());
-      setActiveId(data[j].id);
       scrollTo(j);
       focusItem(data[j].id);
     },
@@ -340,7 +329,6 @@ function RoomBody({ id, me }: { id: string; me: string }) {
     const index = data.findIndex((x) => x.id === target);
     if (index >= 0) {
       jump.current = null;
-      setActiveId(target);
       scrollTo(index);
       focusItem(target);
       return say('원문으로 이동했어요');
@@ -388,7 +376,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
               label="다시 불러오기"
               kind="secondary"
               onPress={() => {
-                retryFocus.current = true;
+                refocusInput.current = true;
                 retry();
               }}
             />
@@ -417,7 +405,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
                   label="이전 메시지 다시 불러오기"
                   kind="secondary"
                   onPress={() => {
-                    retryFocus.current = true;
+                    refocusInput.current = true;
                     void loadOlder();
                   }}
                 />

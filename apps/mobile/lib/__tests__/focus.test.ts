@@ -30,3 +30,11 @@ test('retryFocus: 동작 줄이기(delay 0)면 기다리지 않고 바로 첫 �
   retryFocus(() => el as never, { delay: 0 });
   expect(el.calls).toBe(1);
 });
+test('retryFocus: 돌려준 함수로 남은 시도를 취소한다(언마운트·닫힘)', () => {
+  const el = setup(99);
+  const cancel = retryFocus(() => el as never, { delay: 30 });
+  jest.advanceTimersByTime(80); // 첫 시도 + 한 번 더
+  cancel();
+  jest.advanceTimersByTime(5000);
+  expect(el.calls).toBe(2);
+});
