@@ -72,6 +72,24 @@ cmake --build build -j 32 --target llama-server
 
 ### 배포
 
+**기본 경로: 학교 GPU 서버 + Tailscale Funnel.** 엔진은 학교 GPU 서버(로컬 SEED와 같은 서버)에서 상시로 돌고, 공개 HTTPS는 Tailscale Funnel(무료, 고정 `*.ts.net` 주소)로 낸다. 서버에는 systemd·docker가 없어 tmux 세션(`tone-llm`, `tone-engine`, `tone-ts`)으로 돌린다. 서버 쪽 스크립트는 `deploy/school-gpu/up.sh`(stdin으로 보내므로 서버에 복사본이 없다).
+
+```bash
+scripts/deploy-school --env <파일럿 엔진 env 파일>   # 처음. 이후 코드만 바꿨으면 --env 없이
+scripts/deploy-school --no-restart                   # 코드만 올리고 프로세스는 그대로
+ssh tone-gpu 'bash -s -- status' < deploy/school-gpu/up.sh   # 상태와 공개 URL
+ssh tone-gpu 'bash -s -- stop' < deploy/school-gpu/up.sh     # 엔진만 끈다
+```
+
+`deploy-school`은 커밋된 `engine/`·`deploy/`(`git archive HEAD`)를 올리고 `uv sync --locked --python 3.11` 후 `llm`·`engine`·`funnel`을 켠 다음 상태와 공개 URL을 보여 준다. 엔진 env 파일은 서버 `/root/tone-chat-deploy/engine.env`(권한 600)로 복사되며 값은 화면에 나오지 않는다. 로컬 파일럿 값은 `.env.pilot`에 두면 된다(`.gitignore`됨). 엔진은 항상 `USE_LOCAL_MODEL=1`로 뜬다. `scripts/gpu down`은 `tone-engine`이 떠 있으면 llama-server를 끄지 않는다(`--force`로 끈다).
+
+사람이 해야 할 것(한 번):
+1. 처음 `deploy-school`이 `Tailscale login needed. Open: https://...`를 출력하고 종료 코드 3으로 멈추면, 그 링크를 열어 로그인한다. 그다음 `deploy-school --no-restart`가 아니라 `ssh tone-gpu 'bash -s -- funnel' < deploy/school-gpu/up.sh`를 다시 실행한다.
+2. funnel이 활성화 링크를 출력하면(HTTPS·Funnel 미사용 상태) 링크를 열어 켜고 다시 실행한다.
+3. 공개 URL을 `scripts/deploy-smoke https://<호스트>.ts.net`으로 확인하고, pilot Supabase 웹훅과 앱의 `EXPO_PUBLIC_ENGINE_URL`을 그 주소로 맞춘다(아래 4번).
+
+**다른 서버라면** 아래 Docker + Cloudflare Tunnel 절차를 쓴다.
+
 서버(학교 서버 또는 VM)와 Cloudflare 계정·도메인이 생기면 바로 올릴 수 있게 준비해 두었다(T-29, 서버 없이 로컬에서 확인한 것만 완료). 이미지 빌드 컨텍스트는 `engine/`이다. **프로세스는 반드시 1개**(`--workers 1`, Dockerfile CMD에 고정): 한도·큐·중복 제거·거울 키가 프로세스 메모리에 있다. 복제본도 늘리지 않는다.
 
 **환경 변수** (값은 저장소에 없다. 서버의 env 파일, 예 `/etc/tone/engine.env`, 권한 600에만 적는다. 이미지에도 들어가지 않는다)
