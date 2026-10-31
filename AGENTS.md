@@ -50,61 +50,48 @@
 
 ## 3. 진행 중 (건드리지 말 것)
 
-| 작업 | 브랜치 | 상태 |
+| 작업 | 누가 | 상태 |
 |---|---|---|
-| (없음) | | |
+| P-12 실시간 말투 모델 교체 | Claude | 학교 GPU에서 로컬 모델 비교 실험 중(브랜치 아직 없음). `engine/config/models.yaml`의 실시간 전문가·게이트를 바꿀 예정이니 이 파일은 잠시 피한다 |
 
 보류(paused): 없음.
 
-## 4. 다음 순서
+## 4. 다음 순서 — 누가 무엇을
 
-`docs/tasks.md`의 선행 칸 기준. **[사람]** = 사용자의 입력이 먼저 필요하다(5장).
+배포는 끝났다(웹 `https://tone-chat.expo.app`, Android APK, 엔진은 학교 GPU 서버 상시, 서울 pilot DB). **가장 큰 문제는 말투 힌트가 거의 안 뜨는 것**이다: 실시간 게이트가 엄격해 문장이 모델까지 가지 못하고, 실시간 모델(SEED 1.5B)이 차가운 문장을 거의 구분하지 못한다(pilot 힌트 요청 44건 모두 게이트에서 멈춤, 대조 세트에서 SEED 단독 정밀도·재현율 0). 그래서 다음 일은 엔진 성능이다.
 
-지금 바로 잡을 수 있는 것 (선행이 모두 완료):
-
-| 작업 | 영역 | 메모 |
-|---|---|---|
-| T-18 두 번째 말투 전문가(로컬 SEED) | 엔진 | T-12 완료. 로컬 모델은 Ollama |
-| T-29 엔진 배포 | 배포 | T-24 완료. Cloudflare Tunnel 등, 계정이 필요할 수 있음 **[사람]**. 준비물은 만들어 둠: README "배포" |
-| T-33 헤지 요청 | 엔진 (선택) | T-13 완료 |
-| T-32 디스코드 앱 | 엔진 (선택) | T-21, T-24 완료 |
-| T-02 Supabase dev 연결 | DB | **[사람]** 계정·키 |
-| T-16 대조 세트 30쌍 라벨 | 평가 | **[사람]** 두 사람이 블라인드로 |
-
-### 다른 사람·다른 에이전트에게 맡길 것 (지금, 대화방과 안 겹침)
-
-| 순서 | 작업 | 누가 | 왜 지금 좋은가 |
+| 순서 | 작업 (`docs/tasks.md`) | 누가 | 메모 |
 |---|---|---|---|
-| 2 | **T-29 엔진 배포** (Dockerfile, 공개 HTTPS — Cloudflare Tunnel 등) | 다른 AI + 사람(서버·계정) | 앱 코드와 완전히 분리 |
-| 3 | **T-18 두 번째 말투 전문가** (로컬 SEED, Ollama) | Ollama를 돌릴 수 있는 컴퓨터의 팀원/AI | 엔진만 고친다. 8GB 맥에서는 어렵다 |
-| 4 | T-33 헤지 요청, T-32 디스코드 앱 (선택) | 다른 AI | 엔진 쪽, 필수 아님 |
-| — | **T-02 Supabase dev 프로젝트**, **T-16 라벨 30쌍** | **사람** | -live 확인 6개와 실제 평가(T-17-live·T-20)가 여기에 막혀 있다(5장) |
+| 1 | **P-12** 실시간 말투 모델 교체 | Claude (진행 중) | Qwen3-4B·EXAONE-3.5-2.4B·Gemma-3-4B·SEED를 같은 대조 세트로 비교 → 1.2초 안에서 가장 정확한 모델로, 게이트 낮춤 |
+| 2 | **P-13** "말투 살펴보기" 버튼 + 고쳐 쓰기 3가지·"보내도 괜찮아요" 배지 | 다른 AI 또는 팀원 (앱 + 엔진) | 힌트가 안 떠도 고쳐 쓰기를 쓸 수 있게. 상세 경로(NVIDIA)는 이미 정밀도가 높다. `models.yaml`은 P-12가 쓰는 중이라 건드리지 않는다(프롬프트를 바꾸면 평가 게이트) |
+| 3 | **P-14** 말투 분류기 전문가(KcELECTRA 등) 파이프라인 | 다른 AI (ML) | 데이터가 오기 전에 학습 코드·합성 데이터·평가 틀부터. 학습은 AI-Hub 승인 뒤 학교 GPU에서 |
+| 4 | **-live 확인** (T-07~T-28a-live) | 팀원 + 아무 AI | pilot 웹/APK로 계정 2개 이상 로그인·초대·사진·멘션·푸시를 직접 확인하고 각 행에 `확인:` |
+| 5 | T-20 앙상블 가중치 학습 | 나중 | T-16 라벨과 P-12·P-14 뒤 |
+| — | T-33 헤지 요청, T-32 디스코드 앱 | 선택 | 필수 아님 |
 
-Claude가 이어서 할 것: 단계 1 끝 리뷰는 반영까지 끝났다(P-04, P-04b, P-05). 실제 모델은 P-06(NVIDIA), 로컬 SEED는 P-07(학교 GPU, `scripts/gpu up`). 남은 필수 6개는 사람 입력·계정이 먼저 필요하다: T-16(라벨), T-18·T-20(로컬 모델·실제 평가), T-29(서버·Cloudflare), T-30(웹 호스팅·Expo·Firebase), T-31(파일럿 모집). T-02 끝 — 이제 -live 확인(실제 계정)을 할 수 있다.
+규칙: 작업은 `scripts/claim <ID> <이름>`으로 잡고, 끝나면 `scripts/land <ID>` 후 이 표와 §2를 고쳐 `git push origin main`(7장).
 
-- T-15는 T-14·T-03b도 선행(완료). 힌트 설정(`tone_hint_on`)이 꺼져 있으면 `/v1/hint`를 보내지 않는 테스트를 T-15에서 쓴다(T-37이 저장만 한다).
-- T-22는 T-15와 T-21(완료) 뒤. T-25는 T-09b와 T-24(완료) 뒤.
+## 5. 사람(사용자·팀원)이 해야 할 일
 
-T-02 뒤에: T-07-live, T-08-live, T-09a-live, T-09b-live, T-09c-live, T-09d-live, T-10-live, T-15-live, T-22-live, T-25-live, T-28a-live (실제 Supabase로 로그인·초대·웹훅 확인) **[사람이 먼저 T-02]**.
+키와 계정은 에이전트가 만들 수 없다. **값은 대화창에 붙이지 말고 파일(`.env`, `.env.pilot`, `.env.pilot.engine`)에 직접 넣는다.**
 
-평가: T-17-live는 T-16 라벨 뒤 **[사람]**. T-20은 T-17-live·T-18 뒤(T-17·T-19 완료).
+| 우선 | 할 일 | 왜 |
+|---|---|---|
+| 높음 | **AI-Hub 가입·데이터 신청**: "감성 대화 말뭉치", "공감형 대화"(가능하면 "한국어 SNS") | P-14 분류기 학습 데이터. 승인까지 며칠 걸릴 수 있다. 받은 데이터는 학교 서버에만 두고 저장소에 넣지 않는다 |
+| 높음 | **T-16 라벨 30쌍** — 같은 문장, 다른 맥락. 두 사람이 각자 블라인드로 라벨한 뒤 합의 | 어떤 모델·구성이 나은지 판단하는 기준(지금 8쌍은 너무 적다). 학습에는 쓰지 않는다 |
+| 보통 | **pilot DB 비밀번호 재설정**(대화에 노출됨) | 바꾼 뒤 `.env.pilot`·`.env.pilot.engine`의 DB 주소를 고치고 `scripts/deploy-school --env .env.pilot.engine` |
+| 보통 | pilot Supabase → Authentication → **Rate Limits**에서 메일을 시간당 100 정도로 | 파일럿 첫날 동시 가입(기본 30/시간) |
+| 낮음 | **Firebase 프로젝트**(Android FCM, `google-services.json` + 서비스 계정 키를 EAS에) | 앱이 꺼져 있을 때 Android 푸시. 앱이 열려 있을 때 실시간은 지금도 된다 |
+| 나중 | **T-31 파일럿 모집**(동의서, 10~15쌍 + 팀 그룹방) | P-12·P-13 뒤가 좋다 |
 
-배포·파일럿: T-30은 T-22·T-28a·T-28b(완료) 뒤, T-31은 T-29·T-30 뒤. 배포 빌드에서 `engine.isMock === false`를 확인한다.
+pilot 준비 상태: 서울 Supabase(SMTP는 Brevo — SMTP Login `…@smtp-brevo.com` + SMTP key, API key 아님, Brevo Security → Authorized IPs에서 모르는 IP 차단 끔), 학교 GPU 서버(`ssh tone-gpu`), Tailscale Funnel, Expo(@daegyu_oh). `NVIDIA_API_KEY`(build.nvidia.com, `nvapi-`로 시작)는 서버 엔진 env에 있다.
 
-## 5. 사람(사용자)이 해야 할 일
-
-키와 계정은 에이전트가 만들 수 없다. **값은 대화창에 붙이지 말고 `.env`에 직접 넣는다.**
-
-1. **T-02 Supabase dev 프로젝트** — 로그인·대화·웹훅의 실제 확인이 모두 여기에 걸려 있다.
+새 Supabase 프로젝트를 만들 때(참고, dev·pilot 때 한 순서):
    - 서울 리전에 만들고 `supabase link`. 대시보드에서 Realtime을 먼저 켜지 않은 채로 `supabase db push`(마이그레이션 7개 전부, `_platform` 포함). Realtime "Allow public access" 끄기. Settings → JWT Keys는 비대칭 키(JWKS)로.
    - Auth → Email Templates → Magic Link 본문에 `{{ .Token }}`(앱은 6자리 코드로 로그인한다). 기본 메일 한도가 작으니 계정 2개로만 확인.
    - Auth → Sign In / Providers → Email → **Email OTP Length = 6** 권장(새 프로젝트 기본은 8자리. 앱은 6~10자리를 모두 받지만(P-08) 6자리가 입력하기 편하다). SMTP는 직접 설정(기본 SMTP는 템플릿 수정 불가) — Brevo면 Security → Authorized IPs에서 **모르는 IP 차단을 끈다**(Supabase 발송 IP가 바뀌어 `525 5.7.1 Unauthorized IP address`), Gmail이면 2단계 인증 + 앱 비밀번호(일반 비밀번호는 `535 5.7.8`).
    - 루트 `.env`(`.env.example` 복사): `SUPABASE_URL`, `SUPABASE_DB_URL`, `HOOK_SECRET`(`openssl rand -hex 32`), `MIRROR_SECRET`(32바이트 이상). `apps/mobile/.env`(`apps/mobile/.env.example` 복사): `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`, `EXPO_PUBLIC_ENGINE_URL`.
    - DB 웹훅은 `README.md`의 "dev 웹훅 연결" 순서(T-10-live).
-2. **배포(T-29·T-30, 대부분 끝)** — 학교 GPU 서버(`ssh tone-gpu`), Tailscale(Funnel 켬), 서울 pilot Supabase, Expo 계정(@daegyu_oh)은 준비됨. 사람이 남은 것: **pilot Supabase SMTP**(Brevo의 SMTP Login `…@smtp-brevo.com` + SMTP key, API key 아님 — 틀리면 Auth 로그에 `535 Authentication failed`), Email Templates `{{ .Token }}`, Realtime public access 끄기, **pilot DB 비밀번호 재설정**(대화에 노출됨, 바꾼 뒤 `.env.pilot`·`.env.pilot.engine` 갱신하고 `scripts/deploy-school --env .env.pilot.engine`), Android 푸시용 Firebase 프로젝트. 파일럿 값은 루트 `.env.pilot`(Supabase)·`.env.pilot.engine`(서버 엔진 env, KEY=value만)에 있다(git 제외).
-   **`NVIDIA_API_KEY`** (build.nvidia.com, `nvapi-`로 시작) — 없으면 그 모델은 쓰이지 않고(시작 경고·`/health` down) 기권한다. 로컬 시연은 `FORCE_MOCK=1`.
-3. **T-16 라벨** — 같은 문장, 다른 맥락 30쌍. 두 사람이 각자 블라인드로 라벨한 뒤 합의.
-4. 나중에: Expo 계정(EAS 빌드), Firebase 프로젝트(Android FCM `google-services.json`), 웹 푸시 VAPID 키(`npx web-push generate-vapid-keys`; 개인키는 엔진 `.env`, 공개키는 `apps/mobile/.env`), 선택으로 Apple Developer(네이티브 iOS를 할 때만. 기본 아이폰 경로는 웹 + 웹 푸시).
 
 ## 6. 구조도
 
