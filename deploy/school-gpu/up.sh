@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 서버에서 돌리는 스크립트. 서버에 복사하지 않고 stdin으로 보낸다:
-#   ssh tone-gpu 'bash -s -- llm|engine|funnel|all|status|stop' < deploy/school-gpu/up.sh
+#   ssh tone-gpu 'bash -s -- llm|engine|funnel|all|status|stop|gpu-off|gpu-on' < deploy/school-gpu/up.sh
 # 멱등. 비밀값은 출력하지 않는다. 다른 프로세스·디렉터리는 건드리지 않는다.
 set -euo pipefail
 BASE=/root/tone-chat-deploy; LLM=/root/tone-chat-llm
@@ -8,6 +8,7 @@ PORT=11434; ENGINE_PORT=8000
 TS="$BASE/tailscale_1.104.4_amd64"; SOCK="$BASE/tailscaled.sock"
 MODEL_ID=naver-hyperclovax/HyperCLOVAX-SEED-Text-Instruct-1.5B   # models.yaml tone_hcx의 local: 뒤 이름과 같아야 한다
 FAST_PORT=11435; FAST_ID=gemma-3-4b-it; FAST_GGUF=gemma-3-4b-it-q4_k_m.gguf   # tone_fast의 local_fast: 뒤 이름과 같아야 한다(P-12)
+GPU_OFF="$BASE/gpu.off"   # 이 파일이 있으면 GPU 모델을 띄우지 않는다(사용자가 학습 등에 GPU를 쓸 때). gpu-off / gpu-on
 has() { tmux has-session -t "$1" 2>/dev/null; }
 ts() { "$TS/tailscale" --socket="$SOCK" "$@"; }
 logged_in() { ts status --json 2>/dev/null | grep -q '"BackendState": "Running"'; }
@@ -25,6 +26,7 @@ serve() {   # serve <tmux> <gguf> <port> <alias> [추가 옵션]
 }
 
 llm() {
+  if [ -f "$GPU_OFF" ]; then echo "GPU off ($GPU_OFF): model servers not started (up.sh gpu-on to allow)"; return 0; fi
   serve tone-llm hcx-seed-1.5b-q4_k_m.gguf "$PORT" "$MODEL_ID"
   # Gemma는 SWA라 --swa-full이 있어야 고정 프롬프트 캐시를 다시 쓴다(없으면 요청마다 1초 더)
   serve tone-llm-fast "$FAST_GGUF" "$FAST_PORT" "$FAST_ID" --swa-full
@@ -39,9 +41,9 @@ engine() {
     echo "engine.env format error: only KEY=value lines (no quotes, spaces, \$, &, ;)" >&2; exit 1
   fi
   has tone-engine && tmux kill-session -t tone-engine
-  # 검사한 파일만 셸로 읽는다. USE_LOCAL_MODEL은 항상 켠다. 죽으면 5초 뒤 다시 띄운다(컨테이너 재시작 후엔 up.sh all을 다시 실행).
+  # 검사한 파일만 셸로 읽는다. USE_LOCAL_MODEL은 GPU off가 아니면 켠다(꺼져 있으면 실시간 힌트는 기권, 상세는 NVIDIA만). 죽으면 5초 뒤 다시 띄운다(컨테이너 재시작 후엔 up.sh all을 다시 실행).
   : > "$BASE/engine.log"   # 세션을 (재)만들 때 한 번만 비운다
-  tmux new-session -d -s tone-engine "exec >>$BASE/engine.log 2>&1; cd $BASE/app/engine && set -a && . $f && set +a && export USE_LOCAL_MODEL=1; while :; do sh deploy-entrypoint.sh uv run --frozen --no-dev uvicorn app.main:app --host 127.0.0.1 --port $ENGINE_PORT --workers 1; echo 'engine exited, restarting in 5s'; sleep 5; done"
+  tmux new-session -d -s tone-engine "exec >>$BASE/engine.log 2>&1; cd $BASE/app/engine && set -a && . $f && set +a && export USE_LOCAL_MODEL=$([ -f "$GPU_OFF" ] && echo 0 || echo 1); while :; do sh deploy-entrypoint.sh uv run --frozen --no-dev uvicorn app.main:app --host 127.0.0.1 --port $ENGINE_PORT --workers 1; echo 'engine exited, restarting in 5s'; sleep 5; done"
   for _ in $(seq 30); do
     curl -sf "http://127.0.0.1:$ENGINE_PORT/health" >/dev/null && { echo "engine: ok"; return 0; }
     sleep 1
@@ -76,7 +78,10 @@ llm) llm ;;
 engine) engine ;;
 funnel) funnel ;;
 all) llm; engine; funnel ;;
-status) status ;;
+status) status; [ -f "$GPU_OFF" ] && echo "gpu: off (model servers not allowed)" || echo "gpu: on" ;;
+gpu-off) touch "$GPU_OFF"; for s in tone-llm tone-llm-fast; do has "$s" && tmux kill-session -t "$s"; done
+         has tone-engine && { tmux kill-session -t tone-engine; engine; }; echo "gpu off: model servers stopped, engine uses no local model" ;;
+gpu-on) rm -f "$GPU_OFF"; llm; has tone-engine && { tmux kill-session -t tone-engine; engine; }; echo "gpu on" ;;
 stop) has tone-engine && tmux kill-session -t tone-engine; echo "engine stopped" ;;
-*) echo "usage: up.sh llm|engine|funnel|all|status|stop" >&2; exit 2 ;;
+*) echo "usage: up.sh llm|engine|funnel|all|status|stop|gpu-off|gpu-on" >&2; exit 2 ;;
 esac

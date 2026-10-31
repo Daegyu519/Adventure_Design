@@ -192,6 +192,7 @@ flowchart LR
 - 저장소는 GitHub 비공개 `Daegyu519/Adventure_Design`.
 
 ### 배포
+- 학교 GPU는 사용자도 학습에 쓴다. 쓰는 동안은 서버의 `gpu.off` 스위치(`up.sh gpu-off`)로 우리 모델 서버를 끄고, 배포·`scripts/gpu up`도 GPU를 건드리지 않는다. 다시 쓰려면 `gpu-on`(P-18). **`gpu.off`가 있으면 지우지 말고 사용자에게 먼저 묻는다.**
 - 엔진은 학교 GPU 서버 컨테이너에서 상시(`scripts/deploy-school`, tmux `tone-llm`·`tone-engine`·`tone-ts`), 공개 HTTPS는 Tailscale Funnel(`https://tone-chat.<tailnet>.ts.net`, 도메인 불필요·주소 고정), 아이폰은 웹앱(홈 화면 추가), Android는 EAS preview APK, pilot DB는 서울 Supabase(엔진이 힌트마다 DB를 보므로 지연 때문에) — 2026-10-31 사용자 결정.
 - 앱 공개값(Supabase URL·publishable key·엔진 URL·VAPID 공개키)은 저장소가 아니라 **EAS env**(preview/production)에 둔다. 웹 배포는 같은 값을 셸 env로 넣고 `npx expo export -p web` → `eas deploy --prod`.
 - pilot 메시지 웹훅은 대시보드가 아니라 `scripts/pilot-webhook <엔진 URL> .env.pilot.engine`(pg_net 트리거, 비밀값은 env 파일에서 DB로만). HOOK_SECRET을 바꾸면 다시 실행.
