@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# 사용법: scripts/deploy-smoke <BASE_URL> [ORIGIN]   예: scripts/deploy-smoke http://localhost:8000
+# ORIGIN 기본값: CORS_ORIGINS의 첫 값, 없으면 http://localhost:8081. 하나라도 실패하면 exit 1.
+# 비밀값은 쓰지 않는다. NVIDIA_STRICT=0이면 nvidia down을 경고로만 둔다(로컬 키 없는 시험용).
+set -uo pipefail
+BASE="${1:-${BASE_URL:-}}"; BASE="${BASE%/}"
+[ -n "$BASE" ] || { echo "usage: $0 <BASE_URL> [ORIGIN]" >&2; exit 2; }
+ORIGIN="${2:-${CORS_ORIGINS:-http://localhost:8081}}"; ORIGIN="${ORIGIN%%,*}"
+fail=0
+ok()  { echo "PASS  $1"; }
+bad() { echo "FAIL  $1" >&2; fail=1; }
+code() { curl -s -o /dev/null -w '%{http_code}' --max-time 15 "$@"; }
+
+# 1. /health 200 + nvidia:* 가 모두 up
+body="$(curl -s --max-time 15 -w '\n%{http_code}' "$BASE/health")"; st="${body##*$'\n'}"; body="${body%$'\n'*}"
+if [ "$st" = 200 ]; then ok "/health 200"; else bad "/health expected 200, got $st"; fi
+if [ "$st" = 200 ]; then
+  down="$(printf '%s' "$body" | python3 -c '
+import json,sys
+d=json.load(sys.stdin)
+m={**d["providers"],**d["models"]}
+print(" ".join(k for k,v in m.items() if k.startswith("nvidia") and v!="up"))
+print(sum(1 for k in m if k.startswith("nvidia")))' 2>/dev/null)" || down=""
+  n="$(printf '%s\n' "$down" | tail -1)"; down="$(printf '%s\n' "$down" | head -1)"
+  if [ -z "$down$n" ]; then bad "/health body is not the expected JSON (providers/models missing or not JSON)"
+  elif [ "$n" = 0 ]; then bad "no nvidia:* entry in /health (models.yaml / provider list wrong)"
+  elif [ -n "$down" ]; then
+    msg="nvidia not up: $down -> set NVIDIA_API_KEY in the engine env file and restart"
+    if [ "${NVIDIA_STRICT:-1}" = 0 ]; then echo "WARN  $msg"; else bad "$msg"; fi
+  else ok "nvidia:* all up ($n)"; fi
+fi
+
+# 2. 64 KB 초과 본문 -> 413 (engine: 인증·파싱보다 먼저)
+big="$(mktemp)"; trap 'rm -f "$big"' EXIT
+head -c 70000 /dev/zero | tr '\0' 'a' > "$big"
+c="$(code -X POST -H 'Content-Type: application/json' --data-binary @"$big" "$BASE/v1/hint")"
+[ "$c" = 413 ] && ok "engine: oversize POST /v1/hint -> 413" || bad "engine: oversize POST expected 413, got $c (engine limit missing)"
+
+# 2b. edge 전용: 엔진이 제한하지 않는 경로(/nope, 엔진은 404)로 보내므로 Cloudflare 규칙만 막을 수 있다. https일 때만.
+case "$BASE" in
+  https://*)
+    c="$(code -X POST -H 'Content-Type: application/json' --data-binary @"$big" "$BASE/nope")"
+    case "$c" in 403|413) ok "edge: oversize POST /nope -> $c (Cloudflare rule)";;
+      *) bad "edge: oversize POST /nope expected 403 or 413, got $c (WAF body-size rule missing or plan-limited)";; esac;;
+  *) echo "SKIP  edge 64 KB probe (BASE is not https)";;
+esac
+
+# 3. 토큰 없는 /v1/hint -> 401
+c="$(code -X POST -H 'Content-Type: application/json' -d '{}' "$BASE/v1/hint")"
+[ "$c" = 401 ] && ok "/v1/hint without token -> 401" || bad "/v1/hint without token expected 401, got $c"
+
+# 4. CORS 사전 요청
+hdr="$(curl -s -o /dev/null -D - --max-time 15 -X OPTIONS -H "Origin: $ORIGIN" \
+  -H 'Access-Control-Request-Method: POST' -H 'Access-Control-Request-Headers: authorization,content-type' "$BASE/v1/hint")"
+if printf '%s' "$hdr" | tr -d '\r' | grep -iq "^access-control-allow-origin: $ORIGIN\$"; then ok "CORS preflight allows $ORIGIN"
+else bad "CORS preflight does not allow $ORIGIN (check CORS_ORIGINS)"; fi
+
+[ "$fail" = 0 ] && echo "ALL PASS" || echo "SMOKE FAILED" >&2
+exit "$fail"

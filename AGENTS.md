@@ -1,6 +1,6 @@
 # AGENTS.md
 
-이 저장소를 이어받는 AI 에이전트(Claude Code, Codex, Cursor, Gemini CLI 등)와 사람이 처음 읽는 문서다. 도구와 상관없이 같은 규칙으로 일한다. 기준: 2026-10-31, `main` = `land P-05`(단계 1 끝 리뷰 반영) 이후. land할 때마다 "2. 지금 상태"·"3. 진행 중"·"4. 다음 순서"를 같은 변경에서 고친다.
+이 저장소를 이어받는 AI 에이전트(Claude Code, Codex, Cursor, Gemini CLI 등)와 사람이 처음 읽는 문서다. 도구와 상관없이 같은 규칙으로 일한다. 기준: 2026-10-31, `main` = `land T-29a`(배포 준비) 이후. land할 때마다 "2. 지금 상태"·"3. 진행 중"·"4. 다음 순서"를 같은 변경에서 고친다.
 
 ## 1. 무엇을 만드는가, 읽는 순서
 
@@ -51,7 +51,6 @@
 | 작업 | 브랜치 | 상태 |
 |---|---|---|
 | T-02 Supabase dev 연결 | `t02-supabase-dev` | 클라우드에 마이그레이션 8개 적용·실제 DB 타입 생성 끝, 대시보드 확인 2개(Realtime "Allow public access" 끄기, Magic Link `{{ .Token }}`) 기다림 |
-| T-29a 엔진 배포 준비 | `t29-deploy-prep` | 리뷰 반영 끝, land 직전 |
 
 보류(paused): 없음.
 
@@ -64,7 +63,7 @@
 | 작업 | 영역 | 메모 |
 |---|---|---|
 | T-18 두 번째 말투 전문가(로컬 SEED) | 엔진 | T-12 완료. 로컬 모델은 Ollama |
-| T-29 엔진 배포 | 배포 | T-24 완료. Cloudflare Tunnel 등, 계정이 필요할 수 있음 **[사람]** |
+| T-29 엔진 배포 | 배포 | T-24 완료. Cloudflare Tunnel 등, 계정이 필요할 수 있음 **[사람]**. 준비물은 만들어 둠: README "배포" |
 | T-33 헤지 요청 | 엔진 (선택) | T-13 완료 |
 | T-32 디스코드 앱 | 엔진 (선택) | T-21, T-24 완료 |
 | T-02 Supabase dev 연결 | DB | **[사람]** 계정·키 |
@@ -99,7 +98,8 @@ T-02 뒤에: T-07-live, T-08-live, T-09a-live, T-09b-live, T-09c-live, T-09d-liv
    - Auth → Email Templates → Magic Link 본문에 `{{ .Token }}`(앱은 6자리 코드로 로그인한다). 기본 메일 한도가 작으니 계정 2개로만 확인.
    - 루트 `.env`(`.env.example` 복사): `SUPABASE_URL`, `SUPABASE_DB_URL`, `HOOK_SECRET`(`openssl rand -hex 32`), `MIRROR_SECRET`(32바이트 이상). `apps/mobile/.env`(`apps/mobile/.env.example` 복사): `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`, `EXPO_PUBLIC_ENGINE_URL`.
    - DB 웹훅은 `README.md`의 "dev 웹훅 연결" 순서(T-10-live).
-2. **`NVIDIA_API_KEY`** (build.nvidia.com, `nvapi-`로 시작) — 없으면 그 모델은 쓰이지 않고(시작 경고·`/health` down) 기권한다. 로컬 시연은 `FORCE_MOCK=1`.
+2. **T-29 배포 자원** — 서버/VM, Cloudflare 계정+도메인, pilot Supabase 프로젝트. 순서는 README "배포".
+   **`NVIDIA_API_KEY`** (build.nvidia.com, `nvapi-`로 시작) — 없으면 그 모델은 쓰이지 않고(시작 경고·`/health` down) 기권한다. 로컬 시연은 `FORCE_MOCK=1`.
 3. **T-16 라벨** — 같은 문장, 다른 맥락 30쌍. 두 사람이 각자 블라인드로 라벨한 뒤 합의.
 4. 나중에: Expo 계정(EAS 빌드), Firebase 프로젝트(Android FCM `google-services.json`), 웹 푸시 VAPID 키(`npx web-push generate-vapid-keys`; 개인키는 엔진 `.env`, 공개키는 `apps/mobile/.env`), 선택으로 Apple Developer(네이티브 iOS를 할 때만. 기본 아이폰 경로는 웹 + 웹 푸시).
 
@@ -261,6 +261,7 @@ flowchart LR
 - (T-02 뒤) 초대 코드 시도 횟수 제한은 공개 가입 전에 더한다.
 - (T-07-live) 다크 모드, 200% 글자, VoiceOver·TalkBack, 가로 화면, Android 키보드 겹침을 기기에서 확인. 시트 안내 영역(살펴보기 "살펴보는 중"·결과, 털어놓기 "보내는 중", 시트가 열린 동안 받은 새 메시지)이 웹 VoiceOver·NVDA와 Android TalkBack에서 읽히는지, 영역 opacity 0.01을 TalkBack이 건너뛰지 않는지(P-05).
 - (T-17-live/T-20) 살펴보기 경로 단계별 예산(첫 단계가 8초를 쓰면 안전하게 "알림만"으로 떨어짐), 가린 문장이 gate "짧음" 신호를 약하게 하는 정도, JWKS 재요청이 10분마다 한 응답을 ~2.5초로 늘릴 수 있는 점(규칙 8) — 측정. `rewrite.md`·`judge.md` 문구는 평가로 다시 확인. mock 평가는 정밀도만 막는다(recall 회귀는 T-17-live 전까지 막지 못함).
+- (T-29a) 배포 점검의 바깥 64 KB 확인은 403도 통과로 본다 — 봇 차단·WAF가 내는 403과 구분하려면 작은 POST가 404인지 먼저 보는 대조군을 더할 것. 공백만 있는 비밀값(예: `HOOK_SECRET=" "`)은 시작 검사를 통과한다(MIRROR_SECRET은 엔진의 32바이트 검사가 잡음). Docker 빌드·compose·Cloudflare 바깥 확인은 서버에서 처음 한다.
 - (P-05 재검토 Minor) 실패 뒤 의도 칩을 고르면 포커스가 칩에서 `detail-text`로 튐(`hadErr`는 "다시 해 보기"에서만), 공감 다시 읽기 중 도착한 Realtime 행이 빠질 수 있음(다음 읽기에서 복구), 대화 목록이 자동 재연결(SUBSCRIBED) 뒤 다시 읽지 않음(한 줄: SUBSCRIBED에 `load`), 시트 안 안내 영역이 페이드인 중 불투명도 0 근처(TalkBack에서 첫 안내가 빠질 수 있음 — T-07-live에서 확인). 같은 방을 빨리 나갔다 들어오면 입력 중 채널이 떠나는 중인 채로 재사용돼 그 방문 동안 입력 중 표시가 꺼짐. 목록의 "다시 불러오기"가 사라지면 웹 포커스가 body로.
 - (T-28a, 보안 메모) `register_push_token`은 정확한 토큰 문자열을 아는 사람이 그 기기의 알림을 가져갈 수 있다 — 피해자 알림이 끊기는 서비스 거부뿐이고 남의 알림을 받을 수는 없다(토큰은 본인만 읽음, RPC는 항상 내 user_id로 씀). 같은 토큰을 동시에 등록하면 행이 둘 남을 수 있음(원자적으로 하려면 `unique(token)` + on conflict). 다음 사용자가 알림을 안 켜면 이전 사용자 행이 남는다 — 엔진 쪽 "미리보기 숨기기" 옵션으로 막을 것(알림에 글 앞 100자가 잠금 화면에 보인다). 앱이 안 쓰는 push_tokens insert/update 권한 회수. `lib/types/db.ts`의 RPC 타입은 손으로 씀 — T-02 뒤 `gen:db`로 다시 만들어 비교. 설정 "켜는 중…"이 읽히지 않음, 네이티브 이유 accessibilityHint 없음.
 - (T-28a) Expo가 묶음 전체를 400으로 거절하면 그 방 묶음이 빠진다 — 토큰 검사. 사용자별 push_tokens 개수 제한. 로그아웃 때 토큰 해제. EAS projectId, Android 알림 아이콘.
