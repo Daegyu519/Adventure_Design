@@ -18,21 +18,32 @@ if [ "$st" = 200 ]; then
   down="$(printf '%s' "$body" | python3 -c '
 import json,sys
 d=json.load(sys.stdin)
-print(" ".join(k for k,v in {**d["providers"],**d["models"]}.items() if k.startswith("nvidia") and v!="up"))
-print(sum(1 for k in {**d["providers"],**d["models"]} if k.startswith("nvidia")))' )"
+m={**d["providers"],**d["models"]}
+print(" ".join(k for k,v in m.items() if k.startswith("nvidia") and v!="up"))
+print(sum(1 for k in m if k.startswith("nvidia")))' 2>/dev/null)" || down=""
   n="$(printf '%s\n' "$down" | tail -1)"; down="$(printf '%s\n' "$down" | head -1)"
-  if [ "$n" = 0 ]; then bad "no nvidia:* entry in /health (models.yaml / provider list wrong)"
+  if [ -z "$down$n" ]; then bad "/health body is not the expected JSON (providers/models missing or not JSON)"
+  elif [ "$n" = 0 ]; then bad "no nvidia:* entry in /health (models.yaml / provider list wrong)"
   elif [ -n "$down" ]; then
     msg="nvidia not up: $down -> set NVIDIA_API_KEY in the engine env file and restart"
     if [ "${NVIDIA_STRICT:-1}" = 0 ]; then echo "WARN  $msg"; else bad "$msg"; fi
   else ok "nvidia:* all up ($n)"; fi
 fi
 
-# 2. 64 KB 초과 본문 -> 413 (인증·파싱보다 먼저)
+# 2. 64 KB 초과 본문 -> 413 (engine: 인증·파싱보다 먼저)
 big="$(mktemp)"; trap 'rm -f "$big"' EXIT
 head -c 70000 /dev/zero | tr '\0' 'a' > "$big"
 c="$(code -X POST -H 'Content-Type: application/json' --data-binary @"$big" "$BASE/v1/hint")"
-[ "$c" = 413 ] && ok "oversize POST -> 413" || bad "oversize POST expected 413, got $c (edge rule or engine limit missing)"
+[ "$c" = 413 ] && ok "engine: oversize POST /v1/hint -> 413" || bad "engine: oversize POST expected 413, got $c (engine limit missing)"
+
+# 2b. edge 전용: 엔진이 제한하지 않는 경로(/nope, 엔진은 404)로 보내므로 Cloudflare 규칙만 막을 수 있다. https일 때만.
+case "$BASE" in
+  https://*)
+    c="$(code -X POST -H 'Content-Type: application/json' --data-binary @"$big" "$BASE/nope")"
+    case "$c" in 403|413) ok "edge: oversize POST /nope -> $c (Cloudflare rule)";;
+      *) bad "edge: oversize POST /nope expected 403 or 413, got $c (WAF body-size rule missing or plan-limited)";; esac;;
+  *) echo "SKIP  edge 64 KB probe (BASE is not https)";;
+esac
 
 # 3. 토큰 없는 /v1/hint -> 401
 c="$(code -X POST -H 'Content-Type: application/json' -d '{}' "$BASE/v1/hint")"

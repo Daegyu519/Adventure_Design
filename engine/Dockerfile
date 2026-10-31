@@ -6,9 +6,9 @@ ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy UV_PROJECT_ENVIRONMENT=/opt/venv \
     PATH="/opt/venv/bin:$PATH" PYTHONUNBUFFERED=1
 WORKDIR /srv/engine
 
-# 의존성 먼저(캐시): uv.lock 그대로, dev 제외
+# 의존성 먼저(캐시): uv.lock과 어긋나면 실패, dev 제외
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev
+RUN uv sync --locked --no-dev
 
 # 소스만. .env·테스트는 .dockerignore가 막는다. 비밀값은 이미지에 없고 실행할 때 env로 받는다.
 COPY . .
