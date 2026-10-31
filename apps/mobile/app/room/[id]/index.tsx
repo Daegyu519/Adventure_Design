@@ -17,7 +17,7 @@ import { Button } from '../../../components/Button';
 import { IconButton } from '../../../components/IconButton';
 import { pickAndSendImage } from '../../../lib/images';
 import { activeMentionQuery, extractMentions, insertMention, mentionCandidates } from '../../../lib/mentions';
-import { useAnnounce } from '../../../lib/announce';
+import { SheetSaySlot, useAnnounce } from '../../../lib/announce';
 import { retryFocus } from '../../../lib/focus';
 import { useReducedMotion } from '../../../lib/motion';
 import { dbErrorMessage, isUnreachable, loadErrorMessage, NETWORK_MESSAGE } from '../../../lib/dbErrors';
@@ -72,6 +72,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
   const [appActive, setAppActive] = useState(isActive(AppState.currentState));
   const lastRead = useRef<string | null>(null);
   const { say, region } = useAnnounce(); // 웹·안드로이드는 region, iOS는 announceForAccessibility
+  const sheetSay = useRef<((t: string) => void) | null>(null); // 열린 시트의 say(새 메시지 안내를 시트 영역으로)
   const [activeId, setActiveId] = useState<number | null>(null); // 웹 roving tabindex: 탭 순서에 있는 메시지(기본은 가장 새 것)
   const [failedQuotes, setFailedQuotes] = useState<Set<number>>(new Set());
   const [quoteTick, setQuoteTick] = useState(0);
@@ -228,7 +229,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
     if (!messages.length) return;
     const top = messages[messages.length - 1];
     if (seen.current !== null && top.id > seen.current && top.sender_id !== me) {
-      say(`${names.get(top.sender_id) ?? '상대'}: ${top.text || '사진'}`);
+      (sheetSay.current ?? say)(`${names.get(top.sender_id) ?? '상대'}: ${top.text || '사진'}`); // 시트가 열려 있으면 그 시트 영역으로
     }
     seen.current = top.id;
   }, [messages, me, names, say]);
@@ -482,6 +483,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
           </AppText>
         )}
       </KeyboardAvoidingView>
+      <SheetSaySlot.Provider value={sheetSay}>
       <MessageActions
         senderName={menuFor ? (menuFor.sender_id === me ? '나' : names.get(menuFor.sender_id)) : undefined}
         visible={menuFor !== null}
@@ -544,6 +546,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
           void onSend(); // 평소 보내기 그대로(sent_with_hint는 toneSent가 기록)
         }}
       />
+      </SheetSaySlot.Provider>
       <Toast message={toast} onHide={hideToast} />
     </SafeAreaView>
   );

@@ -10,7 +10,7 @@ jest.mock('../lib/motion', () => ({ MOTION_MS: 200, useReducedMotion: () => true
 jest.mock('../lib/supabase', () => ({ supabase: null }));
 // 시트 안 안내는 시트 자기 영역(Sheet의 useAnnounce)으로 간다: 화면의 say를 받지 않는다(AI-2).
 const mockSay = jest.fn();
-jest.mock('../lib/announce', () => ({ useAnnounce: () => ({ say: mockSay, region: null }) }));
+jest.mock('../lib/announce', () => ({ ...jest.requireActual('../lib/announce'), useAnnounce: () => ({ say: mockSay, region: null }) }));
 const mockFocusNode = jest.fn();
 jest.mock('../lib/focus', () => ({ ...jest.requireActual('../lib/focus'), focusNode: (...a: unknown[]) => mockFocusNode(...a) }));
 const mockDetail = jest.fn();

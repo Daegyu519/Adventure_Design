@@ -1,7 +1,7 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useContext, useEffect, useState, type ReactNode } from 'react';
 import { Animated, Modal, Platform, Pressable, View } from 'react-native';
 
-import { useAnnounce } from '../lib/announce';
+import { SheetSaySlot, useAnnounce } from '../lib/announce';
 import { retryFocus } from '../lib/focus';
 import { MOTION_MS, useReducedMotion } from '../lib/motion';
 import { focusRing, useTheme } from '../lib/theme';
@@ -16,6 +16,14 @@ export function Sheet({ visible, onClose, title, children, initialFocus }: { vis
   const { colors, radius, space } = useTheme();
   const reduced = useReducedMotion();
   const { say, region } = useAnnounce();
+  const slotRef = useContext(SheetSaySlot);
+  useEffect(() => {
+    if (!visible || !slotRef) return;
+    slotRef.current = say; // 열린 동안 화면의 새 메시지 안내도 이 영역으로
+    return () => {
+      if (slotRef.current === say) slotRef.current = null;
+    };
+  }, [visible, slotRef, say]);
   const [t] = useState(() => new Animated.Value(0));
   useEffect(() => {
     if (!visible) return;

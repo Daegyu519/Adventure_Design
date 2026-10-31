@@ -9,7 +9,8 @@ const EMPTY: Member[] = [];
 const newerThan = (a: string | null, b: string | null) => a !== null && (b === null || tsMicros(a) > tsMicros(b));
 
 // 방 멤버. 처음 값(fetchRoom 결과)에 room_members UPDATE(last_read_at·muted)를 덮는다. 더 옛 읽은 시각으로는 되돌리지 않는다.
-// error = Realtime이 끊김(다시 불러오기 줄). reload는 채널을 새로 연다(읽은 시각은 부른 쪽이 fetchRoom으로 다시 받는다).
+// error = Realtime이 끊김(다시 불러오기 줄). 끊긴 뒤 다시 SUBSCRIBED면 이 방 멤버 행을 다시 읽어 따라잡는다.
+// reload는 채널을 새로 연다(읽은 시각은 부른 쪽이 fetchRoom으로 다시 받는다).
 export function useMembers(roomId: string, initial: Member[] = EMPTY) {
   const [patch, setPatch] = useState<Record<string, Pick<Member, 'last_read_at' | 'muted'>>>({});
   const [error, setError] = useState(false);
@@ -18,16 +19,37 @@ export function useMembers(roomId: string, initial: Member[] = EMPTY) {
     if (!supabase) return;
     const c = supabase;
     let alive = true;
+    let down = false;
+    const apply = (n: { user_id: string; last_read_at: string | null; muted: boolean }) =>
+      setPatch((cur) => {
+        const old = cur[n.user_id];
+        return { ...cur, [n.user_id]: { muted: n.muted, last_read_at: old && newerThan(old.last_read_at, n.last_read_at) ? old.last_read_at : n.last_read_at } };
+      });
+    const catchUp = () =>
+      void Promise.resolve(c.from('room_members').select('user_id,last_read_at,muted').eq('room_id', roomId)).then(
+        ({ data }) => alive && data?.forEach(apply),
+        () => {}, // 못 읽으면 다음 UPDATE·다시 불러오기에서 맞춰진다
+      );
     const ch = c
       .channel(freshTopic(`members:${roomId}`))
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'room_members', filter: `room_id=eq.${roomId}` }, (p) => {
-        const n = p.new as { user_id: string; last_read_at: string | null; muted: boolean };
-        setPatch((cur) => {
-          const old = cur[n.user_id];
-          return { ...cur, [n.user_id]: { muted: n.muted, last_read_at: old && newerThan(old.last_read_at, n.last_read_at) ? old.last_read_at : n.last_read_at } };
-        });
-      })
-      .subscribe((s) => alive && watchStatus(s, 'members', () => setError(false), () => setError(true)));
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'room_members', filter: `room_id=eq.${roomId}` }, (p) => apply(p.new as { user_id: string; last_read_at: string | null; muted: boolean }))
+      .subscribe(
+        (s) =>
+          alive &&
+          watchStatus(
+            s,
+            'members',
+            () => {
+              setError(false);
+              if (down) catchUp();
+              down = false;
+            },
+            () => {
+              down = true;
+              setError(true);
+            },
+          ),
+      );
     return () => {
       alive = false;
       void c.removeChannel(ch);

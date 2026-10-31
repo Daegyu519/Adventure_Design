@@ -1081,3 +1081,13 @@ test('읽음 표시를 3번 다시 해도 실패하면 개발 중 경고와 다�
     jest.useRealTimers();
   }
 });
+
+// 시트(메뉴·털어놓기·살펴보기)가 열린 동안 웹은 Modal 밖 화면 영역을 가린다: 새 메시지 안내는 열린 시트의 영역으로.
+test('시트가 열린 동안 받은 새 메시지는 그 시트(dialog) 안 영역으로 알린다', async () => {
+  const { root } = await setup();
+  await click(buttons(root, '메시지 메뉴')[1]);
+  mockMessages = [...mockMessages, m(4, 'u2', '새 소식')];
+  await act(async () => root.render(<Room />));
+  const dialog = root.container.queryAll((n) => n.props.role === 'dialog')[0];
+  expect(dialog.queryAll((n) => n.props.accessibilityLiveRegion === 'polite').map((n) => textOf(n as unknown as TestNode)).join('|')).toContain('민수: 새 소식');
+});

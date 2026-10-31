@@ -12,6 +12,7 @@ const r = (message_id: number, user_id: string, emoji: string): R => ({ message_
 // 메모리 reactions 표 + 호출 기록. insert/update/delete/select만 지원한다(upsert는 없음 → 쓰면 TypeError).
 let table: R[] = [];
 let calls: string[] = [];
+let memberRows: Record<string, unknown>[] = []; // room_members 읽기(다시 연결 뒤 따라잡기)
 let insertErr: { code: string } | null = null;
 let hideUpdate = false; // true면 update가 0행에 닿은 것처럼 보인다
 
@@ -31,6 +32,7 @@ function mockBuilder(name: string) {
   };
   const run = async () => {
     calls.push(`${name}.${op}`);
+    if (op === 'select' && name === 'room_members') return { data: memberRows, error: null };
     if (op === 'select') return { data: table.filter((x) => !inIds || inIds.includes(x.message_id)), error: null };
     if (op === 'insert') {
       if (insertErr) return { data: null, error: insertErr };
@@ -71,6 +73,7 @@ beforeEach(() => {
   insertErr = null;
   hideUpdate = false;
   rt.reset();
+  memberRows = [];
   ids = [1, 2];
 });
 
@@ -195,4 +198,43 @@ test('useMembers: 같은 방 두 화면도 각자 채널, TIMED_OUT이면 error,
   await act(async () => rt.status('members:room', 'SUBSCRIBED'));
   expect(mapi.error).toBe(false);
   warn.mockRestore();
+});
+
+// realtime-js가 스스로 다시 들어가면(끊김 뒤 SUBSCRIBED) 끊긴 사이 놓친 공감·읽음도 다시 읽는다(메시지처럼).
+test.each(['CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED'] as const)('공감: %s 뒤 다시 SUBSCRIBED면 불러온 메시지의 공감을 다시 읽는다(같은 채널)', async (s) => {
+  const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+  await mount();
+  await act(async () => rt.status('reactions:room', 'SUBSCRIBED'));
+  const ch = rt.one('reactions:room');
+  await act(async () => rt.status('reactions:room', s));
+  table = [r(2, 'u3', '😮')]; // 끊긴 사이: 1의 공감은 지워지고 2에 새로 생김
+  if (s === 'CLOSED') rt.open.push(ch); // 가짜는 서버 CLOSED에 목록에서 빼므로, 다시 들어간 경우를 흉내 내려고 되돌린다
+  await act(async () => rt.status('reactions:room', 'SUBSCRIBED'));
+  expect(api.error).toBe(false);
+  expect(api.rows).toEqual([r(2, 'u3', '😮')]);
+  warn.mockRestore();
+});
+
+test('useMembers: 끊김 뒤 다시 SUBSCRIBED면 방 멤버의 읽음·알림 끔을 다시 읽는다(더 옛 값으로는 안 되돌림)', async () => {
+  const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+  await act(async () => createRoot().render(<MProbe />));
+  await act(async () => rt.status('members:room', 'SUBSCRIBED'));
+  await act(async () => rt.status('members:room', 'CHANNEL_ERROR'));
+  memberRows = [
+    { user_id: 'me', last_read_at: null, muted: false },
+    { user_id: 'u2', last_read_at: '2026-10-27 01:32:17.123456+00', muted: true },
+  ];
+  calls = [];
+  await act(async () => rt.status('members:room', 'SUBSCRIBED'));
+  expect(calls).toContain('room_members.select');
+  expect(mapi.error).toBe(false);
+  expect(members.find((x) => x.user_id === 'u2')).toMatchObject({ last_read_at: '2026-10-27 01:32:17.123456+00', muted: true });
+  warn.mockRestore();
+});
+
+test('처음 SUBSCRIBED에는 다시 읽지 않는다(끊긴 적이 없으면)', async () => {
+  await mount();
+  calls = [];
+  await act(async () => rt.status('reactions:room', 'SUBSCRIBED'));
+  expect(calls).toEqual([]);
 });

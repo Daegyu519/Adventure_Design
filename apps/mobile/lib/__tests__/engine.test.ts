@@ -167,19 +167,31 @@ test('default engine falls back to the mock and warns in dev when EXPO_PUBLIC_EN
 });
 
 // 배포 빌드(__DEV__ false)는 URL이 비어도 조용히 mock으로 돌면 안 된다: 가짜 힌트·기록이 나가고 엔진은 요청을 못 받는다(S-C1).
-test('release build: an empty EXPO_PUBLIC_ENGINE_URL throws at engine creation instead of using the mock', () => {
+// 배포 빌드(__DEV__ false)는 URL이 비어도 mock으로 돌지 않고 던지지도 않는다: 엔진만 꺼진다(규칙 11, 채팅은 그대로).
+// 모든 호출이 연결 실패(status 0, engine_not_configured)로 끝나 힌트는 조용히 없고, 다른 화면은 기존 고정 문구를 보인다.
+test('release build: an empty EXPO_PUBLIC_ENGINE_URL gives a disabled engine (no mock, no throw), every call rejects with status 0', async () => {
   const g = globalThis as { __DEV__?: boolean };
   const dev = g.__DEV__;
   const env = process.env;
+  const err = jest.spyOn(console, 'error').mockImplementation(() => {});
   g.__DEV__ = false;
   process.env = { ...env, EXPO_PUBLIC_ENGINE_URL: '' };
   try {
-    expect(() => createEngine({ baseUrl: '  ', getToken: async () => 'tok' })).toThrow(/EXPO_PUBLIC_ENGINE_URL/);
-    expect(createEngine({ baseUrl: 'http://e', getToken: async () => 'tok' }).isMock).toBe(false);
-    jest.isolateModules(() => expect(() => jest.requireActual('../engine')).toThrow(/EXPO_PUBLIC_ENGINE_URL/));
+    const fetchFn = jest.fn();
+    const e = createEngine({ baseUrl: '  ', getToken: async () => 'tok', fetchFn: fetchFn as unknown as typeof fetch });
+    expect(e.isMock).toBe(false);
+    for (const call of [() => e.hint({ room_id: R, text: '안 돼요.', seq: 1 }), () => e.detail({ room_id: R, text: '안 돼요.' }), () => e.feedback({ room_id: R, message_id: 1, text: 'x' }), () => e.stats(), () => e.mirrorToday(), () => e.mirrorAnswer({ card_id: 'c', reply: 'x' })])
+      await expect(call()).rejects.toMatchObject({ name: 'EngineError', status: 0, message: 'engine_not_configured' });
+    expect(fetchFn).not.toHaveBeenCalled();
+    expect(err).toHaveBeenCalledTimes(1); // 만들 때 한 번, 값은 넣지 않는다
+    expect(err.mock.calls[0]).toHaveLength(1);
+    let mod: typeof import('../engine') | undefined;
+    jest.isolateModules(() => (mod = jest.requireActual('../engine'))); // 모듈을 불러와도 던지지 않는다
+    expect(mod!.engine.isMock).toBe(false);
   } finally {
     g.__DEV__ = dev;
     process.env = env;
+    err.mockRestore();
   }
 });
 

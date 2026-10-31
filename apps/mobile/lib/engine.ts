@@ -1,5 +1,5 @@
 // 앱 → 엔진(/v1/*) 클라이언트. 타입은 생성 파일(types/engine.ts)에서 꺼내기만 한다.
-// EXPO_PUBLIC_ENGINE_URL이 비어 있으면 개발·테스트는 mock(engineMock.ts)으로 돌고, 배포 빌드는 던진다.
+// EXPO_PUBLIC_ENGINE_URL이 비어 있으면 개발·테스트는 mock(engineMock.ts)으로 돌고, 배포 빌드는 엔진이 꺼진다(모든 호출 실패, 채팅은 그대로).
 import { abortError } from './abort';
 import { createMockEngine } from './engineMock';
 import { supabase } from './supabase';
@@ -51,9 +51,12 @@ export function createEngine(o: {
   // 앞뒤 공백과 끝 '/'를 떼어 'http://host:8000/'이 '//v1/…'(404)가 되지 않게 한다. 공백뿐이면 비어 있는 것으로 본다.
   const baseUrl = o.baseUrl.trim().replace(/\/+$/, '');
   if (baseUrl === '') {
-    // 배포 빌드가 조용히 가짜 힌트를 내면 안 된다(파일럿 기록이 가짜가 되고 엔진은 요청을 못 받는다). 첫 실행에서 바로 드러나게 던진다.
-    if (!__DEV__) throw new Error('EXPO_PUBLIC_ENGINE_URL is empty in a release build: set it in apps/mobile/.env (web export) or the EAS environment');
-    return createMockEngine();
+    if (__DEV__) return createMockEngine();
+    // 배포 빌드는 가짜 힌트를 내지 않고(파일럿 기록이 가짜가 된다) 던지지도 않는다(규칙 11: 엔진 때문에 채팅이 멈추면 안 된다).
+    // 모든 호출이 연결 실패(status 0)로 끝나 힌트는 조용히 없고, 살펴보기·털어놓기·거울·리포트는 기존 고정 문구를 보인다.
+    console.error('[engine] EXPO_PUBLIC_ENGINE_URL is empty in a release build: engine features are off');
+    const off = () => Promise.reject(new EngineError(0, 'engine_not_configured'));
+    return { isMock: false, hint: off, detail: off, feedback: off, stats: off, mirrorToday: off, mirrorAnswer: off };
   }
   const fetchFn = o.fetchFn ?? fetch;
 
@@ -114,7 +117,7 @@ export const engine: Engine = createEngine({
   getToken: async () => (await supabase?.auth.getSession())?.data.session?.access_token ?? null,
 });
 
-// URL이 비면 가짜 힌트가 나간다. 개발 중에는 눈에 보이게 알린다(배포 빌드는 위에서 던진다).
+// URL이 비면 가짜 힌트가 나간다. 개발 중에는 눈에 보이게 알린다(배포 빌드는 위에서 엔진을 끈다).
 if (__DEV__ && process.env.NODE_ENV !== 'test' && engine.isMock) {
   console.warn('[engine] EXPO_PUBLIC_ENGINE_URL 이 비어 있어 mock 엔진을 씁니다(가짜 힌트). apps/mobile/.env 를 확인하세요(.env.example 참고).');
 }
