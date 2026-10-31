@@ -12,7 +12,7 @@ import { Sheet } from './Sheet';
 
 // 털어놓기: 받은 메시지에 대한 속마음을 엔진에만 남긴다. 글은 이 컴포넌트의 state에만 있고(저장·로그 없음) 보내거나 닫으면 사라진다.
 // 상대에게 알려 주거나 무언가 바뀐다고 약속하지 않는다. 엔진 응답(ack)은 여기서 보이지 않고 onDone에만 넘긴다.
-const HELP = '상대에게 직접 보이지 않아요. 누가 남겼는지 드러나지 않도록 해요.';
+const HELP = '상대에게 직접 보이지 않아요. 누가 남겼는지 알려 주지 않아요.';
 
 function VentForm(p: { say(t: string): void; roomId: string; message: Msg; onClose(): void; onDone(ack: string): void }) {
   const { colors, radius, space, font } = useTheme();

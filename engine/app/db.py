@@ -17,7 +17,6 @@ import asyncpg
 from harness.schemas import READINGS, TRIGGERS, FeedbackPattern
 
 KST = ZoneInfo("Asia/Seoul")
-GROUP_MIN_MEMBERS = 3  # 털어놓은 사람을 감출 수 있는 최소 인원. 이보다 작은 방은 global_patterns에만(규칙 14)
 
 
 def check_patterns(patterns: list[FeedbackPattern]) -> None:
@@ -94,7 +93,6 @@ class FeedbackWrite:
     message_id: int
     usable: bool
     patterns: list[FeedbackPattern]
-    to_sender: bool
     active_from: datetime
 
 
@@ -239,13 +237,11 @@ class PgRepo:
     async def apply_feedback(self, fb: FeedbackWrite) -> bool:
         check_patterns(fb.patterns)  # 첫 쿼리 전에
         async with self._pool.acquire() as conn, conn.transaction():
-            # 보낸 사람·관계·그룹 여부는 호출자가 아니라 여기서 읽는다. 규칙 14: 3명 이상 그룹방만 sender_patterns
+            # 보낸 사람·관계는 호출자가 아니라 여기서 읽는다. 규칙 14: 모든 방의 하소연이 sender_patterns에 들어간다
             src = await conn.fetchrow(
-                """select m.sender_id, r.relation,
-                          r.kind = 'group' and (select count(*) from public.room_members x where x.room_id = r.id) >= $3
-                            as to_sender_ok
+                """select m.sender_id, r.relation
                    from public.messages m join public.rooms r on r.id = m.room_id
-                   where m.id = $1 and m.room_id = $2""", fb.message_id, fb.room_id, GROUP_MIN_MEMBERS)
+                   where m.id = $1 and m.room_id = $2""", fb.message_id, fb.room_id)
             if src is None:
                 raise ValueError("unknown message")
             logged = await conn.fetchval(
@@ -265,8 +261,6 @@ class PgRepo:
                     await conn.execute(
                         """insert into tone.global_patterns as g (trigger, count) values ($1, 1)
                            on conflict (trigger) do update set count = g.count + 1""", p.trigger)
-                if not (fb.to_sender and src["to_sender_ok"]):
-                    continue
                 # count = (보낸 사람, 관계, 신호)마다 서로 다른 신고자 수: 처음 온 신고자만 센다(규칙 7)
                 new_reporter = await conn.fetchval(
                     """insert into tone.sender_pattern_reporters (sender_id, relation, trigger, reporter_id)

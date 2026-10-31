@@ -9,7 +9,7 @@ from datetime import datetime, time, timedelta, timezone
 from uuid import UUID
 
 import pipeline
-from app.db import GROUP_MIN_MEMBERS, KST, FeedbackWrite, Repo, week_start
+from app.db import KST, FeedbackWrite, Repo, week_start
 from experts.registry import Registry
 from harness.schemas import FeedbackPattern
 
@@ -57,7 +57,5 @@ async def run(repo: Repo, reg: Registry, room_id: UUID, reporter_id: UUID, messa
                 log.warning("feedback classification unavailable")
                 raise ClassificationUnavailable
             patterns = result.patterns if result.usable else []   # FeedbackResult가 이미 거름
-        # 호출자의 요청일 뿐이다: 보낸 사람·관계·그룹 규칙은 apply_feedback이 SQL에서 다시 판정한다
-        to_sender = room.kind == "group" and room.member_count >= GROUP_MIN_MEMBERS
         await repo.apply_feedback(FeedbackWrite(room_id, reporter_id, message_id, bool(patterns), patterns,
-                                                to_sender, next_midnight_kst(now)))
+                                                next_midnight_kst(now)))

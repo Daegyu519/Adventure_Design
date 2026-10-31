@@ -863,7 +863,7 @@ test('털어놓기: 받은 메시지에서 열고 → 안내 문구 → 남기�
   await click(buttons(root, '메시지 메뉴')[1]);
   await click(buttons(root, VENT)[0]);
   expect(buttons(root, '답장')).toHaveLength(0); // 메뉴는 닫힘
-  expect(texts()).toContain('상대에게 직접 보이지 않아요. 누가 남겼는지 드러나지 않도록 해요.');
+  expect(texts()).toContain('상대에게 직접 보이지 않아요. 누가 남겼는지 알려 주지 않아요.');
   await act(async () => ventInput(root).props.onChangeText('  너무 차가웠어요  '));
   expect(texts()).toContain('12/1000');
   await click(buttons(root, '남기기')[0]);
