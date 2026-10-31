@@ -19,7 +19,7 @@ up)
   # 서버 쪽 시작 명령은 deploy/school-gpu/up.sh llm 한 곳에만 있다(stdin으로 보낸다. 서버 복사본에 의존하지 않음).
   remote "bash -s -- llm" < "$(dirname "$0")/../deploy/school-gpu/up.sh"
   # 남은 소켓 파일이 있으면 지운다(없으면 -M이 멀티플렉싱 없이 터널을 열어 down이 못 닫는다)
-  tunnel_up || { rm -f "$SOCK"; ssh -f -N -M -S "$SOCK" -o BatchMode=yes -o ExitOnForwardFailure=yes -L "127.0.0.1:$PORT:127.0.0.1:11434" "$H"; }
+  tunnel_up || { rm -f "$SOCK"; ssh -f -N -M -S "$SOCK" -o BatchMode=yes -o ExitOnForwardFailure=yes -L "127.0.0.1:$PORT:127.0.0.1:11434" -L "127.0.0.1:11435:127.0.0.1:11435" "$H"; }
   for _ in $(seq 60); do
     if curl -sf "http://127.0.0.1:$PORT/health" >/dev/null; then
       echo "ready: http://127.0.0.1:$PORT/v1  (engine: USE_LOCAL_MODEL=1)"; exit 0
@@ -32,11 +32,11 @@ down)
   if [ "${2:-}" != --force ] && remote "tmux has-session -t tone-engine 2>/dev/null"; then
     echo "down: tunnel closed; tone-llm kept running because the pilot engine (tone-engine) uses it. Use 'down --force' to kill it anyway."
   else
-    remote "tmux kill-session -t tone-llm 2>/dev/null || true"
+    remote "tmux kill-session -t tone-llm 2>/dev/null; tmux kill-session -t tone-llm-fast 2>/dev/null; true"
     echo "down: tunnel closed, GPU released"
   fi ;;
 status)
-  remote "tmux has-session -t tone-llm 2>/dev/null && echo 'server: running' || echo 'server: stopped'; nvidia-smi --query-gpu=index,memory.used,utilization.gpu --format=csv,noheader"
+  remote "for t in tone-llm tone-llm-fast; do tmux has-session -t \$t 2>/dev/null && echo \"\$t: running\" || echo \"\$t: stopped\"; done; nvidia-smi --query-gpu=index,memory.used,utilization.gpu --format=csv,noheader"
   if tunnel_up; then echo "tunnel: open (127.0.0.1:$PORT)"; else echo "tunnel: closed"; fi
   curl -sf "http://127.0.0.1:$PORT/health" >/dev/null && echo "local :$PORT: ok" || echo "local :$PORT: not answering" ;;
 *) echo "usage: $0 up|down [--force]|status" >&2; exit 2 ;;
