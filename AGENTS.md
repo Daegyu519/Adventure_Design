@@ -48,11 +48,15 @@
 - **평가**: 대조 세트와 `--mock` 평가 스크립트, `eval/baseline.json`(정밀도 게이트)이 있다. 이 mock 수치는 배관 확인용이다. 라벨된 30쌍(T-16)이 있어야 `-live` 평가가 된다.
 - **배포**: 아직 없음. T-29(엔진), T-30(웹 + Android EAS), T-31(파일럿 1주).
 
+P-14 Phase 1(2026-11-01): 실제 학습·저장·재로드·평가·TorchScript와 선택적 이진 전문가 기반 완료. 검증 F1=0이므로 운영 미연결. ML33·엔진533 통과(27skip), scripts/check 통과. 상세는 `docs/handoff/P-14-result.md`. GitHub 쓰기403으로 코드 패치 인계, main 미반영.
+
+P-14 후속 감사(2026-11-01): 기존 모델·ZIP 해시 및 Windows CPU 독립 복원 확인. generic Fast 직렬화의 CLS/SEP 누락을 확인해 새 학습용 opt-in v2와 epoch 기록을 추가했다. 새 레이블·독립 검증 그룹을 확보하지 못해 실제 재학습은 하지 않았다. 맥락 제거/교환 진단 1회 완료. `docs/handoff/P-14-final-hour.md` 참조.
+
 ## 3. 진행 중 (건드리지 말 것)
 
 | 작업 | 누가 | 상태 |
 |---|---|---|
-| (없음) | | |
+| P-14 | Codex | Phase 1 기반 완료, 성능·독립 인간 평가·통합 후속. `p14-context` 로컬 worktree, 원격 쓰기 권한 없음 |
 
 보류(paused): 없음.
 
