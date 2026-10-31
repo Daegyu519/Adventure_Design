@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# 사용법: scripts/pilot-webhook <ENGINE_BASE_URL> <ENGINE_ENV_FILE>
+#   예: scripts/pilot-webhook https://tone-chat.<tailnet>.ts.net .env.pilot.engine
+# pilot DB에 "messages Insert → POST <URL>/hooks/message (X-Hook-Secret)" 웹훅을 만든다(대시보드 Database Webhooks와 같은 일, pg_net).
+# DB 주소와 HOOK_SECRET은 env 파일에서 읽어 DB로만 보낸다(출력·argv에 안 남김). 다시 실행해도 된다(함수 교체, 트리거 다시 만듦).
+# 비밀값·URL이 환경마다 달라서 마이그레이션이 아니라 이 스크립트로 둔다. 비밀값을 바꾸면 엔진 env와 함께 다시 실행한다.
+set -euo pipefail
+URL="${1:-}"; ENVF="${2:-}"
+[ -n "$URL" ] && [ -f "$ENVF" ] || { echo "usage: $0 <ENGINE_BASE_URL> <ENGINE_ENV_FILE>" >&2; exit 2; }
+case "$URL" in https://*) ;; *) echo "ENGINE_BASE_URL must be https://" >&2; exit 2 ;; esac
+ENVF="$(cd "$(dirname "$ENVF")" && pwd)/$(basename "$ENVF")"
+cd "$(dirname "$0")/.."
+HOOK_URL="${URL%/}/hooks/message" ENVF="$ENVF" uv run --project engine python - <<'PY'
+import asyncio, os, asyncpg
+
+v = {}
+for line in open(os.environ["ENVF"], encoding="utf-8"):
+    s = line.strip()
+    if s and not s.startswith("#") and "=" in s:
+        k, x = s.split("=", 1)
+        v[k.strip()] = x.strip()
+db, secret, url = v.get("SUPABASE_DB_URL", ""), v.get("HOOK_SECRET", ""), os.environ["HOOK_URL"]
+if not db or not secret:
+    raise SystemExit("SUPABASE_DB_URL and HOOK_SECRET must be set in the env file")
+
+# 함수 본문에 URL·비밀값을 넣는다(대시보드 웹훅도 트리거 인자에 넣는다). tone 스키마는 API에 노출되지 않는다(규칙 10).
+SQL = """
+create extension if not exists pg_net with schema extensions;
+create or replace function tone.notify_engine_message() returns trigger
+language plpgsql security definer set search_path = '' as $fn$
+begin
+  perform net.http_post(
+    url := {url},
+    body := jsonb_build_object('type', 'INSERT', 'table', 'messages', 'schema', 'public',
+                               'record', to_jsonb(new), 'old_record', null),
+    headers := jsonb_build_object('Content-Type', 'application/json', 'X-Hook-Secret', {secret}),
+    timeout_milliseconds := 5000);
+  return new;
+end
+$fn$;
+revoke all on function tone.notify_engine_message() from public, anon, authenticated;
+drop trigger if exists messages_engine_hook on public.messages;
+create trigger messages_engine_hook after insert on public.messages
+  for each row execute function tone.notify_engine_message();
+"""
+
+def lit(s: str) -> str:
+    return "'" + s.replace("'", "''") + "'"
+
+async def main() -> None:
+    c = await asyncpg.connect(db, statement_cache_size=0)
+    try:
+        await c.execute(SQL.format(url=lit(url), secret=lit(secret)))
+        n = await c.fetchval("select count(*) from pg_trigger where tgname = 'messages_engine_hook'")
+        print(f"webhook ready: messages insert -> {url} (trigger count {n})")
+    finally:
+        await c.close()
+
+asyncio.run(main())
+PY
