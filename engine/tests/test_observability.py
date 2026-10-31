@@ -41,7 +41,7 @@ def test_missing_key_logs_one_warning_per_skipped_entry(caplog):
     with pytest.raises(NoResult):
         _call(_real_router())
     msgs = [r.getMessage() for r in caplog.records]
-    assert any("nvidia:deepseek-ai/deepseek-v4.1-flash" in m and "unavailable" in m for m in msgs)
+    assert any("nvidia:poolside/laguna-xs-2.1" in m and "unavailable" in m for m in msgs)
     assert any("github:openai/gpt-4.1-mini" in m and "unavailable" in m for m in msgs)
     assert SECRET not in caplog.text
 
@@ -49,11 +49,12 @@ def test_missing_key_logs_one_warning_per_skipped_entry(caplog):
 def test_open_breaker_is_logged(caplog, monkeypatch):
     monkeypatch.setenv("NVIDIA_API_KEY", "k")   # 키가 있는 것처럼
     r = _real_router()
-    r.breakers["nvidia:deepseek-ai/deepseek-v4.1-flash"] = Breaker(open_until=time.monotonic() + 60)
+    for entry in ("nvidia:poolside/laguna-xs-2.1", "nvidia:nvidia/nemotron-3.5-bolt-e4b"):   # 사슬의 nvidia 항목 모두
+        r.breakers[entry] = Breaker(open_until=time.monotonic() + 60)
     caplog.set_level(logging.WARNING)
     with pytest.raises(NoResult):
         _call(r)
-    assert any("nvidia:deepseek-ai/deepseek-v4.1-flash" in m and "breaker_open" in m
+    assert any("nvidia:poolside/laguna-xs-2.1" in m and "breaker_open" in m
                for m in (x.getMessage() for x in caplog.records))
 
 
@@ -89,7 +90,7 @@ def test_provider_5xx_logs_entry_and_status_class_and_health_counts_it(caplog, m
     caplog.set_level(logging.WARNING)
     with pytest.raises(NoResult):
         _call(reg.router)
-    assert any("nvidia:deepseek-ai/deepseek-v4.1-flash" in m and "ProviderError 5xx" in m
+    assert any("nvidia:poolside/laguna-xs-2.1" in m and "ProviderError 5xx" in m
                for m in (x.getMessage() for x in caplog.records))
     assert SECRET not in caplog.text
     app.dependency_overrides[get_registry] = lambda: reg
@@ -107,9 +108,9 @@ def test_startup_warns_for_each_unavailable_real_entry(caplog):
     caplog.set_level(logging.WARNING)
     startup_warnings(reg, {})
     msgs = [r.getMessage() for r in caplog.records]
-    assert any("nvidia:moonshotai/kimi-k3" in m for m in msgs)
+    assert any("nvidia:nvidia/nemotron-3.5-bolt-e4b" in m for m in msgs)
     assert not any("mock:" in m for m in msgs)
-    assert len([m for m in msgs if "nvidia:moonshotai/kimi-k3" in m]) == 1   # 사슬이 겹쳐도 한 번
+    assert len([m for m in msgs if "nvidia:nvidia/nemotron-3.5-bolt-e4b" in m]) == 1   # 사슬이 겹쳐도 한 번
 
 
 def test_startup_silent_when_forced_mock(caplog):

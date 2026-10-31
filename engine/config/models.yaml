@@ -23,20 +23,24 @@ providers:
   mock:
     rpm: 100000
 
+# 모델 선택(P-06, 2026-10-31, 이 NVIDIA 계정 실측): 추론 모델(nemotron-3-ultra·nano-omni)은 생각 토큰 때문에 3~15초라 실시간에 못 쓴다.
+# laguna-xs-2.1(실시간·상세 모두 ~1초)을 빠른 쪽, nemotron-3.5-bolt-e4b(1~3초, 고쳐 쓰기가 지시를 더 잘 따름)를 깊은 쪽·폴백으로 쓴다.
+# 응답 없음(2026-10-31): deepseek-v4.1-flash(500·시간 초과), kimi-k3(카탈로그에 없음)·kimi-k2.6(404), mistral-large-4(시간 초과). AGENTS §9에서 다시 확인.
+# 전문가 id의 tone_ds·tone_kimi·ctx_fast·ctx_deep은 옛 모델 이름의 흔적일 뿐이다(테스트가 id를 쓰므로 그대로 둔다).
 # 전문가. 추가·제거는 여기서만 한다. mock은 force_mock(테스트·평가)가 쓸 mock_rules 이름(없으면 prompt 이름).
 # optional은 첫 모델 공급자를 쓸 수 없으면 빠진다. HyperCLOVA X는 생성(rewrite)에 쓰지 않는다(라이선스).
 experts:
-  - {id: ctx_fast,  role: context,  model: nvidia:deepseek-ai/deepseek-v4.1-flash, prompt: context,  paths: [realtime]}
-  - {id: ctx_deep,  role: context,  model: nvidia:moonshotai/kimi-k3,              prompt: context,  paths: [detail, mirror]}
-  - {id: tone_ds,   role: tone,     model: nvidia:deepseek-ai/deepseek-v4.1-flash, prompt: tone,     paths: [realtime, detail, mirror], weight: 1.0}
-  - {id: tone_kimi, role: tone,     model: nvidia:moonshotai/kimi-k3,              prompt: tone,     paths: [detail, mirror], weight: 1.0, mock: tone_alt}
+  - {id: ctx_fast,  role: context,  model: nvidia:poolside/laguna-xs-2.1, prompt: context,  paths: [realtime]}
+  - {id: ctx_deep,  role: context,  model: nvidia:nvidia/nemotron-3.5-bolt-e4b,              prompt: context,  paths: [detail, mirror]}
+  - {id: tone_ds,   role: tone,     model: nvidia:poolside/laguna-xs-2.1, prompt: tone,     paths: [realtime, detail, mirror], weight: 1.0}
+  - {id: tone_kimi, role: tone,     model: nvidia:nvidia/nemotron-3.5-bolt-e4b,              prompt: tone,     paths: [detail, mirror], weight: 1.0, mock: tone_alt}
   - {id: tone_hcx,  role: tone,     model: local:naver-hyperclovax/HyperCLOVAX-SEED-Text-Instruct-1.5B, prompt: tone, paths: [realtime, detail, mirror], weight: 1.0, optional: true}
-  - {id: judge,     role: judge,    model: nvidia:moonshotai/kimi-k3,              prompt: judge,    paths: [detail, mirror]}
-  - {id: rewrite,   role: rewrite,  model: nvidia:deepseek-ai/deepseek-v4.1-flash, prompt: rewrite,  paths: [detail, mirror]}
-  - {id: feedback,  role: feedback, model: nvidia:moonshotai/kimi-k3,              prompt: feedback, paths: [async]}
+  - {id: judge,     role: judge,    model: nvidia:nvidia/nemotron-3.5-bolt-e4b,              prompt: judge,    paths: [detail, mirror]}
+  - {id: rewrite,   role: rewrite,  model: nvidia:poolside/laguna-xs-2.1, prompt: rewrite,  paths: [detail, mirror]}
+  - {id: feedback,  role: feedback, model: nvidia:nvidia/nemotron-3.5-bolt-e4b,              prompt: feedback, paths: [async]}
 fallback:   # 실제 문장이 지나가므로 gemini 금지
-  nvidia:deepseek-ai/deepseek-v4.1-flash: [github:openai/gpt-4.1-mini, mock:auto]
-  nvidia:moonshotai/kimi-k3: [nvidia:deepseek-ai/deepseek-v4.1-flash, mock:auto]
+  nvidia:poolside/laguna-xs-2.1: [nvidia:nvidia/nemotron-3.5-bolt-e4b, github:openai/gpt-4.1-mini, mock:auto]
+  nvidia:nvidia/nemotron-3.5-bolt-e4b: [nvidia:poolside/laguna-xs-2.1, mock:auto]
 paths:
   realtime: {deadline_ms: 1500, expert_deadline_ms: 1200, gate_threshold: 0.3}
   detail:   {deadline_ms: 8000}
