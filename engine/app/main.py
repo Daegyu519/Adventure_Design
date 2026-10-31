@@ -60,7 +60,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 app.state.repo = None
 
 
-app = FastAPI(title="tone-chat engine", lifespan=lifespan)
+app = FastAPI(title="tone-chat engine", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)  # 공개 URL에 문서 노출 금지. 타입 생성은 app.openapi()(openapi_dump)
 app.add_middleware(BodyLimit)  # CORS보다 안쪽: 413에도 CORS 헤더가 붙는다
 
 

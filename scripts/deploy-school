@@ -1,17 +1,15 @@
 #!/usr/bin/env bash
-# 사용법: scripts/deploy-school [--env FILE] [--no-restart]
+# 사용법: scripts/deploy-school [--env FILE]
 # 엔진(engine/, deploy/)을 학교 GPU 서버에 올리고 llm·engine·funnel을 켠다(README "배포").
 #   --env FILE:    엔진 환경 파일을 서버 engine.env(권한 600)로 복사한다. 값은 출력하지 않는다.
-#   --no-restart:  코드만 올리고 프로세스는 그대로 둔다.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 H="${GPU_SSH:-tone-gpu}"; B=/root/tone-chat-deploy
-ENVF=""; RESTART=1
+ENVF=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --env) [ $# -ge 2 ] || { echo "--env needs FILE" >&2; exit 2; }; ENVF="$2"; shift 2 ;;
-    --no-restart) RESTART=0; shift ;;
-    *) echo "usage: $0 [--env FILE] [--no-restart]" >&2; exit 2 ;;
+    *) echo "usage: $0 [--env FILE]" >&2; exit 2 ;;
   esac
 done
 [ -z "$ENVF" ] || [ -f "$ENVF" ] || { echo "no such file: $ENVF" >&2; exit 2; }
@@ -21,13 +19,24 @@ up() { remote 'bash -s -- '"$1" < deploy/school-gpu/up.sh; }
 
 git archive HEAD engine deploy | remote "set -e; rm -rf $B/app.new; mkdir -p $B/app.new; tar -x -C $B/app.new"
 # 가상환경 안의 스크립트는 절대 경로를 품으므로 자리를 바꾼 뒤에 sync한다. 실패하면 되돌린다(이전 venv는 다시 sync가 필요할 수 있음).
-remote "set -e; cd $B; rm -rf app.prev; [ -d app ] && mv app app.prev; mv app.new app
-  cd app/engine && uv sync --locked --python 3.11 || { cd $B; rm -rf app.failed; mv app app.failed; [ -d app.prev ] && mv app.prev app; echo 'uv sync failed; rolled back' >&2; exit 1; }"
+remote "set -e; cd $B; rm -rf app.prev app.failed; [ -d app ] && mv app app.prev; mv app.new app
+  cd app/engine && uv sync --locked --no-dev --python 3.11 || { cd $B; rm -rf app.failed; mv app app.failed; [ -d app.prev ] && mv app.prev app; echo 'uv sync failed; rolled back' >&2; exit 1; }"
 echo "uploaded: HEAD $(git rev-parse --short HEAD)"
 
 if [ -n "$ENVF" ]; then
   remote "umask 077; cat > $B/engine.env.new && chmod 600 $B/engine.env.new && mv $B/engine.env.new $B/engine.env" < "$ENVF"
   echo "engine.env updated"
 fi
-if [ "$RESTART" = 1 ]; then up all || { c=$?; [ "$c" = 3 ] && echo "(Tailscale login needed; open the link, then rerun)" >&2; exit "$c"; }; fi
+c=0; up all || c=$?
+if [ "$c" != 0 ] && [ "$c" != 3 ] && [ "$c" != 4 ]; then   # 3·4는 사람이 할 일(Tailscale 로그인·Funnel 켜기)
+  if remote "set -e; cd $B; [ -d app.prev ]; mv app app.failed; mv app.prev app"; then
+    # 되돌린 코드의 venv는 자리가 바뀌었으므로 다시 sync한다
+    remote "cd $B/app/engine && uv sync --locked --no-dev --python 3.11" && up engine || true
+    echo "rolled back to previous app (failed one kept as app.failed)" >&2
+  else
+    echo "no previous app to roll back to" >&2
+  fi
+  exit "$c"
+fi
+[ "$c" = 0 ] || echo "(human step needed: see README 배포; then rerun)" >&2
 up status

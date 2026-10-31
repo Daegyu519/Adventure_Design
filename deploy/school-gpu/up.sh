@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 서버에서 돌리는 스크립트. 서버에 복사하지 않고 stdin으로 보낸다:
 #   ssh tone-gpu 'bash -s -- llm|engine|funnel|all|status|stop' < deploy/school-gpu/up.sh
-# 멱등. 비밀값은 출력하지 않는다. 다른 사람의 프로세스·디렉터리(/root/alphaforge 등)는 건드리지 않는다.
+# 멱등. 비밀값은 출력하지 않는다. 다른 프로세스·디렉터리는 건드리지 않는다.
 set -euo pipefail
 BASE=/root/tone-chat-deploy; LLM=/root/tone-chat-llm
 PORT=11434; ENGINE_PORT=8000
@@ -15,9 +15,11 @@ funnel_url() { ts funnel status 2>/dev/null | grep -o 'https://[^ ]*' | head -1 
 llm() {
   has tone-llm && return 0
   cd "$LLM"
-  G=$(nvidia-smi --query-gpu=index,memory.used --format=csv,noheader,nounits | sort -t, -k2 -n | head -1 | cut -d, -f1)
+  # 가장 한가한 GPU: 사용률 50% 초과는 뒤로, 그다음 메모리 사용량, 사용률 순(호스트는 여러 사람이 공유)
+  export CUDA_DEVICE_ORDER=PCI_BUS_ID
+  G=$(nvidia-smi --query-gpu=index,memory.used,utilization.gpu --format=csv,noheader,nounits | awk -F', *' '{print ($3>50), $2, $3, $1}' | sort -n -k1,1 -k2,2 -k3,3 | head -1 | awk '{print $4}')
   # 기본 로그 수준은 요청 문장을 남기지 않는다 — -v·--verbose·--log-verbosity를 붙이지 않는다(문장이 server.log에 남음).
-  tmux new-session -d -s tone-llm "CUDA_VISIBLE_DEVICES=$G ./llama.cpp/build/bin/llama-server -m hcx-seed-1.5b-q4_k_m.gguf --host 127.0.0.1 --port $PORT -ngl 99 -np 4 -c 16384 --no-slots --alias $MODEL_ID > server.log 2>&1"
+  tmux new-session -d -s tone-llm "CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=$G ./llama.cpp/build/bin/llama-server -m hcx-seed-1.5b-q4_k_m.gguf --host 127.0.0.1 --port $PORT -ngl 99 -np 4 -c 16384 --no-slots --alias $MODEL_ID > server.log 2>&1"
   echo "llm started on GPU $G"
 }
 
@@ -25,10 +27,13 @@ engine() {
   local f="$BASE/engine.env"
   [ -f "$f" ] || { echo "missing $f (scripts/deploy-school --env FILE)" >&2; exit 1; }
   [ "$(stat -c %a "$f")" = 600 ] || { echo "$f must be mode 600" >&2; exit 1; }
+  # 형식 검사: 빈 줄, 주석, KEY=값(값에 따옴표·공백·$·&·; 없음. DB 비밀번호는 퍼센트 인코딩). docker --env-file과 같은 형식.
+  if grep -qvE '^(#.*|[A-Za-z_][A-Za-z0-9_]*=[A-Za-z0-9._:/@%+=,?~_-]*)?$' "$f"; then
+    echo "engine.env format error: only KEY=value lines (no quotes, spaces, \$, &, ;)" >&2; exit 1
+  fi
   has tone-engine && tmux kill-session -t tone-engine
-  : > "$BASE/engine.log"
-  # engine.env는 셸로 읽는다(값에 공백·특수문자가 있으면 따옴표로 감싼다). USE_LOCAL_MODEL은 항상 켠다.
-  tmux new-session -d -s tone-engine "cd $BASE/app/engine && set -a && . $f && set +a && export USE_LOCAL_MODEL=1 && sh deploy-entrypoint.sh uv run uvicorn app.main:app --host 127.0.0.1 --port $ENGINE_PORT --workers 1 > $BASE/engine.log 2>&1"
+  # 검사한 파일만 셸로 읽는다. USE_LOCAL_MODEL은 항상 켠다. 죽으면 5초 뒤 다시 띄운다(컨테이너 재시작 후엔 up.sh all을 다시 실행).
+  tmux new-session -d -s tone-engine "exec >>$BASE/engine.log 2>&1; cd $BASE/app/engine && set -a && . $f && set +a && export USE_LOCAL_MODEL=1; while :; do sh deploy-entrypoint.sh uv run --frozen --no-dev uvicorn app.main:app --host 127.0.0.1 --port $ENGINE_PORT --workers 1; echo 'engine exited, restarting in 5s'; sleep 5; done"
   for _ in $(seq 30); do
     curl -sf "http://127.0.0.1:$ENGINE_PORT/health" >/dev/null && { echo "engine: ok"; return 0; }
     sleep 1
