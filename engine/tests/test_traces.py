@@ -62,6 +62,7 @@ async def _boom(*_a, **_k):
 
 # ── 요청마다 1행 ──────────────────────────────────────
 
+@pytest.mark.legacy_rt
 def test_one_trace_per_hint_request(client, login, fake, queue, registry, monkeypatch):
     me, _, light = _room(fake, LIGHT)
     _, _, heavy = _room(fake, HEAVY, me)
@@ -89,6 +90,7 @@ def test_one_trace_per_hint_request(client, login, fake, queue, registry, monkey
     assert rows[0]["risk"] is None and 0 <= rows[1]["risk"] <= 1 and rows[2]["risk"] is None
 
 
+@pytest.mark.legacy_rt
 def test_hint_trace_contents(client, login, fake, queue):
     me, _, room = _room(fake, HEAVY)
     login(me)
@@ -232,6 +234,7 @@ def _inject(spy):
     }
 
 
+@pytest.mark.legacy_rt
 @pytest.mark.parametrize("call", [_hint, _detail])
 def test_trace_has_no_text(client, login, fake, queue, spy, registry, call):
     me, _, room = _room(fake, f"민수야 {HEAVY}", you_name="민수")

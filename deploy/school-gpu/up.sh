@@ -19,7 +19,7 @@ serve() {   # serve <tmux> <gguf> <port> <alias> [추가 옵션]
   # 가장 한가한 GPU: 사용률 50% 초과는 뒤로, 그다음 메모리 사용량, 사용률 순(호스트는 여러 사람이 공유)
   export CUDA_DEVICE_ORDER=PCI_BUS_ID
   G=$(nvidia-smi --query-gpu=index,memory.used,utilization.gpu --format=csv,noheader,nounits | awk -F', *' '{print ($3>50), $2, $3, $1}' | sort -n -k1,1 -k2,2 -k3,3 | head -1 | awk '{print $4}')
-  # 기본 로그 수준은 요청 문장을 남기지 않는다 — -v·--verbose·--log-verbosity를 붙이지 않는다(문장이 server.log에 남음).
+  # 기본 로그 수준은 요청 문장을 남기지 않는다 — -v·--verbose·--log-verbosity를 붙이지 않는다(문장이 <세션>.log에 남음).
   tmux new-session -d -s "$1" "CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=$G ./llama.cpp/build/bin/llama-server -m $2 --host 127.0.0.1 --port $3 -ngl 99 -np 4 -c 16384 --no-slots --alias $4 ${5:-} > $1.log 2>&1"
   echo "$1 started on GPU $G"
 }

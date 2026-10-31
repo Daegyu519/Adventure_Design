@@ -14,7 +14,7 @@ from app.main import app
 from app.settings import Settings
 from tests.fakes import FakeQueue, FakeRepo
 from tests.pg import Cluster, PgSeeder, missing_reason
-from tests.spy import SpyProvider, make_registry
+from tests.spy import SpyProvider, make_legacy_rt_registry, make_registry
 
 
 @pytest.fixture(autouse=True)
@@ -62,8 +62,11 @@ def spy() -> SpyProvider:
 
 
 @pytest.fixture
-def registry(spy):
-    """테스트마다 새로 읽는다(cfg를 고쳐도, 라우터 캐시도 다른 테스트에 새지 않는다)."""
+def registry(spy, request, tmp_path):
+    """테스트마다 새로 읽는다(cfg를 고쳐도, 라우터 캐시도 다른 테스트에 새지 않는다).
+    @pytest.mark.legacy_rt: 실시간에 context 전문가가 있던 옛 구조(테스트 전용 설정)."""
+    if request.node.get_closest_marker("legacy_rt"):
+        return make_legacy_rt_registry(tmp_path, spy)
     return make_registry(spy)
 
 

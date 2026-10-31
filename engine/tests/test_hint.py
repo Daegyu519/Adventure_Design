@@ -44,6 +44,7 @@ def test_light_message_no_hint(client, login, fake):
     assert uuid.UUID(body["trace_id"])
 
 
+@pytest.mark.legacy_rt
 def test_heavy_context_hint(client, login, fake):
     me, _, room = _room(fake, HEAVY)
     login(me)
@@ -137,6 +138,7 @@ def test_no_raw_pii_reaches_experts(client, login, fake, spy):
     assert replies and all("[전화번호" in t and "[이름" in t for t in replies)   # 답장 대상이 가려진 채로 갔다
 
 
+@pytest.mark.legacy_rt
 def test_group_room_prompts_name_the_room_and_speakers(client, login, fake, spy):
     a, b, c = fake.add_user("김지은"), fake.add_user("박민수"), fake.add_user("최수아")
     room = fake.add_room("group", "팀원", [a, b, c])
@@ -149,6 +151,7 @@ def test_group_room_prompts_name_the_room_and_speakers(client, login, fake, spy)
     assert "[상대1] " in by_model["context"]["user"] and "[상대1]" in by_model["context"]["system"]
 
 
+@pytest.mark.legacy_rt
 def test_sender_pattern_needs_global_min_obs(fake, registry):
     """보낸 사람 패턴이 있어도 전체 관찰 수가 global_min_obs(5) 미만이면 L0에서 반영되지 않는다."""
     me, _, room = _room(fake, LIGHT)
@@ -167,6 +170,7 @@ def test_sender_pattern_needs_global_min_obs(fake, registry):
     assert five.outcome in {"abstain", "alert", "none"} and five.results
 
 
+@pytest.mark.legacy_rt
 def test_realtime_outcomes(fake, registry):
     me, _, room = _room(fake, HEAVY)
     ctx = asyncio.run(load_context(fake, room, me, None, NOW))

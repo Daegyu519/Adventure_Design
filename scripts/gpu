@@ -26,7 +26,7 @@ up)
     fi
     sleep 1
   done
-  echo "llama-server not ready after 60s: scripts/gpu status, server log /root/tone-chat-llm/server.log" >&2; exit 1 ;;
+  echo "llama-server not ready after 60s: scripts/gpu status, server logs /root/tone-chat-llm/tone-llm.log, tone-llm-fast.log" >&2; exit 1 ;;
 down)
   tunnel_up && ssh -S "$SOCK" -O exit "$H" 2>/dev/null || true
   if [ "${2:-}" != --force ] && remote "tmux has-session -t tone-engine 2>/dev/null"; then

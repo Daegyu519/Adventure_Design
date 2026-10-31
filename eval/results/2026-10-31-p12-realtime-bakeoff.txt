@@ -1,0 +1,33 @@
+# 2026-10-31 P-12 실시간 모델 비교 (학교 GPU P100, llama.cpp, 프로토타입 8쌍 n=16 — 게이트 아님, T-16 30쌍으로 다시 볼 것)
+# 변형: a=게이트 0, b=게이트 0.1, c=게이트 0 + 같은 모델로 context, u=시간 제한 없음(품질만), f=짧은 답 프롬프트(tone_fast)
+# 열: 정밀도 재현율 기권률 평균ms p95ms 실패 (2회 평균)
+model var P R abstain mean_ms p95_ms fails
+exaone-2.4b a 0.0 0.0 1.0 1203 1204 {'TimeoutError': 32}
+exaone-2.4b au 1.0 0.12 0.0 1425 1474 -
+exaone-2.4b b 0.0 0.0 0.81 977 1204 {'TimeoutError': 26}
+exaone-2.4b bu 0.0 0.0 0.0 1191 1557 -
+exaone-2.4b c 0.0 0.0 1.0 1204 1207 {'TimeoutError': 57}
+exaone-2.4b cu 0.5 0.06 0.0 1735 2824 {'ValidationError': 2}
+gemma3-4b a 0.0 0.0 1.0 1206 1212 {'TimeoutError': 32}
+gemma3-4b au 0.75 0.38 0.0 1897 2019 -
+gemma3-4b b 0.0 0.0 0.81 978 1204 {'TimeoutError': 26}
+gemma3-4b bf 1.0 0.38 0.0 665 944 -
+gemma3-4b bu 0.75 0.38 0.0 1561 2057 -
+gemma3-4b c 0.0 0.0 1.0 1204 1206 {'TimeoutError': 64}
+gemma3-4b cu 0.75 0.38 0.0 3249 3570 {'ValidationError': 2}
+qwen25-7b a 0.0 0.0 1.0 1206 1209 {'TimeoutError': 32}
+qwen25-7b au 1.0 0.32 0.03 1960 2068 {'JSONDecodeError': 1}
+qwen25-7b b 0.0 0.0 0.81 978 1205 {'TimeoutError': 26}
+qwen25-7b bf 0.0 0.0 0.06 854 1178 {'TimeoutError': 2}
+qwen25-7b bu 1.0 0.18 0.03 1580 2047 {'JSONDecodeError': 1}
+qwen25-7b c 0.0 0.0 1.0 1208 1208 {'TimeoutError': 64}
+qwen25-7b cu 1.0 0.18 0.03 3239 3202 {'JSONDecodeError': 1, 'ValueError': 1}
+qwen3-4b a 0.0 0.0 1.0 1212 1217 {'TimeoutError': 32}
+qwen3-4b au 0.5 0.12 0.0 1500 1614 -
+qwen3-4b b 0.0 0.0 0.81 978 1208 {'TimeoutError': 26}
+qwen3-4b bf 0.0 0.0 0.03 593 774 {'TimeoutError': 1}
+qwen3-4b bu 0.5 0.12 0.0 1175 1545 -
+qwen3-4b c 0.0 0.0 1.0 1206 1206 {'TimeoutError': 59}
+qwen3-4b cu 0.5 0.12 0.0 1647 1724 -
+seed a 0.0 0.0 0.06 769 824 {'JSONDecodeError': 2}
+# 결론: gemma3-4b + tone_fast(bf) — 정밀도 1.0, 재현율 0.38, p95 0.87~1.0초 → 실시간 전문가로 채택

@@ -52,7 +52,6 @@
 
 | 작업 | 누가 | 상태 |
 |---|---|---|
-| P-12 실시간 말투 모델 교체 | Claude | 학교 GPU에서 로컬 모델 비교 실험 중(브랜치 아직 없음). `engine/config/models.yaml`의 실시간 전문가·게이트를 바꿀 예정이니 이 파일은 잠시 피한다 |
 
 보류(paused): 없음.
 
@@ -64,7 +63,7 @@
 
 | 순서 | 작업 | 누가 | 지시서 |
 |---|---|---|---|
-| 1 | **P-12** 실시간 말투 모델 교체 | Claude (진행 중) | — |
+| 1 | **P-12** 실시간 말투 모델 교체 | Claude (완료, land 대기) | — |
 | 2 | **P-13** "말투 살펴보기" 버튼 + 고쳐 쓰기 3가지·배지 | 다른 AI/팀원 (앱+엔진) | `docs/handoff/P-13.md` |
 | 3 | **P-14** 말투 분류기(KcELECTRA) 학습 파이프라인 | 다른 AI (ML) | `docs/handoff/P-14.md` |
 | 4 | **P-15** 파일럿 지표 집계·그래프 | 다른 AI | `docs/handoff/P-15.md` |
@@ -199,6 +198,7 @@ flowchart LR
 ### 엔진 모델
 - 모델은 laguna-xs-2.1(빠른 쪽)과 nemotron-3.5-bolt-e4b(깊은 쪽·폴백)로 — 이 NVIDIA 계정에서 실제 프롬프트로 JSON이 통과하고 지연이 가장 짧았다(1~3초). deepseek-v4.1-flash·kimi·mistral-large-4는 응답 없음, 추론 모델은 생각 토큰 때문에 3~15초(공급자에 모델별 추가 요청 옵션이 없어 `enable_thinking:false`는 못 씀). 지연은 1~3초, 부하 때 4~12초. **실시간 힌트는 지금 사실상 꺼짐(전문가가 1.2초 안에 못 옴 → 기권)**(P-06). 실제 평가는 8쌍(n=8)이라 게이트가 아니다. GitHub Models는 무료 등급 데이터 약관 미확인이라 사슬에서 뺐다.
 - 로컬 SEED(tone_hcx)는 학교 GPU 서버(P100, 공유 컨테이너)의 llama.cpp `llama-server`에서, 쓸 때만 `scripts/gpu up`/`down`(ssh 터널, 바깥 포트 없음, 접속 정보는 `~/.ssh/config`에만). Ollama 최신판은 P100에 드라이버 550+가 필요해 CPU로 떨어져서 뺐다(서버 535). 실시간 기권은 0.31→0.06으로 줄지만 재현율은 0.12 그대로 — 1.5B 혼자는 맥락을 못 읽는다(P-07).
+- **실시간 = 로컬 Gemma3-4B 짧은 출력(`tone_fast`, P-12).** 실시간 게이트 0.3 → 0.1(0.3이면 pilot 요청이 전부 멈췄다). 실시간에서 SEED·NVIDIA 맥락·말투 전문가를 뺐다(SEED 정밀도·재현율 0, NVIDIA는 1.2초에 못 옴). 프로토타입 8쌍 실제 평가: 0/0 → 정밀도 1.0·재현율 0.38, p95 0.87~1.0초(`eval/results/2026-10-31-p12-realtime-bakeoff.txt`). **mock baseline은 정밀도 0.83 → 0.5로 다시 잡았다**: 옛 0.83은 실시간 경로의 mock 맥락 전문가에서 나왔는데 그 구조가 이제 없다(mock_rules를 고쳐 숫자를 올리지 않는다). Gemma 라이선스는 Gemma Terms of Use. 서버는 둘(`tone-llm` 11434 SEED, `tone-llm-fast` 11435 Gemma).
 - 실제 대화(가린 문장)는 NVIDIA API 카탈로그 무료 등급으로 간다 — 파일럿을 위한 의도된 결정(원 설계 ARCHITECTURE의 공급자 선택), [NVIDIA API Trial 약관](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf)(내용은 사람이 확인 필요), Masker가 이름·개인정보를 먼저 가린다(규칙 16).
 
 ### 앱
@@ -264,6 +264,7 @@ flowchart LR
 
 ## 9. 미뤄 둔 것 (파일럿 전에 중요한 것만)
 
+- (P-12) 실시간 비교 평가는 8쌍(n=16)이라 너무 작다 — 재현율 0.38이 실제인지는 T-16 30쌍 뒤에 다시 본다. 경고 기준 `alert_threshold` 0.5는 정밀도와 재현율의 맞바꿈(정밀도 0.56 / 재현율 0.62)이라 정밀도를 우선할지 사람이 정한다.
 - (P-07) 실시간 재현율이 낮다(8쌍 중 1): 맥락 전문가(NVIDIA)가 1.2초 안에 못 와서 SEED 1.5B 혼자 판단한다. 후보 — 학교 GPU의 빈 카드에 더 큰 로컬 맥락 모델(7~14B Q4), nemotron `enable_thinking: false`(공급자에 모델별 요청 옵션 추가, ~1.1초), 실시간 게이트 기준값 조정. 대조 세트 30쌍(T-16) 뒤에 비교해서 고른다.
 - (P-07) 엔진 시작 때 JWKS 미리 받기가 1초 제한에 걸린다(eu-west-1, 첫 TLS 연결). 첫 요청 때 다시 받으니 로그인은 된다. 서울 pilot 프로젝트면 사라질 것.
 - (P-06) deepseek-v4.1-flash(500·시간 초과)·kimi-k3(카탈로그에 없음)·kimi-k2.6(404)·mistral-large-4(시간 초과)를 나중에 다시 확인(`GET /v1/models` + models.yaml로 5역할 측정). 실시간 말투 전문가가 1.2초에 못 맞춰 기권이 많다 — 모델별 요청 옵션(`chat_template_kwargs: {enable_thinking: false}`로 nemotron 추론 끄기, 측정 ~1.1초)을 공급자에 더할지, 더 빠른 모델/로컬 모델을 쓸지 사람이 결정.

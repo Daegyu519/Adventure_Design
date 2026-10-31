@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 import re
 import socket
 import time
@@ -14,7 +15,7 @@ from app.settings import DEFAULT_MODELS_PATH
 from experts.base import ExpertRequest
 from experts.llm import LLMExpert
 from experts.registry import Registry, run_all
-from harness import mock_rules, pii, prompts
+from harness import mock_rules, pii, prompts, providers
 from harness.pii import Masker
 from harness.prompts import turns_text
 from harness.providers import OpenAICompatProvider, ProviderError
@@ -50,25 +51,60 @@ def test_add_remove_expert_by_config_only(tmp_path):
     cfg = yaml.safe_load(DEFAULT_MODELS_PATH.read_text(encoding="utf-8"))
     cfg["experts"].append({"id": "tone_x", "role": "tone", "model": "nvidia:poolside/laguna-xs-2.1",
                            "prompt": "tone", "paths": ["realtime"], "mock": "tone_alt"})
-    assert _ids(Registry.load(_write(tmp_path, cfg), force_mock=True), "realtime", "tone") == ["tone_ds", "tone_x"]
-    cfg["experts"] = [e for e in cfg["experts"] if e["id"] != "tone_ds"]
+    assert _ids(Registry.load(_write(tmp_path, cfg), force_mock=True), "realtime", "tone") == ["tone_fast", "tone_x"]
+    cfg["experts"] = [e for e in cfg["experts"] if e["id"] != "tone_fast"]
     assert _ids(Registry.load(_write(tmp_path, cfg), force_mock=True), "realtime", "tone") == ["tone_x"]
+
+
+def test_production_realtime_experts_and_gate():
+    """운영 설정: 실시간 말투 = tone_fast 하나, context 없음, 게이트 0.1(P-12)."""
+    cfg = yaml.safe_load(DEFAULT_MODELS_PATH.read_text(encoding="utf-8"))
+    rt = lambda role: [e["id"] for e in cfg["experts"] if e["role"] == role and "realtime" in e["paths"]]  # noqa: E731
+    assert rt("tone") == ["tone_fast"] and rt("context") == []
+    assert cfg["paths"]["realtime"]["gate_threshold"] == 0.1
+    tone_fast = next(e for e in cfg["experts"] if e["id"] == "tone_fast")
+    assert tone_fast["model"].startswith("local_fast:") and not tone_fast.get("optional")
 
 
 def test_paths_in_mock_mode():
     reg = make_registry()
-    assert _ids(reg, "realtime", "tone") == ["tone_ds"]          # tone_hcx(local, mock 없음) 빠짐
-    assert _ids(reg, "detail", "tone") == ["tone_ds", "tone_kimi"]
+    assert _ids(reg, "realtime", "tone") == ["tone_fast"]
+    assert _ids(reg, "realtime", "context") == []
+    assert _ids(reg, "detail", "tone") == ["tone_ds", "tone_kimi"]   # tone_hcx(local, mock 없음) 빠짐
     assert _ids(reg, "mirror", "context") == ["ctx_deep"]
     assert _ids(reg, "async", "feedback") == ["feedback"]
 
 
 def test_optional_local_when_available(monkeypatch):
+    """tone_hcx는 detail·mirror에서만 optional. local·local_fast는 USE_LOCAL_MODEL=1일 때만 켜진다."""
     monkeypatch.setenv("USE_LOCAL_MODEL", "1")
-    assert "tone_hcx" in _ids(Registry.load(DEFAULT_MODELS_PATH, force_mock=False), "realtime", "tone")
-    assert "tone_hcx" not in _ids(make_registry(), "realtime", "tone")   # force_mock인데 사슬에 mock 없음
+    live = Registry.load(DEFAULT_MODELS_PATH, force_mock=False)
+    for path in ("detail", "mirror"):
+        assert "tone_hcx" in _ids(live, path, "tone")
+        assert "tone_hcx" not in _ids(make_registry(), path, "tone")   # force_mock인데 사슬에 mock 없음
+    assert _ids(live, "realtime", "tone") == ["tone_fast"]
+    assert all(providers.available(n, {}, os.environ) for n in ("local", "local_fast"))
     monkeypatch.delenv("USE_LOCAL_MODEL")
-    assert "tone_hcx" not in _ids(Registry.load(DEFAULT_MODELS_PATH, force_mock=False), "realtime", "tone")
+    off = Registry.load(DEFAULT_MODELS_PATH, force_mock=False)
+    assert all("tone_hcx" not in _ids(off, p, "tone") for p in ("detail", "mirror"))
+    assert not any(providers.available(n, {}, os.environ) for n in ("local", "local_fast"))
+    assert _ids(off, "realtime", "tone") == ["tone_fast"]   # optional 아님: 남는다(사슬 끝에서 기권)
+
+
+def test_available_local_providers_follow_use_local_model():
+    for name in ("local", "local_fast"):
+        assert providers.available(name, {}, {"USE_LOCAL_MODEL": "1"})
+        assert not providers.available(name, {}, {})
+        assert not providers.available(name, {"allow_no_key": True}, {"USE_LOCAL_MODEL": "0"})
+
+
+def test_tone_short_form_parses_and_malformed_falls_back():
+    t = ToneReading.model_validate({"r": [5, 0, 0, 5, 0], "c": 0.7})
+    assert t.confidence == 0.7 and abs(sum(t.readings.values()) - 1) < 0.01
+    assert t.readings["차갑게"] == 0.5 and t.readings["무난하게"] == 0.5
+    for bad in ({"r": ["a", 0, 0, 0, 0], "c": 0.5}, {"r": [1, 2], "c": 0.5}, {"r": [float("inf"), 0, 0, 0, 0]}):
+        with pytest.raises(ValidationError):
+            ToneReading.model_validate(bad)
 
 
 def test_no_gemini_in_any_chain():

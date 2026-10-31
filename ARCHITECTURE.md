@@ -127,7 +127,7 @@ sequenceDiagram
   Engine->>DB: 최근 대화 8개, 보낸 사람 패턴, 기준선
   Engine->>Engine: pii.mask (초안 · 최근 대화, 참여자 이름 포함)
   Engine->>Engine: L0 거르기 (위험 낮으면 hint=null로 끝)
-  Engine->>Experts: 맥락 · 말투 전문가 동시 호출 (1.2초)
+  Engine->>Experts: 실시간 말투 전문가 `tone_fast`(로컬 Gemma3-4B, 짧은 출력) 호출 (1.2초, 맥락 전문가는 실시간에 없음)
   Experts-->>Engine: JSON 결과 (늦은 것은 버림)
   Engine->>Engine: 집계 → 문구 검사
   Engine-->>App: seq, hint 또는 null
@@ -320,22 +320,25 @@ providers:
   nvidia: {base_url: https://integrate.api.nvidia.com/v1, api_key_env: NVIDIA_API_KEY, rpm: 40}
   gemini: {base_url: https://generativelanguage.googleapis.com/v1beta/openai, api_key_env: GEMINI_API_KEY, rpm: 15}  # 합성 문장 평가만. experts·fallback에 넣지 않는다
   github: {base_url: https://models.github.ai/inference, api_key_env: GITHUB_TOKEN, rpm: 10}
-  local:  {base_url: http://localhost:11434/v1, api_key_env: LOCAL_API_KEY, rpm: 600, allow_no_key: true}   # Ollama. USE_LOCAL_MODEL=1일 때만 쓴다
+  local:  {base_url: http://localhost:11434/v1, api_key_env: LOCAL_API_KEY, rpm: 600, allow_no_key: true}   # SEED llama-server. USE_LOCAL_MODEL=1일 때만 쓴다
+  local_fast: {base_url: http://localhost:11435/v1, api_key_env: LOCAL_API_KEY, rpm: 600, allow_no_key: true}   # 실시간 Gemma3-4B(P-12). 이름이 local로 시작하면 USE_LOCAL_MODEL=1일 때만
   mock:   {}
 experts:
-  - {id: ctx_fast,  role: context,  model: nvidia:deepseek-ai/deepseek-v4.1-flash, prompt: context,  paths: [realtime]}
+  - {id: tone_fast, role: tone,     model: local_fast:gemma-3-4b-it,               prompt: tone_fast, paths: [realtime], weight: 1.0, mock: tone}   # 실시간 유일한 전문가, 출력 {"r":[5개],"c":확신}
+  - {id: ctx_fast,  role: context,  model: nvidia:deepseek-ai/deepseek-v4.1-flash, prompt: context,  paths: []}   # 실시간에서 뺌(1.2초에 못 옴)
   - {id: ctx_deep,  role: context,  model: nvidia:moonshotai/kimi-k3,              prompt: context,  paths: [detail, mirror]}
-  - {id: tone_ds,   role: tone,     model: nvidia:deepseek-ai/deepseek-v4.1-flash, prompt: tone,     paths: [realtime, detail, mirror], weight: 1.0}
+  - {id: tone_ds,   role: tone,     model: nvidia:deepseek-ai/deepseek-v4.1-flash, prompt: tone,     paths: [detail, mirror], weight: 1.0}
   - {id: tone_kimi, role: tone,     model: nvidia:moonshotai/kimi-k3,              prompt: tone,     paths: [detail, mirror], weight: 1.0, mock: tone_alt}
-  - {id: tone_hcx,  role: tone,     model: local:naver-hyperclovax/HyperCLOVAX-SEED-Text-Instruct-1.5B, prompt: tone, paths: [realtime, detail, mirror], weight: 1.0, optional: true}
+  - {id: tone_hcx,  role: tone,     model: local:naver-hyperclovax/HyperCLOVAX-SEED-Text-Instruct-1.5B, prompt: tone, paths: [detail, mirror], weight: 1.0, optional: true}
   - {id: judge,     role: judge,    model: nvidia:moonshotai/kimi-k3,              prompt: judge,    paths: [detail, mirror]}
   - {id: rewrite,   role: rewrite,  model: nvidia:deepseek-ai/deepseek-v4.1-flash, prompt: rewrite,  paths: [detail, mirror]}
   - {id: feedback,  role: feedback, model: nvidia:moonshotai/kimi-k3,              prompt: feedback, paths: [async]}
 fallback:   # 실제 문장이 지나가므로 gemini 금지
+  local_fast:gemma-3-4b-it: [nvidia:deepseek-ai/deepseek-v4.1-flash, mock:auto]
   nvidia:deepseek-ai/deepseek-v4.1-flash: [github:openai/gpt-4.1-mini, mock:auto]
   nvidia:moonshotai/kimi-k3: [nvidia:deepseek-ai/deepseek-v4.1-flash, mock:auto]
 paths:
-  realtime: {deadline_ms: 1500, expert_deadline_ms: 1200, gate_threshold: 0.3}
+  realtime: {deadline_ms: 1500, expert_deadline_ms: 1200, gate_threshold: 0.1}   # 0.3이면 pilot 요청이 전부 게이트에서 멈췄다(P-12)
   detail:   {deadline_ms: 8000}
   mirror:   {deadline_ms: 8000}
   async:    {deadline_ms: 60000}
@@ -377,7 +380,7 @@ risk = sigmoid( w0 + w1·prior + w2·Σk(αk·negk)/Σk(αk) + w3·violation + w
 - 같은 모델 3회 연속 실패 → 60초 건너뜀.
 - 같은 (전문가, 입력) 결과는 캐시. 의도 칩만 바꾼 상세 재호출에서는 판정 전문가가 여기 걸린다(3-3). 캐시는 `CACHE_MAX`(2048)를 넘으면 통째로 비운다. 넣을 때와 꺼낼 때 깊은 복사를 해서 한 요청의 이름 복원이 다른 요청에 새지 않는다. trace는 최근 1000개만 두고 원문은 없다.
 - 출력은 `<think>…</think>` 제거 → 첫 JSON 객체 추출 → pydantic 검사. 실패하면 폴백. 공급자 응답 모양이 틀려도(`choices` 없음 등) `ProviderError`로 폴백·차단기에 넘긴다. 오류 메시지에 요청·응답 본문을 넣지 않는다.
-- 선택 기능: 실시간 경로에서 같은 역할의 빠른 모델 두 개에 동시에 보내고 먼저 온 유효한 답을 쓴다(지연 편차 감소, 호출 2배).
+- 선택 기능(지금은 안 씀): 실시간 경로에서 같은 역할의 빠른 모델 두 개에 동시에 보내고 먼저 온 유효한 답을 쓴다(지연 편차 감소, 호출 2배).
 - 입구 가리기: 파이프라인 입구에서 요청마다 `pii.Masker`(참여자 이름 포함)를 한 번 거치고, 모든 레이어는 가린 문장만 받는다. 가리는 것: 전화번호(`.`·공백·`-` 구분, `+82` 형식), 이메일(전각 `＠` 포함), 주민·외국인등록번호, 카드번호(16자리), 계좌 모양 숫자, 긴 숫자, 참여자 이름(2글자 이상, 3글자 한글 이름은 뒤 2글자도, 영문은 대소문자 무시). 날짜(`YYYY-MM-DD`·`YYYY.MM.DD`·`YYYY/MM/DD`, `MM/DD`)와 시각(`19:30`)은 말투 맥락이라 가리지 않는다(계좌 규칙보다 앞에서 뺀다). 규칙은 정규식 하나로 한 번에 돌린다(같은 위치에서는 앞 규칙이 이긴다). 대상: 초안, 최근 대화(그룹방 화자 label 포함), 답장 대상, 의도, 하소연, 거울 카드 문장.
 - 자리표시는 종류별로 등장 순서대로 번호를 붙이고 같은 값은 같은 자리표시를 받는다(`[이름1]`, `[전화번호1]` …). 고쳐 쓰기 후보(거울 `options` 포함)는 엔진이 응답 직전에 `Masker.restore`로 되돌린다. 대응표는 그 요청의 `Masker` 메모리에만 두고 로그·trace·큐 인자에 남기지 않는다.
 - 안전망: 그 위에 `Router.call`이 `mock`이 아닌 공급자로 보내기 직전에 system, user, payload 안의 모든 문자열(중첩 포함)에 `pii.mask`(이름 없이 패턴만)를 한 번 더 쓴다. `local`도 원격 주소를 가리킬 수 있어 예외로 두지 않는다. `pii`를 import하는 곳은 `pipeline.py`와 `harness/router.py`뿐이다(테스트로 고정).
