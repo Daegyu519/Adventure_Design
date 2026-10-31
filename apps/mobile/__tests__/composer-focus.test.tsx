@@ -222,3 +222,4 @@ test('멘션 후보: 활성 줄은 색 말고도 왼쪽 막대와 굵은 글자�
   expect(weight(1)).toBe('600');
   expect(weight(0)).not.toBe('600');
 });
+
