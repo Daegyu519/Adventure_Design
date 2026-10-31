@@ -181,7 +181,7 @@ sequenceDiagram
 
 **반영 규칙** (시스템은 누가 털어놓았는지 알려 주지 않는다. 다만 1:1 방에서는 상대가 짐작할 수 있다)
 - 패턴의 주인은 털어놓기 대상 메시지를 **보낸 사람**이다. 키는 (보낸 사람, 관계, 신호)다. 그 사람이 같은 관계의 어느 방에서 쓰든 적용하고, 털어놓은 사람의 문장에는 적용하지 않는다.
-- 모든 방(1:1·2명·그룹)의 하소연이 `tone.sender_patterns`에 들어간다(규칙 14, 2026-10-31 사용자 결정). `active_from`은 다음 날 0시(Asia/Seoul)다. 보낸 사람·관계는 `apply_feedback`가 메시지 id로 DB에서 읽는다(호출자 값을 믿지 않는다). 신고는 자기 `active_from` 행에만 쌓여서, 재신고가 이미 켜진 패턴을 끄지 않는다. count는 (보낸 사람, 관계, 신호)마다 서로 다른 신고자 수다(`tone.sender_pattern_reporters`): 한 사람이 되풀이해도 1이다. 관계별 주간 상한은 (보낸 사람, 관계)마다 KST ISO 주(월요일 0시부터) 5건이다.
+- 모든 방(1:1·2명·그룹)의 하소연이 `tone.sender_patterns`에 들어간다(규칙 14, 2026-10-31 사용자 결정). `active_from`은 신고 시각이다(남긴 즉시 반영, 2026-10-31 사용자 결정: 힌트 변화와 특정 하소연이 연결되기 쉬워지는 것을 받아들임). 보낸 사람·관계는 `apply_feedback`가 메시지 id로 DB에서 읽는다(호출자 값을 믿지 않는다). 신고마다 자기 `active_from`(신고 시각) 행이 생기고 읽을 때 trigger별로 합쳐서, 재신고가 이미 켜진 패턴을 끄지 않고 count도 이중으로 세어지지 않는다(count는 신고자마다 1). count는 (보낸 사람, 관계, 신호)마다 서로 다른 신고자 수다(`tone.sender_pattern_reporters`): 한 사람이 되풀이해도 1이다. 관계별 주간 상한은 (보낸 사람, 관계)마다 KST ISO 주(월요일 0시부터) 5건이다.
 - 하소연은 `tone.global_patterns`(신호별 전체 수)에도 더한다. 1:1 방에서는 보낸 사람 패턴이 곧 상대 한 명의 신고라서, 상대가 누가 털어놓았는지 짐작할 수 있다. 이 위험은 사용자가 받아들였다(익명성보다 효과).
 - 반영은 L0 사전점수와 L3 `pattern` 항으로만 하고, `global_patterns[trigger] ≥ global_min_obs`일 때만 한다. 원래 패널이 낼 법한 경고만 강해지고, 없던 경고를 새로 만들지 않는다.
 
@@ -364,7 +364,7 @@ risk = sigmoid( w0 + w1·prior + w2·Σk(αk·negk)/Σk(αk) + w3·violation + w
 
 - `negk`: k번째 말투 전문가의 부정 읽힘(차갑게 + 성의없게 + 화나게) 확률. `αk = weight × confidence`.
 - `violation`: 맥락 전문가의 기대 요소 중 문장에 없는 비율.
-- `pattern`: 보낸 사람 패턴(`tone.sender_patterns`, `active_from`이 지난 것) 일치 점수. `global_patterns[trigger] ≥ global_min_obs`일 때만 반영.
+- `pattern`: 보낸 사람 패턴(`tone.sender_patterns`, `active_from`이 지난 것 = 신고 즉시) 일치 점수. `global_patterns[trigger] ≥ global_min_obs`일 때만 반영.
 - 의견 차이 = 말투 전문가 `neg`의 최대 − 최소. `max_disagreement`를 넘으면 실시간은 기권, 상세는 심판. 심판은 의견이 갈린 기권만 풀고, 자신 없는 기권(confidence < `min_confidence`)은 심판 없이 기권으로 둔다. 둘 다 반올림 전 값(`features`)으로 본다(3-3).
 - 시간 안에 못 온 전문가는 빼고 계산한다. 말투 전문가가 하나도 없으면 기권.
 - 가중치(w, α)는 평가 세트가 30쌍 이상 모이면 trace에서 학습한다(로지스틱 회귀). 기준값은 정밀도 0.8 이상이 되는 값.

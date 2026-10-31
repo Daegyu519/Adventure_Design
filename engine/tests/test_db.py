@@ -112,12 +112,12 @@ def test_apply_feedback(world):
         d = await w(seed.add_user("소연"))
         room = await w(seed.add_room("group", "팀원", [a, b, c, d]))
         m = [await w(seed.add_message(room, a, f"응{i}")) for i in range(5)]
-        tomorrow = NOW + timedelta(days=1)
+        now = NOW   # 신고 즉시 반영: active_from = 신고 시각
 
         def fb(reporter, message_id, *, usable=True, strength=2, feeling="성의없게"):
             pats = [FeedbackPattern(trigger="짧은 답", feeling=feeling, strength=strength)] if usable else []
             return FeedbackWrite(room_id=room, reporter_id=reporter, message_id=message_id, usable=usable,
-                                 patterns=pats, active_from=tomorrow)
+                                 patterns=pats, active_from=now)
 
         async def rows(*tables):
             return [await w(seed.rows(t)) for t in tables]
@@ -131,8 +131,9 @@ def test_apply_feedback(world):
             == (room, b, m[0], True, 1)
         [sp] = await w(seed.rows("tone.sender_patterns"))
         assert (sp["sender_id"], sp["relation"], sp["trigger"], sp["count"], sp["strength"], sp["feeling"],
-                sp["active_from"]) == (a, "팀원", "짧은 답", 1, 2.0, "성의없게", tomorrow)
-        assert await repo.sender_patterns(a, "팀원", NOW) == {}          # 다음 날부터
+                sp["active_from"]) == (a, "팀원", "짧은 답", 1, 2.0, "성의없게", now)
+        assert (await repo.sender_patterns(a, "팀원", NOW))["짧은 답"]["count"] == 1   # 바로 켜짐
+        assert await repo.sender_patterns(a, "팀원", NOW - timedelta(seconds=1)) == {}
         assert await repo.global_patterns() == {"짧은 답": 1}
 
         # 같은 (신고자, 메시지)를 다시 → False, 아무것도 안 바뀜
@@ -144,17 +145,17 @@ def test_apply_feedback(world):
         for mid in m[1:]:
             assert await repo.apply_feedback(fb(b, mid)) is True
         assert await repo.global_patterns() == {"짧은 답": 1}
-        assert (await repo.sender_patterns(a, "팀원", tomorrow))["짧은 답"]["count"] == 1
+        assert (await repo.sender_patterns(a, "팀원", now))["짧은 답"]["count"] == 1
 
         # 다른 신고자 → 전체·보낸 사람 둘 다 +1, strength 누적 평균
         assert await repo.apply_feedback(fb(c, m[0], strength=3)) is True
         assert await repo.global_patterns() == {"짧은 답": 2}
-        assert await repo.sender_patterns(a, "팀원", tomorrow) == {
+        assert await repo.sender_patterns(a, "팀원", now) == {
             "짧은 답": {"count": 2, "strength": 2.5, "feeling": "성의없게"}}
 
         # 또 다른 신고자 → count + 1, feeling은 새 값
         assert await repo.apply_feedback(fb(d, m[1], strength=1, feeling="차갑게")) is True
-        assert await repo.sender_patterns(a, "팀원", tomorrow) == {
+        assert await repo.sender_patterns(a, "팀원", now) == {
             "짧은 답": {"count": 3, "strength": 2.0, "feeling": "차갑게"}}
         assert await repo.global_patterns() == {"짧은 답": 3}
 
