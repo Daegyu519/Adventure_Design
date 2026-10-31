@@ -48,7 +48,7 @@ def _req(**kw) -> ExpertRequest:
 
 def test_add_remove_expert_by_config_only(tmp_path):
     cfg = yaml.safe_load(DEFAULT_MODELS_PATH.read_text(encoding="utf-8"))
-    cfg["experts"].append({"id": "tone_x", "role": "tone", "model": "nvidia:deepseek-ai/deepseek-v4.1-flash",
+    cfg["experts"].append({"id": "tone_x", "role": "tone", "model": "nvidia:poolside/laguna-xs-2.1",
                            "prompt": "tone", "paths": ["realtime"], "mock": "tone_alt"})
     assert _ids(Registry.load(_write(tmp_path, cfg), force_mock=True), "realtime", "tone") == ["tone_ds", "tone_x"]
     cfg["experts"] = [e for e in cfg["experts"] if e["id"] != "tone_ds"]
