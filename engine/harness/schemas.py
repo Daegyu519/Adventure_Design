@@ -4,7 +4,7 @@ from __future__ import annotations
 import math
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 READINGS = ("차갑게", "성의없게", "화나게", "무난하게", "따뜻하게")
 NEGATIVE = ("차갑게", "성의없게", "화나게")
@@ -63,6 +63,15 @@ class ToneReading(BaseModel):
     has_reason: bool = False
     confidence: float = 0.5
     model: str = ""
+
+    @model_validator(mode="before")
+    @classmethod
+    def compact(cls, d: object) -> object:
+        # 실시간용 짧은 출력 {"r": [차갑게, 성의없게, 화나게, 무난하게, 따뜻하게], "c": 확신}(prompts/tone_fast.md).
+        # 답 토큰이 지연의 대부분이라 읽힘만 받는다(P-12). 숫자가 아니면 아래 검사에서 떨어져 폴백된다(규칙 3)
+        if isinstance(d, dict) and "readings" not in d and isinstance(d.get("r"), list) and len(d["r"]) == len(READINGS):
+            return {"readings": dict(zip(READINGS, d["r"])), "confidence": d.get("c", 0.5)}
+        return d
 
     @field_validator("readings")
     @classmethod
