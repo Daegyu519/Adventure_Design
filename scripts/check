@@ -8,7 +8,17 @@ cd "$(git rev-parse --show-toplevel)"
 npm_ready() { cmp -s "$1/package-lock.json" "$1/node_modules/.lock-stamp" || (cd "$1" && npm ci --silent && cp package-lock.json node_modules/.lock-stamp); }
 
 # --locked: uv.lock이 pyproject와 어긋나면 조용히 고치지 않고 실패한다.
-if [ -f engine/pyproject.toml ]; then (cd engine && uv run --locked pytest -q); fi
+# 진짜 Postgres 계약 테스트가 건너뛰어지면 눈에 보이게 한다(-rs의 건너뜀 사유를 센다). CI=1이면 실패.
+if [ -f engine/pyproject.toml ]; then
+  eng_out="$(mktemp)"
+  (cd engine && uv run --locked pytest -q -rs --no-fold-skipped) | tee "$eng_out"
+  pg_skips="$(grep -c '^SKIPPED .*postgres 없음' "$eng_out" || true)"
+  rm -f "$eng_out"
+  if [ "${pg_skips:-0}" -gt 0 ]; then
+    echo "WARNING: 실제 Postgres 계약 테스트 ${pg_skips}건 건너뜀 (brew install postgresql@16)" >&2
+    [ "${CI:-}" = "1" ] && { echo "CI=1: Postgres 테스트를 건너뛸 수 없다" >&2; exit 1; }
+  fi
+fi
 if [ -f supabase/package.json ]; then npm_ready supabase; (cd supabase && npm test --silent); fi
 # 앱: 타입 → lint → 테스트 → 색 리터럴 금지(색은 useTheme().colors에서만: '#…'·`#…`·rgb(a)·hsl(a), __tests__ 제외). grep이 찾으면 그 줄을 보이고 실패한다.
 if [ -f apps/mobile/package.json ]; then npm_ready apps/mobile; (cd apps/mobile && npx tsc --noEmit && npm run lint --silent && npm test --silent \

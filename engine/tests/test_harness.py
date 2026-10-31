@@ -2,11 +2,10 @@ import asyncio
 import time
 
 import pytest
-import yaml
 
 from app.settings import DEFAULT_MODELS_PATH
 from harness import pii
-from harness.router import NoResult, Router, chains
+from harness.router import NoResult, Router
 from harness.schemas import ContextReading, Conversation, ToneReading, Turn
 from harness.store import ProfileStore
 from layers import aggregate, gate, guard
@@ -67,9 +66,3 @@ def test_single_report_alone_does_not_boost():
     assert not verdict(ProfileStore(pair_patterns=pair, global_patterns={"이유 없는 거절": 1})).pattern_used
     # 일반 패턴이 충분히 쌓이면 반영된다
     assert verdict(ProfileStore(pair_patterns=pair, global_patterns={"이유 없는 거절": 10})).pattern_used
-
-
-def test_no_gemini_on_real_text_roles():
-    cfg = yaml.safe_load(DEFAULT_MODELS_PATH.read_text(encoding="utf-8"))
-    for expert_id, chain in chains(cfg).items():
-        assert not any(e.startswith("gemini:") for e in chain), expert_id

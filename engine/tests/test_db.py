@@ -76,6 +76,7 @@ def test_message_and_names(world):
         assert (m.id, m.room_id, m.sender_id, m.text, m.reply_to) == (reply, room, a, "3시", first)
         assert await repo.message(10**12) is None
         assert await repo.member_names(room) == {a: "민수", b: "지은", c: "현우"}
+        assert await repo.profile_name(b) == "지은" and await repo.profile_name(uuid4()) is None
     world(body)
 
 

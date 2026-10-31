@@ -42,7 +42,7 @@
 
 - **엔진**: 거의 끝. 실시간 힌트(`/v1/hint`), 살펴보기(`/v1/detail`), 털어놓기(`/v1/feedback`), 거울(`/v1/mirror/*`), 통계(`/v1/stats/me`), 웹훅(`/hooks/message`), 푸시·기준선·이벤트·trace 작업, JWKS 인증, 사용자별 429(T-38)가 main에 있다. 남은 것: T-18(두 번째 말투 전문가), T-20(가중치 학습).
 - **앱**: 동의, 로그인, 프로필, 리포트, 설정, 초대·그룹 만들기(`rooms/new`), 대화 목록과 대화방(`room/[id]`: 보내기, Realtime 수신, 과거 불러오기, 읽음 처리, 답장·공감·읽음 수, 입력 중·사진·멘션, 방 정보·검색·알림 끄기), 거울 탭이 있다. Realtime·Presence·Storage는 jest로만 확인했다(-live 행). 남은 큰 덩어리는 입력 중 힌트(T-15), 살펴보기 시트(T-22), 털어놓기 시트(T-25), 푸시 등록(T-28a).
-- **DB**: 마이그레이션 6개가 `supabase/migrations/`에 있고 로컬 PGlite 테스트로만 확인했다. **실제 Supabase 프로젝트는 아직 없다(T-02).**
+- **DB**: 마이그레이션 7개가 `supabase/migrations/`에 있고 로컬 PGlite 테스트로만 확인했다. **실제 Supabase 프로젝트는 아직 없다(T-02).**
 - **평가**: 대조 세트와 `--mock` 평가 스크립트, `eval/baseline.json`(정밀도 게이트)이 있다. 이 mock 수치는 배관 확인용이다. 라벨된 30쌍(T-16)이 있어야 `-live` 평가가 된다.
 - **배포**: 아직 없음. T-29(엔진), T-30(웹 + Android EAS), T-31(파일럿 1주).
 
@@ -94,11 +94,11 @@ T-02 뒤에: T-07-live, T-08-live, T-09a-live, T-09b-live, T-09c-live, T-09d-liv
 키와 계정은 에이전트가 만들 수 없다. **값은 대화창에 붙이지 말고 `.env`에 직접 넣는다.**
 
 1. **T-02 Supabase dev 프로젝트** — 로그인·대화·웹훅의 실제 확인이 모두 여기에 걸려 있다.
-   - 서울 리전에 만들고 `supabase link`. 대시보드에서 Realtime을 먼저 켜지 않은 채로 `supabase db push`(마이그레이션 6개 전부, `_platform` 포함). Realtime "Allow public access" 끄기. Settings → JWT Keys는 비대칭 키(JWKS)로.
+   - 서울 리전에 만들고 `supabase link`. 대시보드에서 Realtime을 먼저 켜지 않은 채로 `supabase db push`(마이그레이션 7개 전부, `_platform` 포함). Realtime "Allow public access" 끄기. Settings → JWT Keys는 비대칭 키(JWKS)로.
    - Auth → Email Templates → Magic Link 본문에 `{{ .Token }}`(앱은 6자리 코드로 로그인한다). 기본 메일 한도가 작으니 계정 2개로만 확인.
-   - 루트 `.env`(`.env.example` 복사): `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_DB_URL`, `HOOK_SECRET`(`openssl rand -hex 32`), `MIRROR_SECRET`(32바이트 이상). `apps/mobile/.env`(`apps/mobile/.env.example` 복사): `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`, `EXPO_PUBLIC_ENGINE_URL`.
+   - 루트 `.env`(`.env.example` 복사): `SUPABASE_URL`, `SUPABASE_DB_URL`, `HOOK_SECRET`(`openssl rand -hex 32`), `MIRROR_SECRET`(32바이트 이상). `apps/mobile/.env`(`apps/mobile/.env.example` 복사): `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`, `EXPO_PUBLIC_ENGINE_URL`.
    - DB 웹훅은 `README.md`의 "dev 웹훅 연결" 순서(T-10-live).
-2. **`NVIDIA_API_KEY`** (build.nvidia.com, `nvapi-`로 시작) — 없으면 엔진은 mock으로 돈다.
+2. **`NVIDIA_API_KEY`** (build.nvidia.com, `nvapi-`로 시작) — 없으면 그 모델은 쓰이지 않고(시작 경고·`/health` down) 기권한다. 로컬 시연은 `FORCE_MOCK=1`.
 3. **T-16 라벨** — 같은 문장, 다른 맥락 30쌍. 두 사람이 각자 블라인드로 라벨한 뒤 합의.
 4. 나중에: Expo 계정(EAS 빌드), Firebase 프로젝트(Android FCM `google-services.json`), 웹 푸시 VAPID 키(`npx web-push generate-vapid-keys`; 개인키는 엔진 `.env`, 공개키는 `apps/mobile/.env`), 선택으로 Apple Developer(네이티브 iOS를 할 때만. 기본 아이폰 경로는 웹 + 웹 푸시).
 
@@ -146,7 +146,7 @@ flowchart LR
 | `engine/app/routes/` | `hint.py` `detail.py` `feedback.py` `mirror.py` `stats.py` `hooks.py` |
 | `engine/app/` | `main.py` `auth.py`(JWKS) `ratelimit.py`(T-38) `db.py`(Repo·FakeRepo) `context.py` `contracts.py` `deps.py` `settings.py` `traces.py` `openapi_dump.py` |
 | `engine/pipeline.py`, `engine/mirror.py` | 경로 조립(realtime / detail / feedback), 거울 카드 고르기·서명 |
-| `engine/harness/` | `router.py`(공급자·폴백·캐시·안전망 가리기) `pii.py`(Masker) `providers.py` `mock_rules.py` `prompts.py` `schemas.py` `store.py` `korean.py` |
+| `engine/harness/` | `router.py`(공급자·폴백·캐시·안전망 가리기, mock은 force_mock에서만) `pii.py`(Masker) `providers.py` `mock_rules.py` `prompts.py` `schemas.py` `store.py` `korean.py` |
 | `engine/experts/` | 전문가 인터페이스·레지스트리(`base.py` `llm.py` `registry.py`) |
 | `engine/layers/` | `gate.py`(L0) `aggregate.py`(집계·기권) `guard.py`(문구 검사) `rewrite.py` |
 | `engine/jobs/` | `queue.py` `push.py` `baseline.py` `events.py` `feedback.py` |
@@ -154,7 +154,7 @@ flowchart LR
 | `engine/prompts/`, `engine/content/` | 프롬프트(바꾸면 평가), 거울 카드 `mirror_cards.yaml` |
 | `apps/mobile/app/` | expo-router 화면: `consent` `login` `profile` `rooms/new` `room/[id]` `(tabs)/{index,mirror,report,settings}` |
 | `apps/mobile/lib/`, `components/` | `engine.ts`(+`engineMock.ts`) `session.tsx` `auth.ts` `gate.ts` `consent.ts` `report.ts` `invite.ts` `theme.ts` `types/`(생성 타입), 공용 `Button` `TextField` `ChipRow` `AppText` |
-| `supabase/migrations/` | `…01_chat` `…02_tone` `…03_platform`(Storage·Realtime) `20261028000001_engine` `…02_sender_pattern_activations` `20261030000001_mirror_attempt_once` |
+| `supabase/migrations/` | `…01_chat` `…02_tone` `…03_platform`(Storage·Realtime) `20261028000001_engine` `…02_sender_pattern_activations` `20261030000001_mirror_attempt_once` `…02_register_push_token` |
 | `eval/` | `run_eval.py` `contrast_set.jsonl` `baseline.json` |
 | `design/`, `design-system/tone-chat/MASTER.md` | 승인 목업, 대비 검사, 디자인 규칙 |
 | `scripts/` | `claim` `land` `check` `test_coord.sh` (사용법 `docs/COLLAB.md`) |
@@ -240,6 +240,8 @@ flowchart LR
 ### 큐·웹훅·푸시
 - 웹훅은 `message_id`만 큐에 넣는다(작업 키 `push:{id}`, `baseline:{id}`). 큐에 못 넣어도 202(pg_net은 다시 보내지 않는다). 작업은 DB에서 다시 읽는다.
 - 작업은 스스로 시간 제한을 둔다(`asyncio.timeout`: push 120초, baseline 10초, events 5초). 작업 인자는 id만(털어놓기 작업만 예외).
+- 엔진은 **프로세스 하나**(`uvicorn --workers 1`), `MIRROR_SECRET` 필수, 배포 뒤 `/health`에서 `nvidia:*` up 확인(한도·큐·잠금이 프로세스 메모리). 요청 본문은 64 KB 제한(413), 오류 응답은 고정 코드만(422 `invalid_request`, 예기치 못한 오류 503 `engine_unavailable`).
+- mock은 폴백이 아니다(사용자 결정 2026-10-30): force_mock(테스트·평가)일 때만 쓰고, 실제 모델이 다 막히면 기권한다(ARCH §6-2). 실패·건너뜀은 항목 이름+종류로 로그, 시작 경고, `/health`의 `providers`·`failures`.
 - 푸시 받는 사람 = 방 멤버 − 보낸 사람 − 알림 끈 사람(SQL). 웹 푸시 주소는 허용 호스트만, 리다이렉트 안 따라감. 404/410·DeviceNotRegistered면 그 토큰만 지운다.
 
 ### DB
@@ -257,7 +259,8 @@ flowchart LR
 - (T-17-live/T-20) 살펴보기 경로 단계별 예산(첫 단계가 8초를 쓰면 안전하게 "알림만"으로 떨어짐), 가린 문장이 gate "짧음" 신호를 약하게 하는 정도, JWKS 재요청이 10분마다 한 응답을 ~2.5초로 늘릴 수 있는 점(규칙 8) — 측정. `rewrite.md`·`judge.md` 문구는 평가로 다시 확인. mock 평가는 정밀도만 막는다(recall 회귀는 T-17-live 전까지 막지 못함).
 - (T-28a, 보안 메모) `register_push_token`은 정확한 토큰 문자열을 아는 사람이 그 기기의 알림을 가져갈 수 있다 — 피해자 알림이 끊기는 서비스 거부뿐이고 남의 알림을 받을 수는 없다(토큰은 본인만 읽음, RPC는 항상 내 user_id로 씀). 같은 토큰을 동시에 등록하면 행이 둘 남을 수 있음(원자적으로 하려면 `unique(token)` + on conflict). 토큰 교체 때 이전 행을 RPC 전에 지워 RPC가 실패하면 스위치가 켜짐으로 보임(순서 바꾸기). 다음 사용자가 알림을 안 켜면 이전 사용자 행이 남는다 — 엔진 쪽 "미리보기 숨기기" 옵션으로 막을 것(알림에 글 앞 100자가 잠금 화면에 보인다). 앱이 안 쓰는 push_tokens insert/update 권한 회수. `lib/types/db.ts`의 RPC 타입은 손으로 씀 — T-02 뒤 `gen:db`로 다시 만들어 비교. 설정 "켜는 중…"이 읽히지 않음, 네이티브 이유 accessibilityHint 없음, `swReady` 타이머 정리.
 - (T-28a) Expo가 묶음 전체를 400으로 거절하면 그 방 묶음이 빠진다 — 토큰 검사. 사용자별 push_tokens 개수 제한. 로그아웃 때 토큰 해제. EAS projectId, Android 알림 아이콘.
-- (T-29/T-30) `/health`가 모델 목록을 인증 없이 보여 준다 — 배포 때 다시 본다. 요청 크기 제한은 Cloudflare에서. 템플릿 아이콘·스플래시 교체. 인증 설정이 비면 401이 아니라 503 `auth_unavailable`.
+- (T-29/T-30) `/health`가 모델 목록을 인증 없이 보여 준다 — 배포 때 다시 본다. 요청 크기는 엔진이 64 KB로 막지만(413) 바깥(Cloudflare)에서도 같은 한도를 건다. 템플릿 아이콘·스플래시 교체. 인증 설정이 비면 401이 아니라 503 `auth_unavailable`.
+- (P-04, 보류) 털어놓기 태그 "늦은 답에 사과 없음"·"반말 전환"·"농담에 정색"은 gate 신호가 아니라 저장만 되고 힌트에 영향이 없다("반말 전환"은 "존댓말이 갑자기 빠짐"과 겹침) — 프롬프트 변경(평가 게이트)이 필요하니 T-20 데이터로 본다.
 - (털어놓기) 사용자별 "처리 중인 털어놓기 작업 수" 한도도 고려(작업 하나가 최대 60초). 주간 한도 확인과 증가가 원자적이지 않아 작업자 2개면 최대 6까지. 중복 방지 키가 메모리뿐이라 재시작하면 잊는다 — 파일럿 규모에서 받아들임.
 - (T-09a) 대화방: "다시 불러오기" 줄이 사라질 때 포커스가 body로 떨어짐(웹 키보드), 언마운트 뒤 읽음 재시도 타이머가 남을 수 있음, 목록 Realtime INSERT마다 전체 다시 읽기(디바운스 없음), 다른 기기의 읽음 갱신(room_members UPDATE) 미반영.
 - (T-09d) 검색은 최근 50개만(쪽 넘김 없음, 화면에 안내함), `*`가 든 검색어는 50개 안에서 거른다, 0행 업데이트(알림 끄기)를 저장된 것으로 봄, 네이티브에서 검색 뒤 키보드가 결과를 가릴 수 있음, `createGroupInvite`를 `rooms/new`도 쓰게.

@@ -1,7 +1,7 @@
 """T-28b 푸시 발송 작업. 웹훅이 `send_push(repo, settings, message_id)`를 큐에 넣는다.
 
 - 큐 인자는 message_id뿐이다. 본문은 여기서 DB에서 다시 읽는다. 본문·토큰·endpoint는 로그에 남기지 않는다(예외는 타입 이름만).
-- DB 읽기 실패는 올려서 큐가 재시도하게 한다. 보내기 단계 실패와 토큰 삭제 실패는 삼킨다(재시도하면 알림이 겹친다).
+- DB 읽기 실패·시간 초과는 올려서 큐가 재시도하게 한다. 보내기 단계 실패와 토큰 삭제 실패는 삼킨다(재시도하면 알림이 겹친다).
 - 웹 푸시 endpoint는 사용자가 넣은 값이라 알려진 푸시 서비스 호스트만 보낸다(SSRF).
 """
 from __future__ import annotations
@@ -24,9 +24,11 @@ EXPO_URL = "https://exp.host/--/api/v2/push/send"
 EXPO_BATCH = 100
 EXPO_TIMEOUT_S = 10.0   # 요청 하나
 WEB_TIMEOUT_S = 10      # 웹 푸시 하나
+DB_READ_DEADLINE_S = 10.0  # 읽기 전체. 풀이 멈춰도 워커를 붙들지 않고, 시간 초과는 올려서 큐가 재시도한다
 SEND_DEADLINE_S = 120.0  # 보내기 전체: 느린 서비스가 워커를 붙들지 않게
 PREVIEW_CHARS = 100
 
+EXPO_ERRORS = {"MessageTooBig", "MessageRateExceeded", "MismatchSenderId", "InvalidCredentials"}   # Expo 문서의 details.error
 PUSH_HOST_EXACT = {"fcm.googleapis.com", "updates.push.services.mozilla.com"}
 PUSH_HOST_SUFFIXES = (".push.apple.com", ".notify.windows.com")
 
@@ -67,14 +69,15 @@ def build_notice(msg: Msg, room: Room, sender_name: str) -> dict:
 
 
 async def send_push(repo: Repo, settings: Settings, message_id: int, http: httpx.AsyncClient | None = None) -> None:
-    msg = await repo.message(message_id)
-    if msg is None:  # 그 사이 지워졌다
-        return
-    room = await repo.room(msg.room_id)
-    targets = await repo.push_targets(msg.room_id, msg.sender_id)  # 보낸 사람·알림 끈 멤버는 DB가 뺀다
-    if room is None or not targets:
-        return
-    names = await repo.member_names(msg.room_id)
+    async with asyncio.timeout(DB_READ_DEADLINE_S):
+        msg = await repo.message(message_id)
+        if msg is None:  # 그 사이 지워졌다
+            return
+        room = await repo.room(msg.room_id)
+        targets = await repo.push_targets(msg.room_id, msg.sender_id)  # 보낸 사람·알림 끈 멤버는 DB가 뺀다
+        if room is None or not targets:
+            return
+        names = await repo.member_names(msg.room_id)
     notice = build_notice(msg, room, names.get(msg.sender_id) or "누군가")
     try:
         async with asyncio.timeout(SEND_DEADLINE_S):
@@ -82,7 +85,9 @@ async def send_push(repo: Repo, settings: Settings, message_id: int, http: httpx
             if expo:
                 await _send_expo(repo, settings, notice, expo, http)
             web = [t for t in targets if t.platform == "web"]
-            if web and settings.vapid_private_key and settings.vapid_subject:
+            if web and not (settings.vapid_private_key and settings.vapid_subject):
+                log.warning("web push skipped: vapid not configured (%d targets)", len(web))
+            elif web:
                 with _web_session() as session:
                     for t in web:
                         await _send_web(repo, settings, notice, t, session)
@@ -111,9 +116,13 @@ async def _send_expo(repo: Repo, settings: Settings, notice: dict, targets: list
                 log.warning("expo push failed: %s", type(e).__name__)
                 continue
             for t, r in zip(batch, results):
-                if isinstance(r, dict) and r.get("status") == "error" and \
-                        (r.get("details") or {}).get("error") == "DeviceNotRegistered":
+                if not (isinstance(r, dict) and r.get("status") == "error"):
+                    continue
+                code = (r.get("details") or {}).get("error")
+                if code == "DeviceNotRegistered":
                     await _forget(repo, t)
+                else:   # 고정 어휘만 남긴다: 모르는 값(메시지·토큰이 섞일 수 있다)은 other
+                    log.warning("expo push ticket error: %s", code if code in EXPO_ERRORS else "other")
     finally:
         if http is None:
             await client.aclose()

@@ -53,7 +53,7 @@
     "eas-build-pre-install": "test \"$EAS_BUILD_PROFILE\" = development || test -n \"$EXPO_PUBLIC_ENGINE_URL\" || { echo 'EXPO_PUBLIC_ENGINE_URL is empty for a release EAS build (preview/production)' >&2; exit 1; }",
     "test": "jest --ci --maxWorkers=2",
     "gen:engine": "npx -y openapi-typescript@7.13.0 lib/types/engine.openapi.json -o lib/types/engine.ts.tmp && mv lib/types/engine.ts.tmp lib/types/engine.ts",
-    "gen:engine:pull": "uv run --directory ../../engine python -m app.openapi_dump \"$PWD/lib/types/engine.openapi.json\" > lib/types/engine.openapi.json.tmp && mv lib/types/engine.openapi.json.tmp lib/types/engine.openapi.json && npm run gen:engine",
+    "gen:engine:pull": "uv run --directory ../../engine python -m app.openapi_dump > lib/types/engine.openapi.json.tmp && mv lib/types/engine.openapi.json.tmp lib/types/engine.openapi.json && npm run gen:engine",
     "gen:db": "npx -y supabase@2.120.0 gen types typescript --project-id \"$SUPABASE_PROJECT_REF\" --schema public > lib/types/db.ts.tmp && mv lib/types/db.ts.tmp lib/types/db.ts"
   },
   "private": true,

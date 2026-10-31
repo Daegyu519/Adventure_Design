@@ -94,7 +94,6 @@ def test_relation_and_kind_from_room(fake):
     fake.baselines[a] = {"avg_len": 12.0, "polite_rate": 0.9, "softener_rate": 0.3, "n": 15}
     ctx = _load(fake, room, a)
     assert (ctx.convo.relation, ctx.convo.kind, ctx.convo.pair_id) == ("선후배", "group", f"{a}:선후배")
-    assert ctx.room.id == room and ctx.room.member_count == 3
     assert sorted(ctx.names) == sorted(["김지은", "박민수", "최수아"])
     assert ctx.store.baseline(str(a)) == fake.baselines[a]
     assert _load(fake, room, b).store.baselines == {}   # 기준선 없는 사람

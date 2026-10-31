@@ -201,13 +201,13 @@ def test_job_has_own_timeout(fake, registry, monkeypatch):
     assert time.monotonic() - start < 1.0          # 바깥 2초 보호막이 아니라 작업 자신의 제한에 걸렸다
 
 
-def test_l4_failure_logs_unusable(fake, registry, spy):
-    """모든 모델이 실패하면(스키마 검사 탈락) 기권: feedback_log만 usable False로 남는다."""
+def test_l4_failure_does_not_consume_report(fake, registry, spy):
+    """모든 모델이 실패하면(스키마 검사 탈락) 기권: 패턴도 feedback_log도 남기지 않는다(P-04 E11: 신고를 소비하지 않음)."""
     (_, jieun, _), room, mid = group(fake)
     spy.canned["feedback"] = lambda _p: "not json"
-    report(fake, registry, room, jieun, mid)
-    assert fake.sender_pats == {} and fake.global_pats == {}
-    assert [(f["usable"], f["pattern_count"]) for f in fake.feedback_log] == [(False, 0)]
+    with pytest.raises(job.ClassificationUnavailable):
+        report(fake, registry, room, jieun, mid)
+    assert fake.sender_pats == {} and fake.global_pats == {} and fake.feedback_log == []
 
 
 def test_identical_complaint_calls_expert_again(fake, registry, spy):
