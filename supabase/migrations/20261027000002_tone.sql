@@ -19,7 +19,7 @@ create table tone.feedback_log (
 );
 create index on tone.feedback_log(reporter_id, created_at); -- 관계별 주간 상한(T-24)
 
--- 보낸 사람 패턴. 모든 방의 하소연이 들어온다(규칙 14, 2026-10-31 변경).
+-- 보낸 사람 패턴. 그룹방(3명 이상) 하소연만 들어온다(규칙 14, 엔진이 지킨다).
 -- trigger는 짧은 패턴 태그다. 길이 상한으로 하소연 문장이 통째로 들어오는 것을 막는다.
 create table tone.sender_patterns (
   sender_id uuid not null references public.profiles(id) on delete cascade,
