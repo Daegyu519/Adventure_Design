@@ -1,6 +1,4 @@
-import { isValidEmail, normalizeOtp, otpErrorMessage, OTP_LENGTH, validateName } from '../auth';
-
-test('OTP_LENGTH is 6', () => expect(OTP_LENGTH).toBe(6));
+import { isValidEmail, normalizeOtp, otpErrorMessage, validateName } from '../auth';
 
 test('isValidEmail', () => {
   expect(isValidEmail(' a@b.co ')).toBe(true);
@@ -17,7 +15,13 @@ test('normalizeOtp', () => {
   expect(normalizeOtp('12345')).toBeNull();
   expect(normalizeOtp('12345a')).toBeNull();
 });
-test('normalizeOtp rejects 7 digits', () => expect(normalizeOtp('1234567')).toBeNull());
+// Supabase Email OTP Length는 6~10(새 프로젝트 기본 8). 그 범위면 모두 받는다.
+test('normalizeOtp accepts 6 to 10 digits', () => {
+  expect(normalizeOtp('79778423')).toBe('79778423');
+  expect(normalizeOtp('7977 8423')).toBe('79778423');
+  expect(normalizeOtp('1234567890')).toBe('1234567890');
+  expect(normalizeOtp('12345678901')).toBeNull();
+});
 
 test('validateName trims', () => expect(validateName('  지은 ')).toEqual({ ok: true, value: '지은' }));
 test('validateName empty', () => expect(validateName('  ')).toEqual({ ok: false, message: '이름을 적어 주세요' }));

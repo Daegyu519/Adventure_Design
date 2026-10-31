@@ -5,13 +5,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppText } from '../components/AppText';
 import { Button } from '../components/Button';
 import { TextField } from '../components/TextField';
-import { isValidEmail, normalizeOtp, OTP_LENGTH, otpErrorMessage } from '../lib/auth';
+import { isValidEmail, normalizeOtp, otpErrorMessage } from '../lib/auth';
 import { supabase } from '../lib/supabase';
 import { useTheme } from '../lib/theme';
 
-const CODE_LABEL = `메일로 받은 ${OTP_LENGTH}자리 코드를 적어 주세요`;
+const CODE_LABEL = '메일로 받은 숫자 코드를 적어 주세요';
 
-// 이메일 → 메일로 온 6자리 코드. 이메일·코드는 상태에만 두고 로그·주소(URL)·저장소에 남기지 않는다.
+// 이메일 → 메일로 온 숫자 코드(6~10자리). 이메일·코드는 상태에만 두고 로그·주소(URL)·저장소에 남기지 않는다.
 // 성공하면 SessionProvider가 SIGNED_IN을 받아 게이트가 이 화면을 치운다(직접 이동하지 않는다).
 export default function Login() {
   const { colors, space } = useTheme();
@@ -45,7 +45,7 @@ export default function Login() {
   const verify = async () => {
     if (busy) return;
     const token = normalizeOtp(code);
-    if (!token) return setError(`${OTP_LENGTH}자리 숫자를 적어 주세요`);
+    if (!token) return setError('메일로 받은 숫자 코드를 그대로 적어 주세요');
     if (!supabase) return;
     setBusy(true);
     setError(null);
@@ -80,7 +80,7 @@ export default function Login() {
 
             {step === 'email' ? (
               <>
-                <AppText color="textMuted">이메일로 {OTP_LENGTH}자리 코드를 보내 드려요. 처음이면 계정이 만들어져요.</AppText>
+                <AppText color="textMuted">이메일로 숫자 코드를 보내 드려요. 처음이면 계정이 만들어져요.</AppText>
                 <TextField
                   label="이메일"
                   value={email}

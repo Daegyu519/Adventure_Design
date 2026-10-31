@@ -1,15 +1,15 @@
 // 로그인·프로필 입력 검사. 순수 함수만 둔다(이메일·코드·이름은 로그에 남기지 않는다).
-export const OTP_LENGTH = 6;
 
 export type Checked = { ok: true; value: string } | { ok: false; message: string };
 
 // 가입 여부는 서버가 정한다. 여기서는 "메일을 보낼 만한 모양인가"만 본다.
 export const isValidEmail = (s: string): boolean => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim());
 
-// 메일에서 붙여 넣으면 공백이 섞일 수 있다. 공백을 지운 뒤 숫자 6자리만 받는다.
+// 메일에서 붙여 넣으면 공백이 섞일 수 있다. 공백을 지운 뒤 숫자 6~10자리만 받는다.
+// 길이는 Supabase 프로젝트 설정(Email OTP Length, 6~10, 새 프로젝트 기본 8)이 정하므로 그 범위를 모두 받는다.
 export function normalizeOtp(s: string): string | null {
   const t = s.replace(/\s+/g, '');
-  return new RegExp(`^\\d{${OTP_LENGTH}}$`).test(t) ? t : null;
+  return /^\d{6,10}$/.test(t) ? t : null;
 }
 
 // profiles.name은 Postgres char_length 1~20(코드포인트). JS 길이가 아니라 [...s]로 센다.
