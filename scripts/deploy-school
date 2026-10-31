@@ -27,16 +27,18 @@ if [ -n "$ENVF" ]; then
   remote "umask 077; cat > $B/engine.env.new && chmod 600 $B/engine.env.new && mv $B/engine.env.new $B/engine.env" < "$ENVF"
   echo "engine.env updated"
 fi
-c=0; up all || c=$?
-if [ "$c" != 0 ] && [ "$c" != 3 ] && [ "$c" != 4 ]; then   # 3·4는 사람이 할 일(Tailscale 로그인·Funnel 켜기)
-  if remote "set -e; cd $B; [ -d app.prev ]; mv app app.failed; mv app.prev app"; then
-    # 되돌린 코드의 venv는 자리가 바뀌었으므로 다시 sync한다
-    remote "cd $B/app/engine && uv sync --locked --no-dev --python 3.11" && up engine || true
-    echo "rolled back to previous app (failed one kept as app.failed)" >&2
-  else
-    echo "no previous app to roll back to" >&2
-  fi
-  exit "$c"
+up llm   # llm 실패는 엔진 코드와 무관하므로 되돌리지 않는다(set -e로 여기서 멈춘다)
+if ! up engine; then
+  # 엔진이 안 뜨면 이전 app으로 되돌린다. 되돌린 코드의 venv는 자리가 바뀌었으므로 다시 sync한다.
+  fail() { echo "ROLLBACK FAILED - engine may be down; run: ssh $H 'bash -s -- status' < deploy/school-gpu/up.sh" >&2; exit 1; }
+  r=0; remote "[ -d $B/app.prev ]" || r=$?
+  [ "$r" != 255 ] || { echo "ssh failed" >&2; fail; }
+  [ "$r" = 0 ] || { echo "engine failed and no previous app to roll back to" >&2; exit 1; }
+  remote "set -e; cd $B; mv app app.failed; mv app.prev app; cd app/engine; uv sync --locked --no-dev --python 3.11" && up engine || fail
+  echo "rolled back to previous app (failed one kept as app.failed); engine healthy" >&2
+  exit 1
 fi
-[ "$c" = 0 ] || echo "(human step needed: see README 배포; then rerun)" >&2
+c=0; up funnel || c=$?   # 3·4는 사람이 할 일(Tailscale 로그인·Funnel 켜기). 건강한 코드는 되돌리지 않는다.
+[ "$c" = 0 ] || echo "(funnel exit $c: see message above and README 배포; then rerun)" >&2
 up status
+exit "$c"

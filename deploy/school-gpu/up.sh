@@ -28,11 +28,12 @@ engine() {
   [ -f "$f" ] || { echo "missing $f (scripts/deploy-school --env FILE)" >&2; exit 1; }
   [ "$(stat -c %a "$f")" = 600 ] || { echo "$f must be mode 600" >&2; exit 1; }
   # 형식 검사: 빈 줄, 주석, KEY=값(값에 따옴표·공백·$·&·; 없음. DB 비밀번호는 퍼센트 인코딩). docker --env-file과 같은 형식.
-  if grep -qvE '^(#.*|[A-Za-z_][A-Za-z0-9_]*=[A-Za-z0-9._:/@%+=,?~_-]*)?$' "$f"; then
+  if grep -qvE '^(#.*|[A-Za-z_][A-Za-z0-9_]*=[A-Za-z0-9._:/@%+=,?_-]*)?$' "$f"; then
     echo "engine.env format error: only KEY=value lines (no quotes, spaces, \$, &, ;)" >&2; exit 1
   fi
   has tone-engine && tmux kill-session -t tone-engine
   # 검사한 파일만 셸로 읽는다. USE_LOCAL_MODEL은 항상 켠다. 죽으면 5초 뒤 다시 띄운다(컨테이너 재시작 후엔 up.sh all을 다시 실행).
+  : > "$BASE/engine.log"   # 세션을 (재)만들 때 한 번만 비운다
   tmux new-session -d -s tone-engine "exec >>$BASE/engine.log 2>&1; cd $BASE/app/engine && set -a && . $f && set +a && export USE_LOCAL_MODEL=1; while :; do sh deploy-entrypoint.sh uv run --frozen --no-dev uvicorn app.main:app --host 127.0.0.1 --port $ENGINE_PORT --workers 1; echo 'engine exited, restarting in 5s'; sleep 5; done"
   for _ in $(seq 30); do
     curl -sf "http://127.0.0.1:$ENGINE_PORT/health" >/dev/null && { echo "engine: ok"; return 0; }
