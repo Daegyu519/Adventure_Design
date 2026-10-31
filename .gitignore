@@ -12,3 +12,6 @@ web-build/
 
 # Supabase CLI 임시 파일(db push 등이 만든다)
 supabase/.temp/
+
+# 파일럿 로컬 값(커밋하지 않는다)
+.env.pilot

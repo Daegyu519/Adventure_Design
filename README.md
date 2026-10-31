@@ -50,7 +50,7 @@ DB 웹훅은 SQL 마이그레이션이 아니라 Supabase 대시보드에서 만
 
 ### 학교 GPU 서버 (로컬 SEED)
 
-말투 전문가 `tone_hcx`(HyperCLOVAX-SEED-Text-Instruct-1.5B)는 학교 GPU 서버(P100 16GB, 여러 사람이 같이 쓰는 컨테이너)의 llama.cpp `llama-server`에서 돈다. **쓸 때만 켠다.**
+말투 전문가 `tone_hcx`(HyperCLOVAX-SEED-Text-Instruct-1.5B)는 학교 GPU 서버(P100 16GB, GPU 호스트는 여러 사람이 같이 쓰고, 컨테이너는 우리 것)의 llama.cpp `llama-server`에서 돈다. **쓸 때만 켠다.**
 
 ```bash
 scripts/gpu up      # 서버에 llama-server(가장 한가한 GPU 1장) + 이 컴퓨터 127.0.0.1:11434 터널
@@ -71,6 +71,26 @@ cmake --build build -j 32 --target llama-server
 ```
 
 ### 배포
+
+**기본 경로: 학교 GPU 서버 + Tailscale Funnel.** 엔진은 학교 GPU 서버(로컬 SEED와 같은 서버)에서 상시로 돌고, 공개 HTTPS는 Tailscale Funnel(무료, 고정 `*.ts.net` 주소)로 낸다. 서버에는 systemd·docker가 없어 tmux 세션(`tone-llm`, `tone-engine`, `tone-ts`)으로 돌린다. 서버 쪽 스크립트는 `deploy/school-gpu/up.sh`(stdin으로 보내므로 서버에 복사본이 없다).
+
+```bash
+scripts/deploy-school --env <파일럿 엔진 env 파일>   # 처음. 이후 코드만 바꿨으면 --env 없이
+ssh tone-gpu 'bash -s -- status' < deploy/school-gpu/up.sh   # 상태와 공개 URL
+ssh tone-gpu 'bash -s -- stop' < deploy/school-gpu/up.sh     # 엔진만 끈다
+```
+
+`deploy-school`은 커밋된 `engine/`·`deploy/`(`git archive HEAD`)를 올리고 `uv sync --locked --no-dev --python 3.11` 후 `llm`·`engine`·`funnel`을 켠 다음 상태와 공개 URL을 보여 준다. 엔진 env 파일은 서버 `/root/tone-chat-deploy/engine.env`(권한 600)로 복사되며 값은 화면에 나오지 않는다. **형식은 `KEY=값` 한 줄씩만**(따옴표·공백·`$`·`&`·`;` 금지, DB 비밀번호는 퍼센트 인코딩, docker `--env-file`과 같은 형식). 어기면 `up.sh engine`이 거절한다. `CORS_ORIGINS`에 웹 앱 origin을 꼭 넣는다. 엔진은 `/docs`·`/redoc`·`/openapi.json`을 열지 않는다. 로컬 파일럿 값은 `.env.pilot`에 두면 된다(`.gitignore`됨). 엔진은 항상 `USE_LOCAL_MODEL=1`로 뜬다. `scripts/gpu down`은 `tone-engine`이 떠 있으면 llama-server를 끄지 않는다(`--force`로 끈다).
+
+사람이 해야 할 것(한 번):
+1. 처음 `deploy-school`이 `Tailscale login needed. Open: https://...`를 출력하고 종료 코드 3으로 멈추면, 그 링크를 열어 로그인한다. 그다음 `ssh tone-gpu 'bash -s -- funnel' < deploy/school-gpu/up.sh`를 다시 실행한다.
+2. funnel이 활성화 링크를 출력하면(HTTPS·Funnel 미사용 상태) 링크를 열어 켜고 다시 실행한다.
+3. 컨테이너가 재시작되면 tmux가 사라지므로 `scripts/deploy-school`(또는 `ssh tone-gpu 'bash -s -- all' < deploy/school-gpu/up.sh`)을 다시 실행한다. 엔진 프로세스가 죽으면 tmux 안에서 5초 뒤 다시 뜬다. 배포가 실패하면 `deploy-school`이 이전 `app`으로 되돌린다.
+4. 공개 URL을 `scripts/deploy-smoke https://<호스트>.ts.net`으로 확인하고, pilot Supabase 웹훅과 앱의 `EXPO_PUBLIC_ENGINE_URL`을 그 주소로 맞춘다(아래 4번).
+
+**감수하는 위험과 주의**: GPU 호스트 관리자는 컨테이너를 볼 수 있다. 파일럿이 끝나면 `HOOK_SECRET`·`MIRROR_SECRET`·NVIDIA 키·VAPID 키·DB 비밀번호를 바꾼다. 컨테이너 root 비밀번호를 바꾸고 키 로그인을 쓴다. userspace 모드의 Tailscale은 같은 tailnet의 다른 기기가 `:8000`·`:11434`에 닿을 수 있으므로, 이 tailnet에 다른 사람을 초대하지 않는다.
+
+**다른 서버라면** 아래 Docker + Cloudflare Tunnel 절차를 쓴다.
 
 서버(학교 서버 또는 VM)와 Cloudflare 계정·도메인이 생기면 바로 올릴 수 있게 준비해 두었다(T-29, 서버 없이 로컬에서 확인한 것만 완료). 이미지 빌드 컨텍스트는 `engine/`이다. **프로세스는 반드시 1개**(`--workers 1`, Dockerfile CMD에 고정): 한도·큐·중복 제거·거울 키가 프로세스 메모리에 있다. 복제본도 늘리지 않는다.
 
