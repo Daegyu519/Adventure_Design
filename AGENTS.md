@@ -197,7 +197,8 @@ flowchart LR
 - 저장소는 GitHub 비공개 `Daegyu519/Adventure_Design`.
 
 ### 엔진 모델
-- 모델은 laguna-xs-2.1(빠른 쪽)과 nemotron-3.5-bolt-e4b(깊은 쪽·폴백)로 — 이 NVIDIA 계정에서 실제 프롬프트로 JSON이 통과하고 지연이 가장 짧았다(1~3초). deepseek-v4.1-flash·kimi·mistral-large-4는 응답 없음, 추론 모델은 생각 토큰 때문에 3~15초(공급자에 모델별 추가 요청 옵션이 없어 `enable_thinking:false`는 못 씀). 실시간 1.2초 예산은 아직 못 맞춘다(P-06).
+- 모델은 laguna-xs-2.1(빠른 쪽)과 nemotron-3.5-bolt-e4b(깊은 쪽·폴백)로 — 이 NVIDIA 계정에서 실제 프롬프트로 JSON이 통과하고 지연이 가장 짧았다(1~3초). deepseek-v4.1-flash·kimi·mistral-large-4는 응답 없음, 추론 모델은 생각 토큰 때문에 3~15초(공급자에 모델별 추가 요청 옵션이 없어 `enable_thinking:false`는 못 씀). 지연은 1~3초, 부하 때 4~12초. **실시간 힌트는 지금 사실상 꺼짐(전문가가 1.2초 안에 못 옴 → 기권)**(P-06). 실제 평가는 8쌍(n=8)이라 게이트가 아니다. GitHub Models는 무료 등급 데이터 약관 미확인이라 사슬에서 뺐다.
+- 실제 대화(가린 문장)는 NVIDIA API 카탈로그 무료 등급으로 간다 — 파일럿을 위한 의도된 결정(원 설계 ARCHITECTURE의 공급자 선택), [NVIDIA API Trial 약관](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf)(내용은 사람이 확인 필요), Masker가 이름·개인정보를 먼저 가린다(규칙 16).
 
 ### 앱
 - 앱 환경 변수는 `apps/mobile/.env`에만(Expo는 루트 `.env`를 읽지 않는다) — 루트와 따로 관리하는 이유. `EXPO_PUBLIC_ENGINE_URL`이 비면 개발·테스트는 mock 엔진 + 개발 중 경고, 배포 빌드(`__DEV__` 아님)는 엔진이 꺼진다: mock도 던짐도 없이 모든 호출이 `EngineError(0, 'engine_not_configured')`로 실패하고 만들 때 `console.error` 한 번(값 없음). 힌트는 조용히 없고 살펴보기·털어놓기·거울·리포트는 기존 고정 문구, 채팅(방·보내기·Realtime·푸시 등록)은 그대로(규칙 11). EAS preview·production 빌드는 `eas-build-pre-install`에서 실패. T-30에서는 `isMock === false`만으로는 모자라니(꺼진 엔진도 false) 콘솔에 그 오류가 없고 힌트가 실제로 오는지 확인.

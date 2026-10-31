@@ -2,9 +2,9 @@
 1  A  내일 7시 맞지?                   ㅇㅇ        False False None  
 1  B  요즘 진짜 너무 힘들다... 취업도 안 되고    ㅇㅇ        True  False 0.0    기권  ← 틀림
 2  A  이 파일 외부 메일로 보내도 돼요?         안 돼요.     False False 0.0    기권
-2  B  이번 주만 마감 하루 미뤄도 될까요? 집에     안 돼요.     True  False 0.0    기권  ← 틀림
+2  B  이번 주만 마감 하루 미뤄도 될까요? 집에     안 돼요.     True  True  0.664 
 3  A  내일 회의 10시로 옮겼어요             알겠습니다.    False False None  
-3  B  어제는 내가 말이 너무 심했어 미안해 ㅠ      알겠습니다.    True  False 0.0    기권  ← 틀림
+3  B  어제는 내가 말이 너무 심했어 미안해 ㅠ      알겠습니다.    True  False 0.246   ← 틀림
 4  A  야 어제 소개팅 갔는데 ㅋㅋㅋ            그래서?      False False None  
 4  B  나 오늘 발표 망쳐서 교수님한테 엄청 혼났어    그래서?      True  False 0.0    기권  ← 틀림
 5  A  오늘 회의록 공유드렸습니다              네 수고하세요   False False None  
@@ -16,4 +16,4 @@
 8  A  자료는 금요일까지 올려 주세요            네.        False False None  
 8  B  주말에 같이 영화 볼래? 너 좋아하는 감독     네.        True  False 0.0    기권  ← 틀림
 
-{"precision": 0.0, "recall": 0.0, "abstain_rate": 0.44, "context_split": "0/8", "mode": "live", "n": 16}
+{"precision": 1.0, "recall": 0.12, "abstain_rate": 0.31, "context_split": "1/8", "mode": "live", "n": 16}

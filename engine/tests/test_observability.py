@@ -42,7 +42,6 @@ def test_missing_key_logs_one_warning_per_skipped_entry(caplog):
         _call(_real_router())
     msgs = [r.getMessage() for r in caplog.records]
     assert any("nvidia:poolside/laguna-xs-2.1" in m and "unavailable" in m for m in msgs)
-    assert any("github:openai/gpt-4.1-mini" in m and "unavailable" in m for m in msgs)
     assert SECRET not in caplog.text
 
 
@@ -99,7 +98,6 @@ def test_provider_5xx_logs_entry_and_status_class_and_health_counts_it(caplog, m
     finally:
         app.dependency_overrides.clear()
     assert body["failures"]["nvidia"]["ProviderError 5xx"] >= 1
-    assert body["failures"]["github"]["unavailable"] >= 1
     assert body["providers"]["nvidia"] == "up" and body["providers"]["github"] == "down"
 
 

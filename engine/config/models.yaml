@@ -6,11 +6,13 @@ providers:
     base_url: https://integrate.api.nvidia.com/v1
     api_key_env: NVIDIA_API_KEY
     rpm: 40            # 모델마다 다름. build.nvidia.com 화면 오른쪽 위에서 확인
+                       # 추정: 힌트 하나에 호출 약 2번(context+tone), 상세는 약 4~5번 → 합쳐서 분당 힌트 약 15~20개가 한도
   # 합성 문장 평가 전용. 실제 대화가 지나가는 experts·fallback에는 넣지 않는다(무료 등급 입력은 구글 학습에 쓰일 수 있음).
   gemini:
     base_url: https://generativelanguage.googleapis.com/v1beta/openai
     api_key_env: GEMINI_API_KEY
     rpm: 15
+  # github는 쓰지 않는다(무료 등급 데이터 약관 미확인, P-06). 사슬 어디에도 넣지 않았다.
   github:
     base_url: https://models.github.ai/inference
     api_key_env: GITHUB_TOKEN
@@ -24,7 +26,8 @@ providers:
     rpm: 100000
 
 # 모델 선택(P-06, 2026-10-31, 이 NVIDIA 계정 실측): 추론 모델(nemotron-3-ultra·nano-omni)은 생각 토큰 때문에 3~15초라 실시간에 못 쓴다.
-# laguna-xs-2.1(실시간·상세 모두 ~1초)을 빠른 쪽, nemotron-3.5-bolt-e4b(1~3초, 고쳐 쓰기가 지시를 더 잘 따름)를 깊은 쪽·폴백으로 쓴다.
+# laguna-xs-2.1(한가할 때 ~1초, 부하 때 4~12초)을 빠른 쪽, nemotron-3.5-bolt-e4b(1~3초, 부하 때 4~12초, 고쳐 쓰기가 지시를 더 잘 따름)를 깊은 쪽·폴백으로 쓴다.
+# 실시간 힌트는 지금 사실상 꺼짐(전문가가 1.2초 안에 못 옴 → 기권). 상세·거울(8초)만 쓸 만하다.
 # 응답 없음(2026-10-31): deepseek-v4.1-flash(500·시간 초과), kimi-k3(카탈로그에 없음)·kimi-k2.6(404), mistral-large-4(시간 초과). AGENTS §9에서 다시 확인.
 # 전문가 id의 tone_ds·tone_kimi·ctx_fast·ctx_deep은 옛 모델 이름의 흔적일 뿐이다(테스트가 id를 쓰므로 그대로 둔다).
 # 전문가. 추가·제거는 여기서만 한다. mock은 force_mock(테스트·평가)가 쓸 mock_rules 이름(없으면 prompt 이름).
@@ -39,7 +42,7 @@ experts:
   - {id: rewrite,   role: rewrite,  model: nvidia:poolside/laguna-xs-2.1, prompt: rewrite,  paths: [detail, mirror]}
   - {id: feedback,  role: feedback, model: nvidia:nvidia/nemotron-3.5-bolt-e4b,              prompt: feedback, paths: [async]}
 fallback:   # 실제 문장이 지나가므로 gemini 금지
-  nvidia:poolside/laguna-xs-2.1: [nvidia:nvidia/nemotron-3.5-bolt-e4b, github:openai/gpt-4.1-mini, mock:auto]
+  nvidia:poolside/laguna-xs-2.1: [nvidia:nvidia/nemotron-3.5-bolt-e4b, mock:auto]
   nvidia:nvidia/nemotron-3.5-bolt-e4b: [nvidia:poolside/laguna-xs-2.1, mock:auto]
 paths:
   realtime: {deadline_ms: 1500, expert_deadline_ms: 1200, gate_threshold: 0.3}
