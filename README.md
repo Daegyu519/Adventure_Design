@@ -42,25 +42,57 @@ CNU 2026-2 어드벤처디자인 수업 프로젝트
 
 ```mermaid
 flowchart LR
-  App["앱 (Expo)<br/>iOS 웹 · Android · 웹"]
-  subgraph SB["Supabase"]
-    SBS["Auth · Postgres+RLS<br/>Realtime · Storage"]
-    WH["DB 웹훅"]
+  subgraph Devices["사용자 기기"]
+    IOS["아이폰 Safari / 홈 화면 앱(PWA)"]
+    AND["안드로이드 Chrome (APK는 보류)"]
   end
-  Engine["AI 엔진 (FastAPI)"]
-  Models["NVIDIA API 카탈로그 모델<br/>+ 로컬 HyperCLOVAX-SEED 1.5B<br/>(학교 GPU 서버의 llama.cpp)"]
-  Push["푸시<br/>(Expo · Web Push)"]
 
-  App <-->|"로그인 · 메시지 · 사진"| SBS
-  App -->|"힌트 요청, HTTPS (Tailscale Funnel)"| Engine
-  Engine --> Models
-  SBS --- WH
-  WH -->|"새 메시지"| Engine
-  Engine --> Push
-  Push --> App
+  subgraph Hosting["EAS Hosting"]
+    WEB["웹 앱 정적 파일<br/>tone-chat.expo.app<br/>(Expo web export, 서비스 워커 sw.js)"]
+  end
+
+  subgraph SB["Supabase pilot (서울)"]
+    AUTH["Auth<br/>이메일 코드 로그인<br/>(Brevo SMTP)"]
+    PG[("Postgres + RLS<br/>public · tone 스키마")]
+    RT["Realtime<br/>messages · reactions · room_members"]
+    ST["Storage<br/>chat-images (비공개)"]
+    HOOK["DB 웹훅 트리거<br/>tone.notify_engine_message (pg_net)"]
+  end
+
+  subgraph School["학교 GPU 서버 (도커 컨테이너)"]
+    TS["tailscaled + Funnel<br/>공개 HTTPS"]
+    ENG["AI 엔진 FastAPI<br/>127.0.0.1:8000"]
+    GEM["Gemma-3-4B<br/>실시간 말투 :11435"]
+    QWEN["Qwen3-30B-A3B<br/>상세·거울 말투 :11436"]
+    SEED["SEED-1.5B :11434<br/>(띄워만 둠, 전문가 아님)"]
+  end
+
+  NV["NVIDIA API 카탈로그<br/>laguna-xs-2.1 · nemotron-3.5-bolt"]
+  PUSH["Web Push (VAPID) / Expo Push"]
+
+  IOS --> WEB
+  AND --> WEB
+  WEB -->|"로그인·메시지·사진<br/>(publishable key + JWT, RLS)"| AUTH
+  WEB --> PG
+  WEB <-->|"웹소켓"| RT
+  WEB --> ST
+  WEB -->|"힌트·상세·털어놓기·거울<br/>HTTPS + JWT"| TS
+  TS --> ENG
+  ENG -->|"JWKS로 토큰 검증"| AUTH
+  ENG <-->|"asyncpg (session pooler)"| PG
+  PG --> HOOK
+  HOOK -->|"POST /hooks/message<br/>X-Hook-Secret"| TS
+  ENG -->|"가린 문장만"| GEM
+  ENG -->|"가린 문장만"| QWEN
+  ENG -->|"가린 문장만"| NV
+  ENG --> PUSH
+  PUSH --> IOS
+  PUSH --> AND
 ```
 
-**더 자세한 그림**(전체 구성·실시간 힌트·상세 보기·웹훅/푸시·털어놓기/거울·데이터 모델·학교 GPU 배치·배포·개인정보 경계): [`docs/architecture-diagrams.md`](docs/architecture-diagrams.md)
+- 엔진과 모델 서버는 학교 GPU 서버 컨테이너의 127.0.0.1에만 열리고, 바깥에서는 Tailscale Funnel HTTPS로만 들어온다.
+
+**흐름별 자세한 그림**(실시간 힌트·상세 보기·웹훅/푸시·털어놓기/거울·데이터 모델·학교 GPU 배치·배포·개인정보 경계): [`docs/architecture-diagrams.md`](docs/architecture-diagrams.md)
 
 안전 원칙은 이렇다(전체 규칙은 [`CLAUDE.md`](CLAUDE.md)).
 
