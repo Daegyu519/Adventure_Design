@@ -6,6 +6,9 @@ import { Platform } from 'react-native';
 import { Composer } from '../components/Composer';
 
 jest.mock('lucide-react-native/icons/send', () => () => null);
+jest.mock('lucide-react-native/icons/arrow-up', () => () => null);
+jest.mock('lucide-react-native/icons/plus', () => () => null);
+jest.mock('lucide-react-native/icons/chevron-left', () => () => null);
 jest.mock('lucide-react-native/icons/x', () => () => null);
 
 // 같은 사람의 다른 메시지로 답장 대상을 바꿔도(hasReply는 계속 true) 입력창으로 포커스가 다시 간다.

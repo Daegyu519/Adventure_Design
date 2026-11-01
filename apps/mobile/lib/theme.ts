@@ -59,7 +59,9 @@ export function useTheme() {
   const system = useColorScheme();
   const scheme = resolveScheme(useContext(Ctx)?.pref ?? 'system', system);
   const colors: Colors = scheme === 'dark' ? tokens.dark : tokens.light;
-  return { colors, scheme, radius: tokens.radius, space: tokens.space, font: FONT };
+  // iOS 묶음 목록: 라이트는 회색 바탕 + 흰 칸, 다크는 검은 바탕 + 어두운 회색 칸. 탭 바는 iOS 막대색(불투명).
+  const grouped = scheme === 'dark' ? { screen: colors.background, cell: colors.surface } : { screen: colors.surface, cell: colors.background };
+  return { colors, scheme, radius: tokens.radius, space: tokens.space, font: FONT, grouped, bar: colors.bar };
 }
 
 // 웹 키보드 포커스 링(MASTER 8장: primary 2px). 브라우저가 키보드 포커스에만 그리는 기본 링의 색·굵기만 바꾼다.

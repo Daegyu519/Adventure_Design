@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { Platform, type ViewStyle } from 'react-native';
+import { Platform, StyleSheet, type ViewStyle } from 'react-native';
 // 아이콘은 하나씩 불러온다. 묶음 import는 웹 번들에 아이콘 전체(약 2MB)가 들어간다.
 import ChartColumn from 'lucide-react-native/icons/chart-column';
 import MessageCircle from 'lucide-react-native/icons/message-circle';
@@ -18,7 +18,7 @@ const WEB_TAB_SAFE = (Platform.OS === 'web'
   : {}) as unknown as ViewStyle;
 
 export default function TabsLayout() {
-  const { colors, font } = useTheme();
+  const { colors, font, bar } = useTheme();
   return (
     <Tabs
       screenOptions={{
@@ -26,8 +26,9 @@ export default function TabsLayout() {
         sceneStyle: { backgroundColor: colors.background }, // 다크 모드에서 화면 전환 때 흰 바탕이 번쩍이지 않게
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textMuted,
-        tabBarStyle: { backgroundColor: colors.background, borderTopColor: colors.border, ...WEB_TAB_SAFE },
-        tabBarLabelStyle: { fontFamily: font.family, fontSize: font.small, lineHeight: 16 },
+        // 막대는 불투명(iOS 막대색) + 머리카락 선. 반투명(absolute)으로 두면 아이폰 웹에서 안전 영역이 깨진다(P-22)
+        tabBarStyle: { backgroundColor: bar, borderTopColor: colors.border, borderTopWidth: StyleSheet.hairlineWidth, ...WEB_TAB_SAFE },
+        tabBarLabelStyle: { fontFamily: font.family, fontSize: 11, fontWeight: '500', lineHeight: 16 },
       }}
     >
       <Tabs.Screen name="index" options={{ title: '대화', tabBarIcon: ({ color }) => <MessageCircle color={color} size={ICON_SIZE} /> }} />

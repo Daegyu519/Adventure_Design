@@ -1,8 +1,8 @@
-import ImagePlus from 'lucide-react-native/icons/image-plus';
-import Send from 'lucide-react-native/icons/send';
+import ArrowUp from 'lucide-react-native/icons/arrow-up';
+import Plus from 'lucide-react-native/icons/plus';
 import X from 'lucide-react-native/icons/x';
 import { useEffect, useRef, useState, type ComponentRef, type RefObject } from 'react';
-import { Platform, TextInput, View } from 'react-native';
+import { Platform, StyleSheet, TextInput, View } from 'react-native';
 
 import { shouldSubmitOnKey } from '../lib/composer';
 import { retryFocus } from '../lib/focus';
@@ -14,7 +14,7 @@ import { IconButton } from './IconButton';
 import { MAX_SHOWN, MENTION_LIST_ID, MentionPicker, mentionOptionId } from './MentionPicker';
 import type { Member } from '../lib/rooms';
 
-// MASTER 4·5장: 입력창 모서리 22, 최소 높이 44. 웹은 Enter로 보내고 Shift+Enter는 줄바꿈, 한글 조합 중 Enter는 보내지 않는다.
+// MASTER 4·5장: iOS식 입력줄. 둥근 + 버튼(사진), 둥근 입력창(모서리 18, 최소 높이 36), 둥근 보내기. 눌림 영역은 모두 44. 웹은 Enter로 보내고 Shift+Enter는 줄바꿈, 한글 조합 중 Enter는 보내지 않는다.
 // 입력창은 보낸 뒤에도 그대로 있어서 포커스를 잃지 않는다. 글이 비면 보내기는 aria-disabled(진짜 disabled 아님).
 // 답장 막대: 답장 대상을 고르면 입력창으로, 취소하면(막대가 사라지므로) 입력창으로 포커스를 옮긴다.
 export type InputHandle = ComponentRef<typeof TextInput>;
@@ -92,7 +92,7 @@ export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, 
     ref.current?.focus(); // 목록이 사라져도 포커스가 body로 떨어지지 않게
   };
   return (
-    <View style={{ borderTopWidth: 1, borderTopColor: colors.border, backgroundColor: colors.background }}>
+    <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, backgroundColor: colors.surface }}>
       {typingLabel ? (
         <AppText variant="small" color="textMuted" style={{ paddingHorizontal: space[3], paddingTop: space[0] }}>
           {typingLabel}
@@ -125,8 +125,8 @@ export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, 
           />
         </View>
       )}
-      <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: space[1], paddingHorizontal: space[3], paddingVertical: space[1] }}>
-        {onPickImage ? <IconButton icon={ImagePlus} label="사진 보내기" onPress={onPickImage} busy={photoBusy} disabled={photoBusy} /> : null}
+      <View style={{ flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: space[0], paddingVertical: space[0] }}>
+        {onPickImage ? <IconButton icon={Plus} label="사진 보내기" onPress={onPickImage} busy={photoBusy} disabled={photoBusy} circle={{ bg: 'border', fg: 'textMuted' }} /> : null}
         <TextInput
           ref={ref}
           accessibilityLabel={replyTo ? `메시지 입력, ${replyTo.name}에게 답장 중` : '메시지 입력'}
@@ -143,6 +143,7 @@ export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, 
           selectionColor={colors.primary}
           {...(Platform.OS === 'web'
             ? {
+                rows: 1, // 한 줄에서 시작(RN web의 multiline 기본은 두 줄 높이). 글이 길어지면 maxHeight까지 늘어난다
                 role: 'combobox',
                 'aria-expanded': picking,
                 'aria-controls': picking ? MENTION_LIST_ID : undefined,
@@ -181,21 +182,23 @@ export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, 
           }
           style={{
             flex: 1,
-            minHeight: 44,
+            minHeight: 36,
             maxHeight: 140,
-            paddingHorizontal: space[3],
-            paddingVertical: space[2],
+            marginVertical: 4,
+            paddingHorizontal: 14,
+            paddingTop: 7,
+            paddingBottom: 7,
             borderWidth: 1,
-            borderColor: colors.textMuted,
+            borderColor: colors.border,
             borderRadius: radius.input,
-            backgroundColor: colors.surface,
+            backgroundColor: colors.background,
             color: colors.text,
             fontFamily: font.family,
             fontSize: font.body,
             ...focusRing(colors.primary),
           }}
         />
-        <IconButton icon={Send} label="보내기" color="primary" disabled={value.trim() === ''} onPress={onSend} />
+        <IconButton icon={ArrowUp} label="보내기" disabled={value.trim() === ''} onPress={onSend} circle={{ bg: 'primary', fg: 'onPrimary' }} />
       </View>
     </View>
   );

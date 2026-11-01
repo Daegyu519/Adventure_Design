@@ -14,6 +14,9 @@ afterEach(async () => {
 import { Composer } from '../components/Composer';
 
 jest.mock('lucide-react-native/icons/send', () => () => null);
+jest.mock('lucide-react-native/icons/arrow-up', () => () => null);
+jest.mock('lucide-react-native/icons/plus', () => () => null);
+jest.mock('lucide-react-native/icons/chevron-left', () => () => null);
 jest.mock('lucide-react-native/icons/x', () => () => null);
 jest.mock('lucide-react-native/icons/image-plus', () => () => null);
 jest.mock('../lib/motion', () => ({ MOTION_MS: 200, useReducedMotion: () => true }));

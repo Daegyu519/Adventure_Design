@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>톤챗 디자인 시안 (승인: 모노, 2026-11-01)</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<style>
+  /* 시안: 애플식 화면 구조(큰 제목·묶음 목록·반투명 바) + 일반적인 메신저 대화 배치(상대 사진·이름 / 내 말풍선 오른쪽 / 시간·안 읽음 옆 / 날짜 구분).
+     색은 톤챗 틸 + iOS 계열 회색. 카카오톡의 노랑·갈색·하늘회색 배경·로고는 쓰지 않는다(규칙 15). */
+  :root {
+    --tint: #0F766E; --on-tint: #fff;
+    --bg: #FFFFFF; --grouped: #F2F2F7; --cell: #FFFFFF; --sep: rgba(60,60,67,.18);
+    --label: #000; --label2: rgba(60,60,67,.62); --label3: rgba(60,60,67,.32);
+    --bubble-other: #E9E9EB; --on-other: #000;
+    --bar: rgba(249,249,249,.78); --hint-bg: #FFF7ED; --hint: #9A3412;
+    --avatar1: #CCE7E3; --avatar2: #E5DEF7; --avatar3: #DCE9F7;
+  }
+  [data-theme="dark"] {
+    --tint: #2DD4BF; --on-tint: #042F2E;
+    --bg: #000; --grouped: #000; --cell: #1C1C1E; --sep: rgba(84,84,88,.6);
+    --label: #fff; --label2: rgba(235,235,245,.6); --label3: rgba(235,235,245,.3);
+    --bubble-other: #262628; --on-other: #fff;
+    --bar: rgba(22,22,24,.78); --hint-bg: #2A1E12; --hint: #FEE7CF;
+    --avatar1: #12403B; --avatar2: #2E2650; --avatar3: #1D3550;
+  }
+  /* 색감 후보: 모두 대비 4.5:1 이상(라이트·다크), 노랑·갈색·디스코드 보라·인스타 분홍 그라데이션·빨강(오류 전용) 제외 */
+  [data-palette="blue"]  { --tint: #0B63CE; --on-tint: #fff; --avatar1: #D6E6FB; --avatar2: #E3E8F2; --avatar3: #DDEBF7; }
+  [data-palette="green"] { --tint: #1E7A4E; --on-tint: #fff; --avatar1: #D3EBDD; --avatar2: #E4ECE3; --avatar3: #DCEBE5; }
+  [data-palette="mono"]  { --tint: #1C1C1E; --on-tint: #fff; --avatar1: #E5E5EA; --avatar2: #EDEDF0; --avatar3: #E1E1E6; }
+  [data-theme="dark"][data-palette="blue"]  { --tint: #5AA9FF; --on-tint: #00213F; --avatar1: #10304F; --avatar2: #1F2633; --avatar3: #14324A; }
+  [data-theme="dark"][data-palette="green"] { --tint: #5BD38F; --on-tint: #05301A; --avatar1: #12382A; --avatar2: #1E2A22; --avatar3: #143528; }
+  [data-theme="dark"][data-palette="mono"]  { --tint: #F2F2F7; --on-tint: #1C1C1E; --avatar1: #2C2C2E; --avatar2: #3A3A3C; --avatar3: #2A2A2D; }
+  [data-palette="mono"] .other .b { background: var(--bubble-other); }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #D9DDE1; font-family: Pretendard, -apple-system, system-ui, sans-serif; color: #111; }
+  header.top { padding: 20px 24px 8px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  header.top h1 { font-size: 20px; margin: 0 12px 0 0; letter-spacing: -0.01em; }
+  header.top button { font: inherit; padding: 8px 14px; border-radius: 999px; border: 1px solid #9aa; background: #fff; cursor: pointer; }
+  header.top p { margin: 0; width: 100%; color: #445; font-size: 14px; }
+  .row { display: flex; gap: 28px; padding: 16px 24px 40px; flex-wrap: wrap; align-items: flex-start; }
+  .caption { font-size: 14px; color: #334; margin: 0 0 8px; font-weight: 600; max-width: 393px; }
+  .phone { width: 393px; height: 852px; border-radius: 52px; background: var(--bg); color: var(--label); position: relative; overflow: hidden;
+           box-shadow: 0 0 0 10px #1b1b1d, 0 20px 50px rgba(0,0,0,.25); }
+  .island { position: absolute; top: 11px; left: 50%; transform: translateX(-50%); width: 124px; height: 36px; border-radius: 20px; background: #000; z-index: 9; }
+  .status { height: 54px; padding: 18px 32px 0; display: flex; justify-content: space-between; font-weight: 600; font-size: 16px; }
+  .home { position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); width: 134px; height: 5px; border-radius: 3px; background: var(--label); opacity: .85; z-index: 9; }
+  .large { font-size: 34px; font-weight: 700; letter-spacing: -0.022em; line-height: 1.12; padding: 4px 20px 10px; }
+  .search { margin: 0 16px 8px; height: 36px; border-radius: 10px; background: rgba(118,118,128,.12); color: var(--label2); font-size: 17px; display: flex; align-items: center; padding: 0 10px; gap: 6px; }
+  .chat { display: flex; gap: 12px; padding: 10px 16px; align-items: center; }
+  .av { flex: none; width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 19px; color: var(--label); }
+  .chat .main { flex: 1; min-width: 0; border-bottom: .5px solid var(--sep); padding-bottom: 12px; margin-bottom: -12px; }
+  .chat .l1 { display: flex; justify-content: space-between; align-items: baseline; }
+  .chat .name { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
+  .chat .time { font-size: 14px; color: var(--label2); }
+  .chat .l2 { display: flex; justify-content: space-between; gap: 8px; margin-top: 3px; }
+  .chat .prev { font-size: 15px; color: var(--label2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .badge { flex: none; min-width: 22px; height: 22px; border-radius: 11px; background: var(--tint); color: var(--on-tint); font-size: 13px; font-weight: 700; display: grid; place-items: center; padding: 0 6px; }
+  .tabbar { position: absolute; left: 0; right: 0; bottom: 0; height: 83px; background: var(--bar); backdrop-filter: blur(20px) saturate(180%); -webkit-backdrop-filter: blur(20px) saturate(180%);
+            border-top: .5px solid var(--sep); display: flex; justify-content: space-around; padding-top: 7px; }
+  .tab { display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 10.5px; font-weight: 500; color: var(--label2); width: 70px; }
+  .tab svg { width: 26px; height: 26px; }
+  .tab.on { color: var(--tint); }
+  .nav { height: 52px; display: grid; grid-template-columns: 64px 1fr 64px; align-items: center; background: var(--bar); backdrop-filter: blur(20px) saturate(180%); -webkit-backdrop-filter: blur(20px) saturate(180%); border-bottom: .5px solid var(--sep); position: relative; z-index: 2; }
+  .nav .back { color: var(--tint); font-size: 17px; padding-left: 8px; display: flex; align-items: center; }
+  .nav .title { text-align: center; font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
+  .nav .sub { display: block; font-size: 12px; font-weight: 500; color: var(--label2); }
+  .nav .more { color: var(--tint); text-align: right; padding-right: 16px; font-size: 22px; }
+  .thread { padding: 6px 12px 0; display: flex; flex-direction: column; gap: 3px; height: 590px; overflow: hidden; }
+  .date { align-self: center; font-size: 12px; color: var(--label2); background: rgba(118,118,128,.12); padding: 4px 12px; border-radius: 999px; margin: 8px 0; font-weight: 500; }
+  .m { display: flex; align-items: flex-end; gap: 6px; max-width: 100%; }
+  .m.other { padding-left: 44px; }
+  .m.other.first { padding-left: 0; }
+  .m .pic { width: 38px; height: 38px; border-radius: 50%; flex: none; align-self: flex-start; display: grid; place-items: center; font-weight: 700; font-size: 15px; }
+  .who { font-size: 12.5px; color: var(--label2); margin: 6px 0 3px 46px; font-weight: 500; }
+  .b { max-width: 72%; padding: 8px 13px; border-radius: 18px; font-size: 16px; line-height: 1.4; letter-spacing: -0.005em; position: relative; }
+  .other .b { background: var(--bubble-other); color: var(--on-other); }
+  .mine { justify-content: flex-end; }
+  .mine .b { background: var(--tint); color: var(--on-tint); }
+  .tail.other .b { border-bottom-left-radius: 6px; }
+  .tail.mine .b { border-bottom-right-radius: 6px; }
+  .meta { display: flex; flex-direction: column; font-size: 11px; color: var(--label2); line-height: 1.25; flex: none; }
+  .mine .meta { align-items: flex-end; }
+  .meta .unread { color: var(--tint); font-weight: 700; font-size: 11.5px; }
+  .gap { height: 8px; }
+  .hint { margin: 0 2px 6px; background: var(--hint-bg); color: var(--hint); border-radius: 14px; padding: 9px 12px; font-size: 14.5px; display: flex; align-items: center; gap: 8px; }
+  .hint .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
+  .hint .see { margin-left: auto; font-weight: 700; }
+  .composer { position: absolute; left: 0; right: 0; bottom: 0; padding: 8px 10px 34px; background: var(--bar); backdrop-filter: blur(20px) saturate(180%); -webkit-backdrop-filter: blur(20px) saturate(180%); border-top: .5px solid var(--sep); }
+  .crow { display: flex; align-items: flex-end; gap: 8px; }
+  .plus { width: 34px; height: 34px; border-radius: 50%; background: rgba(118,118,128,.16); color: var(--label2); display: grid; place-items: center; font-size: 22px; flex: none; }
+  .field { flex: 1; min-height: 36px; border-radius: 18px; border: 1px solid var(--label3); padding: 7px 14px; font-size: 16px; color: var(--label); background: var(--bg); }
+  .send { width: 34px; height: 34px; border-radius: 50%; background: var(--tint); color: var(--on-tint); display: grid; place-items: center; flex: none; }
+  .groupedbg { background: var(--grouped); height: 100%; }
+  .glabel { font-size: 13px; color: var(--label2); padding: 18px 36px 7px; letter-spacing: 0.01em; }
+  .group { margin: 0 16px; background: var(--cell); border-radius: 12px; overflow: hidden; }
+  .cell { display: flex; align-items: center; min-height: 48px; padding: 0 16px; font-size: 17px; gap: 12px; position: relative; }
+  .cell + .cell::before { content: ""; position: absolute; top: 0; left: 16px; right: 0; border-top: .5px solid var(--sep); }
+  .cell .v { margin-left: auto; color: var(--label2); }
+  .switch { margin-left: auto; width: 51px; height: 31px; border-radius: 16px; background: var(--tint); position: relative; flex: none; }
+  .switch::after { content: ""; position: absolute; top: 2px; right: 2px; width: 27px; height: 27px; border-radius: 50%; background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,.2); }
+  .seg { margin-left: auto; display: flex; background: rgba(118,118,128,.12); border-radius: 9px; padding: 2px; font-size: 13px; font-weight: 600; }
+  .seg span { padding: 5px 10px; border-radius: 7px; color: var(--label); }
+  .seg span.on { background: var(--cell); box-shadow: 0 1px 3px rgba(0,0,0,.15); }
+  .gfoot { font-size: 13px; color: var(--label2); padding: 7px 36px 0; line-height: 1.4; }
+  .danger { color: #FF3B30; justify-content: center; }
+  [data-theme="dark"] .danger { color: #FF453A; }
+</style>
+</head>
+<body>
+<header class="top">
+  <h1>톤챗 디자인 시안 — 애플식 화면 + 메신저식 대화 배치</h1>
+  <button onclick="setTheme('light')">라이트</button>
+  <button onclick="setTheme('dark')">다크</button>
+  <span style="width:12px"></span>
+  <b>색감</b>
+  <button onclick="setPalette('teal')"><span style="color:#0F766E">●</span> 틸(지금)</button>
+  <button onclick="setPalette('blue')"><span style="color:#0B63CE">●</span> 오션 블루</button>
+  <button onclick="setPalette('green')"><span style="color:#1E7A4E">●</span> 포레스트 그린</button>
+  <button onclick="setPalette('mono')"><span style="color:#1C1C1E">●</span> 모노(애플 미니멀)</button>
+  <p>iPhone 16(393×852) 기준. 색은 톤챗 틸 + iOS 계열 회색. 카카오톡의 노랑·갈색·하늘회색 배경·로고는 쓰지 않음. 말풍선 꼬리는 묶음의 마지막 말풍선에만(아이메시지식).</p>
+</header>
+<div class="row" id="row"></div>
+
+<template id="tabs">
+  <nav class="tabbar">
+    <div class="tab TAB0"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg>대화</div>
+    <div class="tab TAB1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"/></svg>거울</div>
+    <div class="tab TAB2"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v16a2 2 0 0 0 2 2h16M18 17V9M13 17V5M8 17v-3"/></svg>리포트</div>
+    <div class="tab TAB3"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1 7 17M17 7l2.1-2.1"/></svg>설정</div>
+  </nav>
+</template>
+
+<script>
+const tabs = (on) => document.getElementById('tabs').innerHTML.replace('TAB' + on, 'on').replace(/TAB\d/g, '');
+const frame = (cap, inner) => `<div><p class="caption">${cap}</p><div class="phone"><div class="island"></div><div class="status"><span>2:16</span><span>66%</span></div>${inner}<div class="home"></div></div></div>`;
+const list = `
+  <div class="large">대화</div>
+  <div class="search">⌕ 검색</div>
+  ${[['지은','var(--avatar1)','나 오늘 발표 망쳐서 교수님한테 엄청 혼났어','오후 2:14',2],
+     ['팀 프로젝트 (5)','var(--avatar2)','민수: 회의 시간 내일 10시로 옮겨도 될까요?','오후 1:02',5],
+     ['엄마','var(--avatar3)','반찬 보냈어 냉장고에 넣어 둬','오전 9:40',0],
+     ['동아리 선배','var(--avatar1)','이번 주 회비 얼마였지?','어제',0],
+     ['현우','var(--avatar2)','ㅋㅋㅋ 그 짤 봤어?','어제',0],
+     ['스터디','var(--avatar3)','자료는 금요일까지 올려 주세요','10월 30일',0]]
+    .map(([n,c,p,t,u]) => `<div class="chat"><div class="av" style="background:${c}">${n[0]}</div><div class="main"><div class="l1"><span class="name">${n}</span><span class="time">${t}</span></div><div class="l2"><span class="prev">${p}</span>${u?`<span class="badge">${u}</span>`:''}</div></div></div>`).join('')}
+  ${tabs(0)}`;
+const room = `
+  <div class="nav"><span class="back">‹ 대화</span><span class="title">지은<span class="sub">1:1</span></span><span class="more">⋯</span></div>
+  <div class="thread">
+    <span class="date">2026년 11월 1일 일요일</span>
+    <div class="who">지은</div>
+    <div class="m other first"><span class="pic" style="background:var(--avatar1)">지</span><span class="b">야 나 오늘 진짜 힘들었다</span></div>
+    <div class="m other tail"><span class="b">발표 망쳐서 교수님한테 엄청 혼났어 ㅠ</span><span class="meta"><span>오후 2:14</span></span></div>
+    <div class="gap"></div>
+    <div class="m mine"><span class="meta"><span class="unread">1</span></span><span class="b">헐 무슨 일 있었어?</span></div>
+    <div class="m mine tail"><span class="meta"><span class="unread">1</span><span>오후 2:15</span></span><span class="b">괜찮아? 전화할래?</span></div>
+    <div class="gap"></div>
+    <div class="who">지은</div>
+    <div class="m other first tail"><span class="pic" style="background:var(--avatar1)">지</span><span class="b">아니야 그냥 좀 쉬고 싶어</span><span class="meta"><span>오후 2:16</span></span></div>
+  </div>
+  <div class="composer">
+    <div class="hint"><span class="dot"></span>짧은 답이 무심하게 느껴질 수도 있어요<span class="see">살펴보기</span></div>
+    <div class="crow"><span class="plus">+</span><span class="field">그래서?</span><span class="send">↑</span></div>
+  </div>`;
+const settings = `
+  <div class="groupedbg">
+    <div class="large">설정</div>
+    <div class="glabel">힌트</div>
+    <div class="group"><div class="cell">보내기 전 말투 힌트<span class="switch"></span></div></div>
+    <div class="gfoot">보내기 전에 나에게만 조용히 알려 줘요. 보내는 걸 막지 않아요.</div>
+    <div class="glabel">알림</div>
+    <div class="group"><div class="cell">새 메시지 알림<span class="switch"></span></div></div>
+    <div class="glabel">화면</div>
+    <div class="group"><div class="cell">모양<span class="seg"><span class="on">시스템</span><span>밝게</span><span>어둡게</span></span></div></div>
+    <div class="glabel">계정</div>
+    <div class="group"><div class="cell">이메일<span class="v">me@example.com</span></div><div class="cell">이름<span class="v">홍길동</span></div></div>
+    <div class="glabel"></div>
+    <div class="group"><div class="cell danger">로그아웃</div></div>
+  </div>
+  ${tabs(3)}`;
+function render() {
+  document.getElementById('row').innerHTML = frame('① 대화 목록 — 큰 제목, 사진·이름·미리보기·시간·안 읽은 수', list)
+    + frame('② 채팅방 — 상대 사진·이름 / 내 말풍선 오른쪽 / 시간·안 읽음 옆 / 날짜 구분 / 힌트는 입력창 위', room)
+    + frame('③ 설정 — iOS식 묶음 목록, 반투명 탭 바', settings);
+}
+function setTheme(t) { document.documentElement.dataset.theme = t; }
+function setPalette(p) { if (p === 'teal') delete document.documentElement.dataset.palette; else document.documentElement.dataset.palette = p; }
+setTheme(matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'); setPalette('mono');
+render();
+</script>
+</body>
+</html>

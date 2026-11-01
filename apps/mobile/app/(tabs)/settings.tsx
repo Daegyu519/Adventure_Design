@@ -1,9 +1,10 @@
 // 아이콘은 하나씩 불러온다(묶음 import는 웹 번들이 커진다).
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState } from 'react';
 import { Platform, Pressable, ScrollView, Switch, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '../../components/AppText';
+import { GroupedSection, InfoRow } from '../../components/GroupedList';
 import { Button } from '../../components/Button';
 import { ChipRow } from '../../components/ChipRow';
 import { signOutAndClear } from '../../lib/account';
@@ -30,32 +31,8 @@ const NOT_CONNECTED = '서버에 연결되어 있지 않아 지금은 바꿀 수
 const THEME_PREFS: readonly ThemePref[] = ['system', 'light', 'dark'];
 const THEME_LABELS: Record<ThemePref, string> = { system: '시스템', light: '밝게', dark: '어둡게' };
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
-  const { colors, radius, space } = useTheme();
-  return (
-    <View style={{ gap: space[1] }}>
-      <AppText accessibilityRole="header" aria-level={2} variant="small" color="textMuted" weight="600">
-        {title}
-      </AppText>
-      <View style={{ backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: radius.card, padding: space[3], gap: space[2] }}>
-        {children}
-      </View>
-    </View>
-  );
-}
-
-function InfoRow({ label, value }: { label: string; value: string }) {
-  const { space } = useTheme();
-  return (
-    <View style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space[3] }}>
-      <AppText color="textMuted">{label}</AppText>
-      <AppText style={{ flexShrink: 1, textAlign: 'right' }}>{value}</AppText>
-    </View>
-  );
-}
-
 export default function Settings() {
-  const { colors, space } = useTheme();
+  const { colors, space, grouped } = useTheme();
   const { pref, setPref } = useThemePref();
   const { userId, email, profile, refreshProfile } = useSession();
 
@@ -151,14 +128,14 @@ export default function Settings() {
   }
 
   return (
-    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: colors.background }}>
-      <ScrollView contentContainerStyle={{ padding: space[3], paddingBottom: space[6], gap: space[5] }}>
-        <AppText accessibilityRole="header" aria-level={1} variant="title">
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: grouped.screen }}>
+      <ScrollView contentContainerStyle={{ paddingVertical: space[1], paddingBottom: space[6], gap: space[3] }}>
+        <AppText accessibilityRole="header" aria-level={1} variant="large" style={{ paddingHorizontal: space[3] + space[0] }}>
           설정
         </AppText>
         {region}
 
-        <Section title="힌트">
+        <GroupedSection title="힌트">
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[3] }}>
             {/* 글자 쪽도 눌러서 켜고 끌 수 있게 해 눌리는 영역을 넓힌다(스위치만 접근성 대상) */}
             <Pressable
@@ -199,9 +176,9 @@ export default function Settings() {
               바꾸지 못했어요. 연결을 확인하고 다시 해 주세요.
             </AppText>
           )}
-        </Section>
+        </GroupedSection>
 
-        <Section title="알림">
+        <GroupedSection title="알림">
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[3] }}>
             <Pressable
               accessible={false}
@@ -262,22 +239,22 @@ export default function Settings() {
               </AppText>
             )
           )}
-        </Section>
+        </GroupedSection>
 
-        <Section title="화면">
-          <ChipRow options={THEME_PREFS} value={pref} onChange={(p) => p && setPref(p)} labels={THEME_LABELS} accessibilityLabel="화면 모드" />
-        </Section>
+        <GroupedSection title="화면">
+          <ChipRow segmented options={THEME_PREFS} value={pref} onChange={(p) => p && setPref(p)} labels={THEME_LABELS} accessibilityLabel="화면 모드" />
+        </GroupedSection>
 
-        <Section title="계정">
+        <GroupedSection title="계정">
           <InfoRow label="이메일" value={email ?? '-'} />
           <InfoRow label="이름" value={profile?.name ?? '-'} />
-          <Button label="로그아웃" kind="secondary" onPress={logout} loading={signingOut} disabled={!connected} />
+          <Button label="로그아웃" kind="danger" onPress={logout} loading={signingOut} disabled={!connected} />
           {signOutError && (
             <AppText variant="small" color="danger" accessibilityRole="alert" accessibilityLiveRegion="polite">
               로그아웃하지 못했어요. 연결을 확인하고 다시 해 주세요.
             </AppText>
           )}
-        </Section>
+        </GroupedSection>
       </ScrollView>
     </SafeAreaView>
   );

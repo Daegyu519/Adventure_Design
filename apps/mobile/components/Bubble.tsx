@@ -6,6 +6,7 @@ import { useSignedUrl } from '../lib/images';
 import { splitMentions } from '../lib/mentions';
 import { focusRing, useTheme } from '../lib/theme';
 import { AppText } from './AppText';
+import { Avatar } from './Avatar';
 import { Button } from './Button';
 import { IconButton } from './IconButton';
 
@@ -14,7 +15,11 @@ export const firstLine = (m: Pick<Msg, 'text' | 'image_path'>) => m.text.split('
 type Props = {
   message: Msg;
   mine: boolean;
-  senderName?: string;
+  senderName?: string; // 받은 묶음의 첫 말풍선에만(아바타와 함께)
+  tail?: boolean; // 묶음의 마지막 말풍선: 한 모서리를 6으로
+  showTime?: boolean; // 같은 분 묶음의 마지막: 시각 표시(안 읽은 수는 늘 표시)
+  showAvatar?: boolean; // 받은 묶음의 첫 말풍선
+  avatarName?: string;
   speaker: string; // 화면 읽기 프로그램용 보낸 사람("나" 또는 이름)
   mentionNames?: string[]; // 그룹 방 멤버 이름: 글 속 @이름을 굵게
   mentionsMe?: boolean; // 내가 언급됨: 합친 이름에 "나를 언급"
@@ -36,11 +41,12 @@ type Props = {
 const PHOTO = { w: 240, h: 180 }; // 최대 너비 240. 불러오는 동안 자리 상자도 같은 크기라 목록이 흔들리지 않는다
 const HIDDEN = { accessibilityElementsHidden: true, importantForAccessibility: 'no-hide-descendants', 'aria-hidden': true } as const;
 
-// MASTER 5장: 꼬리 없음, 모서리 18, 최대 너비 75%. 내 것 오른쪽 primary, 받은 것 왼쪽 bubbleOther. 시간은 말풍선 옆(13, textMuted).
+// MASTER 5장: 메신저식 배치. 받은 묶음의 첫 말풍선에만 아바타·이름, 이어지는 말풍선은 아바타 칸만큼 들여쓴다. 꼬리(한 모서리 6)는 묶음의 마지막에만.
+// 내 것 오른쪽 primary, 받은 것 왼쪽 bubbleOther. 시간·안 읽은 수는 말풍선 옆(11, textMuted; 내 것은 왼쪽).
 // 접근성: 본문 하나가 "보낸 사람, 글, 시각, 안 읽은 수"를 한 이름으로 갖는다(시각·숫자 노드는 따로 읽히지 않게 숨김).
 // 웹은 roving tabindex: 활성 메시지의 본문·메뉴·인용·칩만 탭 순서에 있고, ↑/↓로 메시지를 옮기며 Enter·Shift+F10·ContextMenu로 메뉴를 연다.
 // 네이티브는 길게 누르기 + 접근성 동작("메시지 메뉴"). 사진 메시지는 말풍선 안에 그림(대체 글 "<보낸 사람>이 보낸 사진"), 합친 이름에는 "사진"(+글). 멘션은 "나를 언급"이 붙는다.
-export function Bubble({ message, mine, senderName, speaker, mentionNames = [], mentionsMe = false, quoted, quotedName, quoteFailed, reactions, unread, unreadText, active, onNavigate, onLongPress, onMore, onQuotePress, onQuoteRetry, onReactionPress }: Props) {
+export function Bubble({ message, mine, senderName, tail = true, showTime = true, showAvatar = false, avatarName, speaker, mentionNames = [], mentionsMe = false, quoted, quotedName, quoteFailed, reactions, unread, unreadText, active, onNavigate, onLongPress, onMore, onQuotePress, onQuoteRetry, onReactionPress }: Props) {
   const { colors, radius, space } = useTheme();
   const web = Platform.OS === 'web';
   const tabIndex = web ? (active ? 0 : -1) : undefined;
@@ -50,6 +56,9 @@ export function Bubble({ message, mine, senderName, speaker, mentionNames = [], 
   const parts = message.text && mentionNames.length ? splitMentions(message.text, mentionNames) : null;
   const stamp = formatStamp(message.created_at);
   const edge = mine ? 'flex-end' : 'flex-start';
+  const AV = 38;
+  const R = radius.bubble;
+  const corners = { borderTopLeftRadius: R, borderTopRightRadius: R, borderBottomLeftRadius: tail && !mine ? 6 : R, borderBottomRightRadius: tail && mine ? 6 : R };
   const onKeyDown = web
     ? {
         onKeyDown: (e: { key: string; shiftKey?: boolean; preventDefault(): void }) => {
@@ -64,9 +73,11 @@ export function Bubble({ message, mine, senderName, speaker, mentionNames = [], 
       }
     : {};
   return (
-    <View nativeID={`msg-${message.id}`} style={{ alignSelf: edge, maxWidth: '85%', alignItems: edge }} {...(onKeyDown as object)}>
+    <View nativeID={`msg-${message.id}`} style={{ flexDirection: 'row', justifyContent: edge }} {...(onKeyDown as object)}>
+      {mine ? null : <View style={{ width: AV, marginRight: space[1] }}>{showAvatar ? <Avatar name={avatarName ?? senderName ?? speaker} size={AV} /> : null}</View>}
+      <View style={{ flexShrink: 1, maxWidth: '85%', alignItems: edge }}>
       {senderName ? (
-        <AppText variant="small" color="textMuted" style={{ marginBottom: space[0] }}>
+        <AppText variant="small" color="textMuted" weight="500" style={{ marginBottom: space[0] }}>
           {senderName}
         </AppText>
       ) : null}
@@ -109,15 +120,15 @@ export function Bubble({ message, mine, senderName, speaker, mentionNames = [], 
           accessibilityHint="메시지 메뉴 열기"
           accessibilityActions={[{ name: 'menu', label: '메시지 메뉴' }]}
           onAccessibilityAction={(e) => e.nativeEvent.actionName === 'menu' && onMore()}
-          style={{
+          style={({ pressed }) => ({
             flexShrink: 1,
-            maxWidth: '88%',
             paddingVertical: space[1],
-            paddingHorizontal: space[2],
-            borderRadius: radius.bubble,
+            paddingHorizontal: 13,
+            ...corners,
             backgroundColor: mine ? colors.primary : colors.bubbleOther,
+            opacity: pressed ? 0.85 : 1, // 누르는 순간 바로 눌림 표시
             ...focusRing(colors.primary),
-          }}
+          })}
         >
           {message.image_path ? (
             url ? (
@@ -149,17 +160,19 @@ export function Bubble({ message, mine, senderName, speaker, mentionNames = [], 
             </AppText>
           ) : null}
         </Pressable>
-        <View style={{ alignItems: edge }} {...HIDDEN}>
+        <View style={{ alignItems: edge, flexShrink: 0 }} {...HIDDEN}>
           {unread > 0 && (
-            <AppText variant="small" color="textMuted">
+            <AppText color="primary" weight="700" style={{ fontSize: 11.5, lineHeight: 14 }}>
               {unread}
             </AppText>
           )}
-          <AppText variant="small" color="textMuted">
-            {stamp}
-          </AppText>
+          {showTime ? (
+            <AppText color="textMuted" style={{ fontSize: 11, lineHeight: 14 }}>
+              {stamp}
+            </AppText>
+          ) : null}
         </View>
-        <IconButton icon={Ellipsis} label="메시지 메뉴" onPress={onMore} color="textMuted" tabIndex={tabIndex} />
+        <IconButton icon={Ellipsis} label="메시지 메뉴" onPress={onMore} color="textMuted" tabIndex={tabIndex} quiet />
       </View>
       {photoFailed && (
         <Pressable
@@ -192,6 +205,7 @@ export function Bubble({ message, mine, senderName, speaker, mentionNames = [], 
           ))}
         </View>
       )}
+      </View>
     </View>
   );
 }
