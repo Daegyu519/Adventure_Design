@@ -55,6 +55,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             if errors:
                 raise errors[0]
         finally:
+            for c in get_registry().classifiers:   # 공유 httpx 클라이언트를 닫는다
+                getattr(c.backend, "close", lambda: None)()
             if repo:
                 await repo.close()
                 app.state.repo = None

@@ -31,6 +31,9 @@ def load_backend(path: Path, device: str) -> Backend:
     return Predictor(path, device)
 
 
+HEALTH_TTL_S = 5.0
+
+
 class HttpBackend:
     """School-GPU classifier service (ml/classifier_shim.py, P-28). Sends the already masked row only (rule 16).
     Any failure (timeout, 4xx/5xx, bad JSON, bad score) raises; ClassifierExpert turns that into no signal."""
@@ -38,6 +41,7 @@ class HttpBackend:
     def __init__(self, url: str, timeout_ms: float = 150, client: httpx.Client | None = None):
         self.url = url
         self.client = client or httpx.Client(timeout=timeout_ms / 1000)   # reused: keep-alive
+        self._health: tuple[float, bool] = (-HEALTH_TTL_S, False)   # (monotonic time, result)
 
     def predict(self, row: dict) -> tuple[float, float]:
         body = {k: row[k] for k in ("context", "draft", "relation", "last_them")}
@@ -50,10 +54,19 @@ class HttpBackend:
         return score, ms
 
     def healthy(self, timeout: float = 0.3) -> bool:
+        """/health is public: cache the probe so a flood of requests cannot tie up the threadpool."""
+        now = time.monotonic()
+        if now - self._health[0] < HEALTH_TTL_S:
+            return self._health[1]
         try:
-            return self.client.get(self.url.rsplit("/", 1)[0] + "/health", timeout=timeout).status_code == 200
+            ok = self.client.get(self.url.rsplit("/", 1)[0] + "/health", timeout=timeout).status_code == 200
         except Exception:   # noqa: BLE001
-            return False
+            ok = False
+        self._health = (now, ok)
+        return ok
+
+    def close(self) -> None:
+        self.client.close()
 
 
 @dataclass

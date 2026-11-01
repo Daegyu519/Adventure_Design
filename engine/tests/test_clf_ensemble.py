@@ -23,7 +23,7 @@ from harness.store import ProfileStore
 from tests.test_aggregate import CFG, CONVO, GATE, run, tone
 from tests.test_traces import HEAVY, SECRET, _room
 
-URL = "http://localhost:11481/score"
+URL = "http://127.0.0.1:11481/score"
 CONFIG = yaml.safe_load(DEFAULT_MODELS_PATH.read_text(encoding="utf-8"))
 
 
@@ -207,3 +207,40 @@ def test_health_status_reports_up_and_down(spy):
     reg = _reg(spy, Up())
     reg.classifiers = []
     assert classifier_status(cfg, reg) == {"clf_cold": "down"}
+
+
+def test_health_probe_is_cached_for_a_few_seconds(monkeypatch):
+    calls = []
+
+    def handler(r: httpx.Request):
+        calls.append(r.url.path)
+        return httpx.Response(200, json={"ok": True})
+
+    b = HttpBackend(URL, 150, httpx.Client(transport=httpx.MockTransport(handler)))
+    assert all(b.healthy() for _ in range(50)) and calls == ["/health"]
+    t = time.monotonic()
+    monkeypatch.setattr("experts.classifier.time.monotonic", lambda: t + 6)   # TTL 지나면 다시 본다
+    assert b.healthy() and len(calls) == 2
+
+
+def test_close_and_lifespan_closes_classifier_clients(spy, monkeypatch):
+    import app.main as M
+    b = HttpBackend(URL, 150)
+    b.close()
+    assert b.client.is_closed
+
+    class V:
+        async def warm(self):
+            pass
+
+    live = HttpBackend(URL, 150)
+    reg = _reg(spy, live)
+    monkeypatch.setattr(M, "get_registry", lambda: reg)
+    monkeypatch.setattr(M, "get_verifier", lambda: V())
+    monkeypatch.setattr(M, "startup_warnings", lambda *a: None)
+
+    async def go():
+        async with M.lifespan(M.app):
+            assert not live.client.is_closed
+    asyncio.run(go())
+    assert live.client.is_closed

@@ -21,7 +21,7 @@ providers:
     base_url: http://localhost:11434/v1  # scripts/gpu up(학교 GPU llama-server 터널) 또는 Ollama. vLLM이면 http://localhost:8000/v1
     api_key_env: LOCAL_API_KEY           # 비어 있어도 됨
     rpm: 600
-    allow_no_key: true
+    allow_no_key: true   # 지금은 어느 전문가도 안 쓴다(SEED 서버를 더는 띄우지 않음, P-28)
   local_fast:
     base_url: http://localhost:11435/v1  # 실시간용 Gemma3-4B llama-server(학교 GPU, up.sh llm·scripts/gpu up). P-12
     api_key_env: LOCAL_API_KEY
@@ -37,13 +37,13 @@ providers:
 
 # 모델 선택(P-06, 2026-10-31, 이 NVIDIA 계정 실측): 추론 모델(nemotron-3-ultra·nano-omni)은 생각 토큰 때문에 3~15초라 실시간에 못 쓴다.
 # laguna-xs-2.1(한가할 때 ~1초, 부하 때 4~12초)을 빠른 쪽, nemotron-3.5-bolt-e4b(1~3초, 부하 때 4~12초, 고쳐 쓰기가 지시를 더 잘 따름)를 깊은 쪽·폴백으로 쓴다.
-# 실시간 힌트는 지금 사실상 꺼짐(전문가가 1.2초 안에 못 옴 → 기권). 상세·거울(8초)만 쓸 만하다.
+# 실시간 힌트: 전문가 마감 1.35초(P-28, 공유 GPU의 Gemma가 1.3~1.6초 걸릴 때가 있음; 전체 1.5초는 그대로). 상세·거울(8초)만 쓸 만하다.
 # 응답 없음(2026-10-31): deepseek-v4.1-flash(500·시간 초과), kimi-k3(카탈로그에 없음)·kimi-k2.6(404), mistral-large-4(시간 초과). AGENTS §9에서 다시 확인.
 # 전문가 id의 tone_ds·tone_kimi·ctx_fast·ctx_deep은 옛 모델 이름의 흔적일 뿐이다(테스트가 id를 쓰므로 그대로 둔다).
 # 전문가. 추가·제거는 여기서만 한다. mock은 force_mock(테스트·평가)가 쓸 mock_rules 이름(없으면 prompt 이름).
 # optional은 첫 모델 공급자를 쓸 수 없으면 빠진다. HyperCLOVA X는 생성(rewrite)에 쓰지 않는다(라이선스).
 experts:
-  # 실시간 말투: 짧은 답(prompts/tone_fast.md)으로 1.2초 안에 드는 로컬 Gemma3-4B. 대조 세트 정밀도 1.0·재현율 0.38, p95 0.87~1.0초(P-12)
+  # 실시간 말투: 짧은 답(prompts/tone_fast.md)으로 1.35초 안에 드는 로컬 Gemma3-4B. 대조 세트 정밀도 1.0·재현율 0.38, p95 0.87~1.0초(P-12)
   - {id: tone_fast, role: tone,     model: local_fast:gemma-3-4b-it, prompt: tone_fast, paths: [realtime], weight: 1.0, mock: tone}
   - {id: ctx_fast,  role: context,  model: nvidia:poolside/laguna-xs-2.1, prompt: context,  paths: []}   # 실시간 1.2초에 못 와서 뺌(P-12)
   - {id: ctx_deep,  role: context,  model: nvidia:nvidia/nemotron-3.5-bolt-e4b,              prompt: context,  paths: [detail, mirror]}
@@ -62,9 +62,9 @@ fallback:   # 실제 문장이 지나가므로 gemini 금지
 # 학습된 판별기(KcELECTRA, P-14b → P-28 사용자 결정). 학교 GPU의 tone-clf(ml/classifier_shim.py, 127.0.0.1:11481)를 HTTP로 부른다.
 # USE_LOCAL_MODEL=1일 때만 켜진다(로컬 공급자와 같음). 못 오면 aggregate의 clf 항을 뺀다(예외 없음). 가린 문장만 보낸다(규칙 16).
 classifiers:
-  - {id: clf_cold, model_id: kcelectra-p14b, backend: http, url: "http://localhost:11481/score", timeout_ms: 150, paths: [realtime, detail], enabled: true, optional: true}
+  - {id: clf_cold, model_id: kcelectra-p14b, backend: http, url: "http://127.0.0.1:11481/score", timeout_ms: 150, paths: [realtime, detail], enabled: true, optional: true}
 paths:
-  realtime: {deadline_ms: 1500, expert_deadline_ms: 1200, gate_threshold: 0.1}   # 0.3이면 pilot 요청이 전부 게이트에서 멈췄다(P-12)
+  realtime: {deadline_ms: 1500, expert_deadline_ms: 1350, gate_threshold: 0.1}   # 0.3이면 pilot 요청이 전부 게이트에서 멈췄다(P-12)
   detail:   {deadline_ms: 8000}
   mirror:   {deadline_ms: 8000}
   async:    {deadline_ms: 60000}

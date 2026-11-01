@@ -13,7 +13,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 [ -z "$ENVF" ] || [ -f "$ENVF" ] || { echo "no such file: $ENVF" >&2; exit 2; }
-[ -z "$(git status --porcelain -- engine deploy ml)" ] || { echo "uncommitted changes under engine/ or deploy/; commit first" >&2; exit 1; }
+[ -z "$(git status --porcelain -- engine deploy ml)" ] || { echo "uncommitted changes under engine/, deploy/ or ml/; commit first" >&2; exit 1; }
 remote() { ssh -o BatchMode=yes -o ConnectTimeout=10 "$H" "$@"; }
 up() { remote 'bash -s -- '"$1" < deploy/school-gpu/up.sh; }
 
@@ -27,7 +27,9 @@ if [ -n "$ENVF" ]; then
   remote "umask 077; cat > $B/engine.env.new && chmod 600 $B/engine.env.new && mv $B/engine.env.new $B/engine.env" < "$ENVF"
   echo "engine.env updated"
 fi
-up llm   # llm 실패는 엔진 코드와 무관하므로 되돌리지 않는다(set -e로 여기서 멈춘다)
+up llm
+up restart-clf   # 옛 코드(app.prev)로 떠 있는 tone-clf를 새 코드로 다시 띄운다(tone-clf는 선택이라 건너뛰어도 계속)
+# llm 실패는 엔진 코드와 무관하므로 되돌리지 않는다(set -e로 여기서 멈춘다)
 if ! up engine; then
   # 엔진이 안 뜨면 이전 app으로 되돌린다. 되돌린 코드의 venv는 자리가 바뀌었으므로 다시 sync한다.
   fail() { echo "ROLLBACK FAILED - engine may be down; run: ssh $H 'bash -s -- status' < deploy/school-gpu/up.sh" >&2; exit 1; }

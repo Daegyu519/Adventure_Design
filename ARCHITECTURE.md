@@ -129,7 +129,7 @@ sequenceDiagram
   Engine->>DB: 최근 대화 8개, 보낸 사람 패턴, 기준선
   Engine->>Engine: pii.mask (초안 · 최근 대화, 참여자 이름 포함)
   Engine->>Engine: L0 거르기 (위험 낮으면 hint=null로 끝)
-  Engine->>Experts: 실시간 말투 전문가 `tone_fast`(로컬 Gemma3-4B, 짧은 출력) 호출 (1.2초, 맥락 전문가는 실시간에 없음)
+  Engine->>Experts: 실시간 말투 전문가 `tone_fast`(로컬 Gemma3-4B, 짧은 출력) 호출 (1.35초, 맥락 전문가는 실시간에 없음)
   Experts-->>Engine: JSON 결과 (늦은 것은 버림)
   Engine->>Engine: 집계 → 문구 검사
   Engine-->>App: seq, hint 또는 null
@@ -147,7 +147,7 @@ sequenceDiagram
 | 토큰 검증(JWKS 캐시) | 5ms 이하 |
 | DB 조회 | 약 50ms |
 | L0 | 10ms 이하 |
-| 전문가 (동시) | 1,200ms 이하 |
+| 전문가 (동시) | 1,350ms 이하 (전체 1,500ms는 그대로) |
 | 집계 + 문구 검사 | 10ms 이하 |
 | 엔진 → 앱 | 약 100ms |
 
@@ -341,7 +341,7 @@ fallback:   # 실제 문장이 지나가므로 gemini 금지
   nvidia:deepseek-ai/deepseek-v4.1-flash: [github:openai/gpt-4.1-mini, mock:auto]
   nvidia:moonshotai/kimi-k3: [nvidia:deepseek-ai/deepseek-v4.1-flash, mock:auto]
 paths:
-  realtime: {deadline_ms: 1500, expert_deadline_ms: 1200, gate_threshold: 0.1}   # 0.3이면 pilot 요청이 전부 게이트에서 멈췄다(P-12)
+  realtime: {deadline_ms: 1500, expert_deadline_ms: 1350, gate_threshold: 0.1}   # 0.3이면 pilot 요청이 전부 게이트에서 멈췄다(P-12)
   detail:   {deadline_ms: 8000}
   mirror:   {deadline_ms: 8000}
   async:    {deadline_ms: 60000}

@@ -42,7 +42,6 @@ flowchart LR
     GEM["Gemma-3-4B<br/>실시간 말투 :11435"]
     QWEN["Qwen3-30B-A3B<br/>상세·거울 말투 :11436"]
     CLF["KcELECTRA 판별기 tone-clf<br/>cold_score :11481 (선택)"]
-    SEED["SEED-1.5B :11434<br/>(띄워만 둠, 전문가 아님)"]
   end
 
   NV["NVIDIA API 카탈로그<br/>laguna-xs-2.1 · nemotron-3.5-bolt"]
@@ -94,7 +93,7 @@ sequenceDiagram
   E->>D: 방 멤버 확인 · 최근 대화 8개 · 관계 · 패턴
   E->>E: Masker로 이름·개인정보 가림(규칙 16)
   E->>E: 문지기(규칙 신호: 짧은 답·이유 없는 거절·마침표·<br/>감정적인 상대 말 등). 점수 < 0.1이면 끝(gated)
-  par 같은 마감(1.2초) 안에서 동시에
+  par 같은 마감(1.35초) 안에서 동시에
     E->>G: tone_fast 프롬프트(짧은 답 r[5]·c)
     G-->>E: 다섯 읽힘(차갑게·성의없게·화나게·무난하게·따뜻하게)
   and
@@ -314,22 +313,19 @@ flowchart TB
       T2["tmux tone-ts<br/>tailscaled userspace + Funnel 443 → :8000"]
       T3["tmux tone-llm-fast<br/>Gemma-3-4B Q4 :11435"]
       T4["tmux tone-llm-detail<br/>Qwen3-30B-A3B IQ3_XXS :11436<br/>(여유 14GB 이상 카드만)"]
-      T5["tmux tone-llm<br/>SEED-1.5B :11434 (미사용)"]
       T6["tmux tone-clf<br/>KcELECTRA TorchScript :11481<br/>(여유 1.5GB 이상 카드, 없으면 cpu)"]
       SW{{"gpu.off 스위치<br/>있으면 모델 서버를 안 띄움"}}
     end
-    G7["GPU 7: Gemma + SEED"]
+    G7["GPU 7: Gemma (바빠지면 relocate-fast)"]
     G6["GPU 6: Qwen3-30B 약 13.5GB"]
     G2["가장 한가한 카드: tone-clf 약 1.5GB"]
     GX["나머지 GPU: 다른 사람 작업"]
   end
   T3 --- G7
-  T5 --- G7
   T4 --- G6
   T6 --- G2
   SW -. "gpu-off / gpu-on" .-> T3
   SW -.-> T4
-  SW -.-> T5
   SW -.-> T6
 ```
 
