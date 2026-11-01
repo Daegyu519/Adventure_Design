@@ -1,4 +1,5 @@
 import { Tabs } from 'expo-router';
+import { Platform, type ViewStyle } from 'react-native';
 // 아이콘은 하나씩 불러온다. 묶음 import는 웹 번들에 아이콘 전체(약 2MB)가 들어간다.
 import ChartColumn from 'lucide-react-native/icons/chart-column';
 import MessageCircle from 'lucide-react-native/icons/message-circle';
@@ -9,6 +10,12 @@ import { useTheme } from '../../lib/theme';
 
 const ICON_SIZE = 24; // MASTER 4장: 아이콘 24px, 선 굵기 2(Lucide 기본값)
 
+// 웹(아이폰 홈 화면 앱·Safari): 홈 막대 자리를 CSS env()로 직접 비운다. JS가 안전 영역을 0으로 읽어도 탭 바가 가려지지 않게(P-22).
+// react-native-web은 CSS 문자열을 그대로 넘기지만 RN 타입은 숫자만 받아서 캐스트한다.
+const WEB_TAB_SAFE = (Platform.OS === 'web'
+  ? { height: 'calc(56px + env(safe-area-inset-bottom))', paddingBottom: 'calc(6px + env(safe-area-inset-bottom))' }
+  : {}) as unknown as ViewStyle;
+
 export default function TabsLayout() {
   const { colors, font } = useTheme();
   return (
@@ -18,7 +25,7 @@ export default function TabsLayout() {
         sceneStyle: { backgroundColor: colors.background }, // 다크 모드에서 화면 전환 때 흰 바탕이 번쩍이지 않게
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textMuted,
-        tabBarStyle: { backgroundColor: colors.background, borderTopColor: colors.border },
+        tabBarStyle: { backgroundColor: colors.background, borderTopColor: colors.border, ...WEB_TAB_SAFE },
         tabBarLabelStyle: { fontFamily: font.family, fontSize: font.small },
       }}
     >
