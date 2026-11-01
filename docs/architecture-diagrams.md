@@ -41,6 +41,7 @@ flowchart LR
     ENG["AI 엔진 FastAPI<br/>127.0.0.1:8000"]
     GEM["Gemma-3-4B<br/>실시간 말투 :11435"]
     QWEN["Qwen3-30B-A3B<br/>상세·거울 말투 :11436"]
+    CLF["KcELECTRA 판별기 tone-clf<br/>cold_score :11481 (선택)"]
     SEED["SEED-1.5B :11434<br/>(띄워만 둠, 전문가 아님)"]
   end
 
@@ -61,6 +62,7 @@ flowchart LR
   HOOK -->|"POST /hooks/message<br/>X-Hook-Secret"| TS
   ENG -->|"가린 문장만"| GEM
   ENG -->|"가린 문장만"| QWEN
+  ENG -->|"가린 문장만 · 150ms"| CLF
   ENG -->|"가린 문장만"| NV
   ENG --> PUSH
   PUSH --> IOS
@@ -83,6 +85,7 @@ sequenceDiagram
   participant E as 엔진 /v1/hint
   participant D as Postgres
   participant G as Gemma-3-4B (:11435)
+  participant K as tone-clf KcELECTRA (:11481)
 
   U->>A: 문장 입력
   A->>A: 0.5초 멈추면 요청(디바운스)
@@ -91,9 +94,14 @@ sequenceDiagram
   E->>D: 방 멤버 확인 · 최근 대화 8개 · 관계 · 패턴
   E->>E: Masker로 이름·개인정보 가림(규칙 16)
   E->>E: 문지기(규칙 신호: 짧은 답·이유 없는 거절·마침표·<br/>감정적인 상대 말 등). 점수 < 0.1이면 끝(gated)
-  E->>G: tone_fast 프롬프트(짧은 답 r[5]·c) · 1.2초 마감
-  G-->>E: 다섯 읽힘(차갑게·성의없게·화나게·무난하게·따뜻하게)
-  E->>E: 집계(문지기 점수+부정 읽힘+털어놓기 패턴) → 위험도 ≥ 0.6이면 알림
+  par 같은 마감(1.2초) 안에서 동시에
+    E->>G: tone_fast 프롬프트(짧은 답 r[5]·c)
+    G-->>E: 다섯 읽힘(차갑게·성의없게·화나게·무난하게·따뜻하게)
+  and
+    E->>K: POST /score 가린 문장만 · 150ms 제한
+    K-->>E: cold_score (실패·시간 초과면 항 생략)
+  end
+  E->>E: 집계(문지기 점수+부정 읽힘+털어놓기 패턴+clf 항, 있을 때만) → 위험도 ≥ 0.6이면 알림
   E->>E: 힌트 문구는 템플릿·금지어 검사 통과분만(규칙 4)
   E->>D: 분석 기록(tone.analysis_traces, 문장 없음)
   E-->>A: hint 또는 없음
@@ -118,9 +126,10 @@ flowchart TB
     T1["말투 tone_ds<br/>NVIDIA laguna"]
     T2["말투 tone_kimi<br/>NVIDIA nemotron"]
     T3["말투 tone_hcx<br/>로컬 Qwen3-30B"]
+    T4["판별기 clf_cold<br/>로컬 KcELECTRA (선택)"]
   end
 
-  PAR --> AGG["집계: 의견 차이·확신·패턴"]
+  PAR --> AGG["집계: 의견 차이·확신·패턴·clf 항"]
   AGG --> J["심판 judge<br/>NVIDIA nemotron"]
   J --> RW["고쳐 쓰기 rewrite<br/>NVIDIA laguna"]
   RW --> GUARD["금지어·템플릿 검사(규칙 4)"]
@@ -306,18 +315,22 @@ flowchart TB
       T3["tmux tone-llm-fast<br/>Gemma-3-4B Q4 :11435"]
       T4["tmux tone-llm-detail<br/>Qwen3-30B-A3B IQ3_XXS :11436<br/>(여유 14GB 이상 카드만)"]
       T5["tmux tone-llm<br/>SEED-1.5B :11434 (미사용)"]
+      T6["tmux tone-clf<br/>KcELECTRA TorchScript :11481<br/>(여유 1.5GB 이상 카드, 없으면 cpu)"]
       SW{{"gpu.off 스위치<br/>있으면 모델 서버를 안 띄움"}}
     end
     G7["GPU 7: Gemma + SEED"]
     G6["GPU 6: Qwen3-30B 약 13.5GB"]
+    G2["가장 한가한 카드: tone-clf 약 1.5GB"]
     GX["나머지 GPU: 다른 사람 작업"]
   end
   T3 --- G7
   T5 --- G7
   T4 --- G6
+  T6 --- G2
   SW -. "gpu-off / gpu-on" .-> T3
   SW -.-> T4
   SW -.-> T5
+  SW -.-> T6
 ```
 
 - GPU 번호는 띄울 때 가장 한가한 카드를 고르므로 바뀔 수 있다(지금 배치는 2026-11-01 기준).

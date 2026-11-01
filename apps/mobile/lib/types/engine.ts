@@ -189,6 +189,10 @@ export interface components {
         };
         /** HealthResponse */
         HealthResponse: {
+            /** Classifiers */
+            classifiers: {
+                [key: string]: "up" | "down";
+            };
             /** Failures */
             failures: {
                 [key: string]: {

@@ -65,7 +65,8 @@ def missing_points(draft: str, ctx: ContextReading, tones: Tones) -> list[str]:
 
 
 def aggregate(draft: str, gate: GateResult, ctx: ContextReading | None, tones: Tones,
-              store: ProfileStore, convo: Conversation, cfg: dict) -> Verdict:
+              store: ProfileStore, convo: Conversation, cfg: dict, clf: float | None = None) -> Verdict:
+    """clf: 학습된 판별기의 cold_score(0~1, P-28). 없으면 항(feature·가중합)을 통째로 뺀다(0 가중이 아님)."""
     used = _used(tones)
     if not used:
         return Verdict(risk=0.0, top_reading=NEUTRAL, signals=gate.signals, disagreement=0.0, confidence=0.0,
@@ -89,6 +90,9 @@ def aggregate(draft: str, gate: GateResult, ctx: ContextReading | None, tones: T
     }
     w = cfg["weights"]
     z = w["bias"] + sum(w[k] * f[k] for k in TERMS)
+    if clf is not None and math.isfinite(clf):
+        f["clf"] = unit(clf)
+        z += w.get("clf", 0.0) * f["clf"]
     risk = 0.5 * (1 + math.tanh(z / 2))   # = sigmoid(z), 넘침 없음
     abstain = f["disagreement"] > cfg["max_disagreement"] or f["confidence"] < cfg["min_confidence"]
     alert = not abstain and risk >= cfg["alert_threshold"]

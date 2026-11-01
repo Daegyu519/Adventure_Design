@@ -59,13 +59,17 @@ fallback:   # 실제 문장이 지나가므로 gemini 금지
   local_detail:qwen3-30b-a3b: [mock:auto]
   nvidia:poolside/laguna-xs-2.1: [nvidia:nvidia/nemotron-3.5-bolt-e4b, mock:auto]
   nvidia:nvidia/nemotron-3.5-bolt-e4b: [nvidia:poolside/laguna-xs-2.1, mock:auto]
+# 학습된 판별기(KcELECTRA, P-14b → P-28 사용자 결정). 학교 GPU의 tone-clf(ml/classifier_shim.py, 127.0.0.1:11481)를 HTTP로 부른다.
+# USE_LOCAL_MODEL=1일 때만 켜진다(로컬 공급자와 같음). 못 오면 aggregate의 clf 항을 뺀다(예외 없음). 가린 문장만 보낸다(규칙 16).
+classifiers:
+  - {id: clf_cold, model_id: kcelectra-p14b, backend: http, url: "http://localhost:11481/score", timeout_ms: 150, paths: [realtime, detail], enabled: true, optional: true}
 paths:
   realtime: {deadline_ms: 1500, expert_deadline_ms: 1200, gate_threshold: 0.1}   # 0.3이면 pilot 요청이 전부 게이트에서 멈췄다(P-12)
   detail:   {deadline_ms: 8000}
   mirror:   {deadline_ms: 8000}
   async:    {deadline_ms: 60000}
 aggregate:
-  weights: {bias: -2.2, prior: 1.6, neg: 2.4, violation: 1.4, pattern: 0.9}
+  weights: {bias: -2.2, prior: 1.6, neg: 2.4, violation: 1.4, pattern: 0.9, clf: 2.0}
   alert_threshold: 0.6
   max_disagreement: 0.35
   min_confidence: 0.4

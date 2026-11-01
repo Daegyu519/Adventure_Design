@@ -64,6 +64,7 @@ flowchart LR
     ENG["AI 엔진 FastAPI<br/>127.0.0.1:8000"]
     GEM["Gemma-3-4B<br/>실시간 말투 :11435"]
     QWEN["Qwen3-30B-A3B<br/>상세·거울 말투 :11436"]
+    CLF["KcELECTRA 판별기 tone-clf<br/>cold_score :11481 (선택)"]
     SEED["SEED-1.5B :11434<br/>(띄워만 둠, 전문가 아님)"]
   end
 
@@ -84,6 +85,7 @@ flowchart LR
   HOOK -->|"POST /hooks/message<br/>X-Hook-Secret"| TS
   ENG -->|"가린 문장만"| GEM
   ENG -->|"가린 문장만"| QWEN
+  ENG -->|"가린 문장만 · 150ms"| CLF
   ENG -->|"가린 문장만"| NV
   ENG --> PUSH
   PUSH --> IOS
@@ -119,7 +121,7 @@ P-14 후속 점검에서 기존 generic Fast 입력의 CLS/SEP 누락을 확인�
 
 P-14 실험용 이진 분류기의 실제 학습 결과·재현·선택적 엔진 연결은 [실행·인계 문서](ml/P14-phase1.md)를 참고한다. 현재 모델은 모든 예비 평가에서 양성 검출에 실패해 실제 경고에 연결하지 않는다.
 
-P-14b: 로컬 Qwen3-30B 선생님 약지도(`ml/teacher.py`)·소프트 레이블 학습(`ml/train_soft.py`)·Gemma 앙상블 측정(`ml/ensemble_eval.py`) 결과는 [P-14b 결과](docs/handoff/P-14b-result.md), 채택 기준 미충족이라 연결하지 않았다.
+P-14b: 로컬 Qwen3-30B 선생님 약지도(`ml/teacher.py`)·소프트 레이블 학습(`ml/train_soft.py`)·Gemma 앙상블 측정(`ml/ensemble_eval.py`) 결과는 [P-14b 결과](docs/handoff/P-14b-result.md). OR 결합은 채택 기준(정밀도 0.9)을 못 채웠지만, P-28(사용자 결정)에서 집계의 가중 항(`aggregate.weights.clf`)으로 엔진에 연결했다(학교 GPU `tone-clf` :11481, 선택).
 
 ```bash
 git clone <이 저장소> && cd <폴더>
@@ -196,8 +198,10 @@ DB 웹훅은 SQL 마이그레이션이 아니라 Supabase 대시보드에서 만
 - `tone-llm-detail`(포트 11436, `-c 8192 -np 4`): Qwen3-30B-A3B-Instruct-2507 UD-IQ3_XXS(`qwen3-30b-a3b-2507-iq3xxs.gguf`, Apache-2.0), 상세·거울 말투 전문가 `tone_hcx`(선택, P-24). 여유 메모리 14000MiB 이상·사용률 50% 이하인 GPU가 없으면 건너뛴다(엔진은 그대로 돈다).
 - `tone-llm-fast`(포트 11435, `--swa-full`): Gemma3-4B(`gemma-3-4b-it-q4_k_m.gguf`), 실시간 말투 전문가 `tone_fast`(짧은 출력, P-12). 서버가 없으면 실시간 힌트는 기권한다(NVIDIA 폴백 없음).
 
+- `tone-clf`(포트 11481, P-28): KcELECTRA 판별기(`ml/classifier_shim.py`, TorchScript, `127.0.0.1`만). 모델은 `/root/tone-chat-llm/clf/kcelectra-p14b/`, 코드는 `scripts/deploy-school`이 올리는 `/root/tone-chat-deploy/app/ml`, python은 `/root/p14-work/source/ml/.venv-demo/bin/python`. 여유 1500MiB 이상인 가장 한가한 GPU(없으면 cpu, 경고). 엔진은 `USE_LOCAL_MODEL=1`일 때만 `http://localhost:11481/score`를 150ms 제한으로 부르고, 못 오면 집계에서 `clf` 항만 뺀다. 요청 문장은 로그에 남지 않는다.
+
 ```bash
-scripts/gpu up      # 서버에 llama-server 셋(각각 가장 한가한 GPU 1장) + 이 컴퓨터 127.0.0.1:11434·11435·11436 터널 (11436은 선택: 없으면 경고만)
+scripts/gpu up      # 서버에 llama-server 셋(각각 가장 한가한 GPU 1장) + 이 컴퓨터 127.0.0.1:11434·11435·11436·11481 터널 (11436·11481은 선택: 없으면 경고만; 11481은 tone-clf)
 (cd engine && USE_LOCAL_MODEL=1 uv run uvicorn app.main:app --env-file ../.env --port 8000)
 scripts/gpu down    # 끝나면 터널 닫고 GPU 반납 (scripts/gpu status로 상태 확인)
 ```

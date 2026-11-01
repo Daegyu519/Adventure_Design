@@ -30,7 +30,7 @@ THRESHOLDS = (0.3, 0.4, 0.5, 0.6)
 
 class HttpBackend:
     def __init__(self, port: int):
-        self.url = f"http://127.0.0.1:{port}/predict"
+        self.url = f"http://127.0.0.1:{port}/score"
 
     def predict(self, row: dict) -> tuple[float, float]:
         req = urllib.request.Request(self.url, json.dumps(row).encode(), {"Content-Type": "application/json"})
@@ -87,7 +87,7 @@ async def main_async(a) -> dict:
 
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--port", type=int, default=11480)
+    p.add_argument("--port", type=int, default=11481)
     p.add_argument("--runs", type=int, default=2)
     p.add_argument("--output", type=Path, required=True)
     a = p.parse_args()

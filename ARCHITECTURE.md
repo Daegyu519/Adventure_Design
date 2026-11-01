@@ -313,7 +313,7 @@ class Expert(Protocol):
 ```
 
 - `LLMExpert`(`experts/llm.py`): 프롬프트 + 라우터(사슬) + 출력 스키마 검사. role별 스키마(context → `ContextReading`, tone → `ToneReading`, judge → `JudgeOut`, rewrite → `RewriteSet`, feedback → `FeedbackResult`). confidence는 출력에 있으면 그 값, 없으면 1.0.
-- `ClassifierExpert` (P-14): KcELECTRA 이진 분류기는 별도 `ColdSignal(cold_score, model_id, latency_ms)`을 돌려준다. `cold_score`는 `negative`나 최종 `risk`와 다르며 `confidence`를 대체하지 않는다. `ToneReading`으로 변환하지 않는다. 선택적 최상위 `classifiers` 설정으로 `Registry.classifiers`에 별도 등록되며 기본 설정은 비활성이다. 실시간·상세 파이프라인과 L3는 이 목록을 호출하거나 집계하지 않는다. 연구 호출자는 이미 가려진 `ExpertRequest`와 deadline을 전달한다. 실제 경고 통합은 별도 검증 후 수행한다.
+- `ClassifierExpert` (P-14): KcELECTRA 이진 분류기는 별도 `ColdSignal(cold_score, model_id, latency_ms)`을 돌려준다. `cold_score`는 `negative`나 최종 `risk`와 다르며 `confidence`를 대체하지 않는다. `ToneReading`으로 변환하지 않는다. 선택적 최상위 `classifiers` 설정으로 `Registry.classifiers`에 별도 등록되며 운영 설정은 http 백엔드 `clf_cold` 하나이고 `USE_LOCAL_MODEL=1`일 때만 켜진다(`force_mock`에는 없다). 연구 호출자는 이미 가려진 `ExpertRequest`와 deadline을 전달한다. **P-28(2026-11-01 사용자 결정)**: 실시간·상세 파이프라인이 `classifiers`를 말투 전문가와 같은 마감 안에서 동시에 부르고, 가장 높은 `cold_score`를 집계의 `clf` 항으로 넣는다(6-3). `backend: http`(`HttpBackend`, httpx, 클라이언트 재사용, 호출당 150ms)는 학교 GPU `ml/classifier_shim.py`(:11481)를 부르며 `USE_LOCAL_MODEL=1`일 때만 켜진다. 실패·시간 초과·잘못된 응답은 신호 없음이고 예외는 올리지 않는다. 가린 문장만 보낸다(규칙 16).
 - 레지스트리(`experts/registry.py`)는 경로·역할별로 쓸 전문가 목록을 설정 순서대로 만든다. `force_mock`인데 사슬에 mock이 없는 전문가, `optional`인데 첫 모델 공급자를 쓸 수 없는 전문가는 빠진다. 로드할 때 role, prompt 파일, 사슬의 공급자가 `providers`에 있는지, `mock:<이름>`이 `mock_rules`에 있는지 검사한다(실패하면 시작 실패).
 - `run_all`은 전문가를 동시에 돌리고, 시간 안에 못 온 전문가와 모든 모델이 실패한 전문가는 뺀다.
 
@@ -346,7 +346,7 @@ paths:
   mirror:   {deadline_ms: 8000}
   async:    {deadline_ms: 60000}
 aggregate:
-  weights: {bias: -2.2, prior: 1.6, neg: 2.4, violation: 1.4, pattern: 0.9}
+  weights: {bias: -2.2, prior: 1.6, neg: 2.4, violation: 1.4, pattern: 0.9, clf: 2.0}
   alert_threshold: 0.6
   max_disagreement: 0.35
   min_confidence: 0.4
@@ -365,12 +365,13 @@ aggregate:
 ### 6-3. 집계기
 
 ```
-risk = sigmoid( w0 + w1·prior + w2·Σk(αk·negk)/Σk(αk) + w3·violation + w4·pattern )
+risk = sigmoid( w0 + w1·prior + w2·Σk(αk·negk)/Σk(αk) + w3·violation + w4·pattern [+ w5·clf] )
 ```
 
 - `negk`: k번째 말투 전문가의 부정 읽힘(차갑게 + 성의없게 + 화나게) 확률. `αk = weight × confidence`.
 - `violation`: 맥락 전문가의 기대 요소 중 문장에 없는 비율.
 - `pattern`: 보낸 사람 패턴(`tone.sender_patterns`, `active_from`이 지난 것 = 신고 즉시) 일치 점수. `global_patterns[trigger] ≥ global_min_obs`일 때만 반영.
+- `clf` (P-28): 학습된 판별기(KcELECTRA)의 `cold_score` 중 최댓값(0~1). 판별기가 시간 안에 못 오면 항 자체를 뺀다(0 가중이 아님, `features`에도 없음). 의견 차이·확신에는 들어가지 않는다. 가중치 `weights.clf`는 live 측정으로 골랐다(AGENTS §8).
 - 의견 차이 = 말투 전문가 `neg`의 최대 − 최소. `max_disagreement`를 넘으면 실시간은 기권, 상세는 심판. 심판은 의견이 갈린 기권만 풀고, 자신 없는 기권(confidence < `min_confidence`)은 심판 없이 기권으로 둔다. 둘 다 반올림 전 값(`features`)으로 본다(3-3).
 - 시간 안에 못 온 전문가는 빼고 계산한다. 말투 전문가가 하나도 없으면 기권.
 - 가중치(w, α)는 평가 세트가 30쌍 이상 모이면 trace에서 학습한다(로지스틱 회귀). 기준값은 정밀도 0.8 이상이 되는 값.
