@@ -68,6 +68,17 @@ flowchart LR
 - 실시간 힌트는 1.5초를 넘기면 결과를 버린다.
 - 실제 대화는 Gemini 무료 등급에 보내지 않는다. 예문·합성 데이터만 쓴다.
 
+## 평가
+
+대조 세트 라벨(T-16): 후보 30쌍(`eval/label/candidates_t16.jsonl`)은 **AI가 초안만 쓴 것**이고 최종 라벨은 사람 둘이 따로(블라인드) 정한다. 양식에는 어느 면이 의도였는지 나오지 않고, 쌍·면이 섞여 나온다. `key.json`(정답 대응표)은 합치기 전까지 보지 않는다.
+
+```bash
+python3 eval/label/label.py export                                  # eval/label/out/form.html + key.json
+# 두 사람이 각자 form.html을 열어 라벨하고 JSON 저장 (서로 보지 않기)
+python3 eval/label/label.py merge a.json b.json                     # 일치율·kappa·불일치 목록 + eval/contrast_set_t16.jsonl
+uv run --project engine python eval/run_eval.py --set eval/contrast_set_t16.jsonl --mock   # 합의본으로 평가
+```
+
 ## 개발 시작하기
 
 P-14 후속 점검에서 기존 generic Fast 입력의 CLS/SEP 누락을 확인했다. 새 학습용 opt-in 입력 v2·epoch 모니터·실패 진단 명령은 [최종 점검 안내](ml/P14-final-hour.md)에 있다. 기존 모델은 보존했고 실제 재학습·경고 활성화는 하지 않았다.
