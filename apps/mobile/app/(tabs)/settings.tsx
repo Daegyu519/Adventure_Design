@@ -152,7 +152,7 @@ export default function Settings() {
 
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: colors.background }}>
-      <ScrollView contentContainerStyle={{ padding: space[3], gap: space[5] }}>
+      <ScrollView contentContainerStyle={{ padding: space[3], paddingBottom: space[6], gap: space[5] }}>
         <AppText accessibilityRole="header" aria-level={1} variant="title">
           설정
         </AppText>

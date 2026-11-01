@@ -11,9 +11,10 @@ import { useTheme } from '../../lib/theme';
 const ICON_SIZE = 24; // MASTER 4장: 아이콘 24px, 선 굵기 2(Lucide 기본값)
 
 // 웹(아이폰 홈 화면 앱·Safari): 홈 막대 자리를 CSS env()로 직접 비운다. JS가 안전 영역을 0으로 읽어도 탭 바가 가려지지 않게(P-22).
+// 내용 높이 58px ≥ 탭 항목 54px(위아래 padding 5+5, 아이콘 칸 28, 이름 줄 16) + 여유 4. 이전 값은 이름 아래가 잘렸다(P-23).
 // react-native-web은 CSS 문자열을 그대로 넘기지만 RN 타입은 숫자만 받아서 캐스트한다.
 const WEB_TAB_SAFE = (Platform.OS === 'web'
-  ? { height: 'calc(56px + env(safe-area-inset-bottom))', paddingBottom: 'calc(6px + env(safe-area-inset-bottom))' }
+  ? { height: 'calc(62px + env(safe-area-inset-bottom))', paddingTop: 4, paddingBottom: 'env(safe-area-inset-bottom)' }
   : {}) as unknown as ViewStyle;
 
 export default function TabsLayout() {
@@ -26,7 +27,7 @@ export default function TabsLayout() {
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textMuted,
         tabBarStyle: { backgroundColor: colors.background, borderTopColor: colors.border, ...WEB_TAB_SAFE },
-        tabBarLabelStyle: { fontFamily: font.family, fontSize: font.small },
+        tabBarLabelStyle: { fontFamily: font.family, fontSize: font.small, lineHeight: 16 },
       }}
     >
       <Tabs.Screen name="index" options={{ title: '대화', tabBarIcon: ({ color }) => <MessageCircle color={color} size={ICON_SIZE} /> }} />
