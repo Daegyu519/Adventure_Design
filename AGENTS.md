@@ -202,7 +202,7 @@ flowchart LR
 
 ### 배포
 - **주 사용 경로는 아이폰 웹(홈 화면에 추가한 앱, `https://tone-chat.expo.app`)이다.** Android APK 빌드는 사용자 결정으로 우선순위 낮음(2026-11-01) — 새로 빌드하지 않는다. 화면 보정·테스트는 아이폰 16 계열 크기(393~440폭) 기준으로 한다.
-- 힌트 기준은 테스트 중에 서버 엔진 env(`.env.pilot.engine`)의 `HINT_GATE_THRESHOLD`·`HINT_ALERT_THRESHOLD`·`HINT_MIN_CONFIDENCE`로 낮출 수 있다(P-21). 2026-11-01 사용자 요청으로 0 / 0.3 / 0.2 → 같은 날 "너무 낮다"로 **0.1 / 0.65 / 0.3** → 다시 "살짝 더"로 **0.1 / 0.7 / 0.3**(판별기 가중치 2.0 때문에 위험도가 전반적으로 높다: 최근 40건 기준 0.6이면 약 80%, 0.65면 약 65%, 0.7이면 약 절반이 힌트). 원래대로는 세 줄을 지우고 `scripts/deploy-school --env .env.pilot.engine`.
+- 힌트 기준은 테스트 중에 서버 엔진 env(`.env.pilot.engine`)의 `HINT_GATE_THRESHOLD`·`HINT_ALERT_THRESHOLD`·`HINT_MIN_CONFIDENCE`로 낮출 수 있다(P-21). 2026-11-01 사용자 요청으로 0 / 0.3 / 0.2 → 같은 날 "너무 낮다"로 **0.1 / 0.65 / 0.3**(판별기 가중치 2.0 때문에 위험도가 전반적으로 높아 0.6이면 약 80%가 힌트, 0.65면 약 65%). 원래대로는 세 줄을 지우고 `scripts/deploy-school --env .env.pilot.engine`.
 - GPU 서버는 사용자도 학습에 쓴다. 쓰는 동안은 서버의 `gpu.off` 스위치(`up.sh gpu-off`)로 우리 모델 서버를 끄고, 배포·`scripts/gpu up`도 GPU를 건드리지 않는다. 다시 쓰려면 `gpu-on`(P-18). **`gpu.off`가 있으면 지우지 말고 사용자에게 먼저 묻는다.**
 - 엔진은 GPU 서버 컨테이너에서 상시(`scripts/deploy-school`, tmux `tone-llm`·`tone-engine`·`tone-ts`), 공개 HTTPS는 Tailscale Funnel(`https://tone-chat.<tailnet>.ts.net`, 도메인 불필요·주소 고정), 아이폰은 웹앱(홈 화면 추가), Android는 EAS preview APK, pilot DB는 서울 Supabase(엔진이 힌트마다 DB를 보므로 지연 때문에) — 2026-10-31 사용자 결정.
 - 앱 공개값(Supabase URL·publishable key·엔진 URL·VAPID 공개키)은 저장소가 아니라 **EAS env**(preview/production)에 둔다. 웹 배포는 같은 값을 셸 env로 넣고 `npx expo export -p web` → `eas deploy --prod`.
