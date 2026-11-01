@@ -9,6 +9,9 @@ TS="$BASE/tailscale_1.104.4_amd64"; SOCK="$BASE/tailscaled.sock"
 # SEED 1.5B(tone-llm, :11434)는 어느 전문가도 안 써서 더는 띄우지 않는다(P-28, Gemma 옆 GPU 메모리 절약). 예전에 떠 있는 것은 status·gpu-off가 계속 다룬다.
 DETAIL_PORT=11436; DETAIL_ID=qwen3-30b-a3b; DETAIL_GGUF=qwen3-30b-a3b-2507-iq3xxs.gguf   # tone_hcx의 local_detail: 뒤 이름과 같아야 한다(P-24)
 FAST_PORT=11435; FAST_ID=gemma-3-4b-it; FAST_GGUF=gemma-3-4b-it-q4_k_m.gguf   # tone_fast의 local_fast: 뒤 이름과 같아야 한다(P-12)
+# HyperCLOVA X SEED Omni 8B(P-29, 상세 tone_hcx8): NAVER llama.cpp 포크 바이너리만 쓴다(upstream llama-server는 이 모델을 못 읽음). 없으면 건너뜀. --jinja 필요
+HCX_BIN=/root/tone-chat-llm/bakeoff/hcx-llama.cpp/build/bin/llama-server
+HCX8_PORT=11491; HCX8_ID=hcx-omni-8b; HCX8_GGUF=bakeoff/clova-omni8b.gguf   # tone_hcx8의 local_hcx8: 뒤 이름과 같아야 한다
 CLF_PORT=11481; CLF_DIR=$LLM/clf/kcelectra-p14b   # 학습 판별기(P-14b 내보내기, P-28). 코드는 deploy-school이 올리는 $BASE/app/ml, python은 팀원 ML venv
 CLF_PY=/root/p14-work/source/ml/.venv-demo/bin/python
 GPU_OFF="$BASE/gpu.off"   # 이 파일이 있으면 GPU 모델을 띄우지 않는다(사용자가 학습 등에 GPU를 쓸 때). gpu-off / gpu-on
@@ -17,16 +20,17 @@ ts() { "$TS/tailscale" --socket="$SOCK" "$@"; }
 logged_in() { ts status --json 2>/dev/null | grep -q '"BackendState": "Running"'; }
 funnel_url() { ts funnel status 2>/dev/null | grep -o 'https://[^ ]*' | head -1 || true; }
 
-serve() {   # serve <tmux> <gguf> <port> <alias> [추가 옵션]. 환경변수 MIN_FREE_MIB(기본 0)보다 여유 메모리가 큰 GPU만 쓴다(없으면 건너뜀)
+serve() {   # serve <tmux> <gguf> <port> <alias> [추가 옵션]. 환경변수 MIN_FREE_MIB(기본 0)보다 여유 메모리가 큰 GPU만 쓴다(없으면 건너뜀). SERVER_BIN으로 바이너리 지정
   has "$1" && return 0
   cd "$LLM"
+  if [ -n "${SERVER_BIN:-}" ] && [ ! -x "$SERVER_BIN" ]; then echo "$1: $SERVER_BIN missing, skipped"; return 0; fi
   [ -f "$2" ] || { echo "$1: $2 missing, skipped"; return 0; }
   # 가장 한가한 GPU: 사용률 50% 초과는 뒤로, 그다음 메모리 사용량, 사용률 순(호스트는 여러 사람이 공유)
   export CUDA_DEVICE_ORDER=PCI_BUS_ID
   G=$(nvidia-smi --query-gpu=index,memory.total,memory.used,utilization.gpu --format=csv,noheader,nounits | awk -F', *' -v min="${MIN_FREE_MIB:-0}" '$2-$3>=min && (min==0 || $4<=50) {print ($4>50), $3, $4, $1}' | sort -n -k1,1 -k2,2 -k3,3 | head -1 | awk '{print $4}')
   [ -n "$G" ] || { echo "$1: no GPU with >= ${MIN_FREE_MIB:-0} MiB free and util <= 50%, skipped"; return 0; }
   # 기본 로그 수준은 요청 문장을 남기지 않는다 — -v·--verbose·--log-verbosity를 붙이지 않는다(문장이 <세션>.log에 남음).
-  tmux new-session -d -s "$1" "CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=$G ./llama.cpp/build/bin/llama-server -m $2 --host 127.0.0.1 --port $3 -ngl 99 -np 4 -c ${CTX:-16384} --no-slots --alias $4 ${5:-} > $1.log 2>&1"
+  tmux new-session -d -s "$1" "CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=$G ${SERVER_BIN:-./llama.cpp/build/bin/llama-server} -m $2 --host 127.0.0.1 --port $3 -ngl 99 -np 4 -c ${CTX:-16384} --no-slots --alias $4 ${5:-} > $1.log 2>&1"
   echo "$1 started on GPU $G"
 }
 
@@ -36,6 +40,8 @@ llm() {
   serve tone-llm-fast "$FAST_GGUF" "$FAST_PORT" "$FAST_ID" --swa-full
   # Qwen3-30B-A3B: GPU 메모리 ~13.5GB. 여유 14000MiB 이상·사용률 50% 이하인 카드가 없으면 건너뛴다(선택 전문가라 엔진은 그대로 돈다)
   MIN_FREE_MIB=14000 CTX=8192 serve tone-llm-detail "$DETAIL_GGUF" "$DETAIL_PORT" "$DETAIL_ID"
+  # HCX Omni 8B: GPU 메모리 ~7GB. 여유 7000MiB 이상·사용률 50% 이하인 카드가 없으면 건너뜀(선택 전문가). 이 GPU 서버의 Gemma·Qwen과 다른 카드를 쓰게 하지 않는다(가장 한가한 카드 선택)
+  SERVER_BIN=$HCX_BIN MIN_FREE_MIB=7000 CTX=8192 serve tone-hcx-8b "$HCX8_GGUF" "$HCX8_PORT" "$HCX8_ID" --jinja
   clf
 }
 
@@ -101,7 +107,7 @@ funnel() {
 }
 
 status() {
-  for s in tone-llm tone-llm-fast tone-llm-detail tone-clf tone-engine tone-ts; do has "$s" && echo "$s: running" || echo "$s: stopped"; done
+  for s in tone-llm tone-llm-fast tone-llm-detail tone-hcx-8b tone-clf tone-engine tone-ts; do has "$s" && echo "$s: running" || echo "$s: stopped"; done
   echo "health: $(curl -sf "http://127.0.0.1:$ENGINE_PORT/health" | head -c 300 || echo 'not answering')"
   if [ -S "$SOCK" ] && logged_in; then echo "public: $(funnel_url)"; else echo "tailscale: not logged in"; fi
 }
@@ -114,7 +120,7 @@ all) llm; restart_clf; engine; funnel ;;
 restart-clf) restart_clf ;;
 relocate-fast) relocate_fast ;;
 status) status; [ -f "$GPU_OFF" ] && echo "gpu: off (model servers not allowed)" || echo "gpu: on" ;;
-gpu-off) touch "$GPU_OFF"; for s in tone-llm tone-llm-fast tone-llm-detail tone-clf; do has "$s" && tmux kill-session -t "$s"; done
+gpu-off) touch "$GPU_OFF"; for s in tone-llm tone-llm-fast tone-llm-detail tone-hcx-8b tone-clf; do has "$s" && tmux kill-session -t "$s"; done
          has tone-engine && { tmux kill-session -t tone-engine; engine; }; echo "gpu off: model servers stopped, engine uses no local model" ;;
 gpu-on) rm -f "$GPU_OFF"; llm; has tone-engine && { tmux kill-session -t tone-engine; engine; }; echo "gpu on" ;;
 stop) has tone-engine && tmux kill-session -t tone-engine; echo "engine stopped" ;;
