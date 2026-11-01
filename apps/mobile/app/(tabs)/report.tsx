@@ -110,7 +110,7 @@ export default function Report() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.primary} colors={[colors.primary]} />}
       >
         <View style={{ width: '100%', maxWidth: 560, alignSelf: 'center', gap: space[5] }}>
-          <AppText accessibilityRole="header" aria-level={1} variant="title">
+          <AppText accessibilityRole="header" aria-level={1} variant="large">
             리포트
           </AppText>
 

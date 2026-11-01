@@ -1,22 +1,22 @@
 import { useFocusEffect, useRouter, type Href } from 'expo-router';
-import BellOff from 'lucide-react-native/icons/bell-off';
 import Plus from 'lucide-react-native/icons/plus';
 import { useCallback, useRef, useState } from 'react';
-import { FlatList, Pressable, View } from 'react-native';
+import { FlatList, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '../../components/AppText';
 import { Button } from '../../components/Button';
+import { ChatRow } from '../../components/ChatRow';
 import { IconButton } from '../../components/IconButton';
 import { formatStamp } from '../../lib/messages';
 import { freshTopic, watchStatus } from '../../lib/realtime';
 import { fetchRoomList, type RoomListItem } from '../../lib/rooms';
 import { useSession } from '../../lib/session';
 import { supabase } from '../../lib/supabase';
-import { focusRing, useTheme } from '../../lib/theme';
+import { useTheme } from '../../lib/theme';
 
 export default function Chats() {
-  const { colors, space, radius } = useTheme();
+  const { colors, space } = useTheme();
   const router = useRouter();
   const { userId } = useSession();
   const [rooms, setRooms] = useState<RoomListItem[] | null>(null);
@@ -53,7 +53,7 @@ export default function Chats() {
 
   const header = (
     <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-      <AppText accessibilityRole="header" aria-level={1} variant="title">
+      <AppText accessibilityRole="header" aria-level={1} variant="large">
         대화
       </AppText>
       <IconButton icon={Plus} label="새 대화" onPress={() => router.push('/rooms/new')} />
@@ -61,10 +61,10 @@ export default function Chats() {
   );
 
   return (
-    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: colors.background, padding: space[3] }}>
-      {header}
+    <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: colors.background }}>
+      <View style={{ paddingHorizontal: space[3], paddingTop: space[0] }}>{header}</View>
       {failed && (
-        <View style={{ gap: space[1], paddingVertical: space[2], alignItems: 'flex-start' }}>
+        <View style={{ gap: space[1], padding: space[3], alignItems: 'flex-start' }}>
           <AppText accessibilityRole="alert" color="danger">
             대화를 불러오지 못했어요. 연결이 불안정할 수도 있어요.
           </AppText>
@@ -76,38 +76,15 @@ export default function Chats() {
           data={rooms}
           keyExtractor={(r) => r.id}
           renderItem={({ item }) => (
-            <Pressable
+            <ChatRow
+              title={item.title}
+              preview={item.last ? (item.last.isImage ? '사진' : item.last.text) : '아직 메시지가 없어요'}
+              time={item.last ? formatStamp(item.last.created_at) : undefined}
+              unread={item.unread}
+              muted={item.muted}
               onPress={() => router.push(`/room/${item.id}` as Href)}
-              accessibilityRole="button"
               accessibilityLabel={`${item.title}${item.unread ? `, 안 읽은 메시지 ${item.unread}개` : ''}${item.muted ? ', 알림 꺼짐' : ''}${item.last ? `, ${item.last.isImage ? '사진' : item.last.text}` : ''}`}
-              style={({ pressed }) => ({ minHeight: 64, flexDirection: 'row', alignItems: 'center', gap: space[2], paddingVertical: space[2], opacity: pressed ? 0.8 : 1, ...focusRing(colors.primary) })}
-            >
-              <View style={{ flex: 1, gap: space[0] }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[1] }}>
-                  <AppText weight="600" numberOfLines={1} style={{ flexShrink: 1 }}>
-                    {item.title}
-                  </AppText>
-                  {item.muted && <BellOff accessibilityLabel="알림 꺼짐" color={colors.textMuted} size={16} />}
-                </View>
-                <AppText variant="small" color="textMuted" numberOfLines={1}>
-                  {item.last ? (item.last.isImage ? '사진' : item.last.text) : '아직 메시지가 없어요'}
-                </AppText>
-              </View>
-              <View style={{ alignItems: 'flex-end', gap: space[0] }}>
-                {item.last && (
-                  <AppText variant="small" color="textMuted">
-                    {formatStamp(item.last.created_at)}
-                  </AppText>
-                )}
-                {item.unread > 0 && (
-                  <View accessibilityLabel={`안 읽은 메시지 ${item.unread}개`} style={{ minWidth: 22, height: 22, paddingHorizontal: space[1], borderRadius: radius.chip, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' }}>
-                    <AppText variant="small" color="onPrimary" weight="600">
-                      {item.unread > 99 ? '99+' : item.unread}
-                    </AppText>
-                  </View>
-                )}
-              </View>
-            </Pressable>
+            />
           )}
         />
       ) : rooms !== null ? (

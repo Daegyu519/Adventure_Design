@@ -1,6 +1,4 @@
 import { useIsFocused, useLocalSearchParams, useRouter, type Href } from 'expo-router';
-import ArrowLeft from 'lucide-react-native/icons/arrow-left';
-import Info from 'lucide-react-native/icons/info';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, FlatList, KeyboardAvoidingView, Platform, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -14,7 +12,7 @@ import { DetailSheet } from '../../../components/DetailSheet';
 import { VentSheet } from '../../../components/VentSheet';
 import { canVent } from '../../../lib/vent';
 import { Button } from '../../../components/Button';
-import { IconButton } from '../../../components/IconButton';
+import { NavBar } from '../../../components/NavBar';
 import { pickAndSendImage } from '../../../lib/images';
 import { activeMentionQuery, extractMentions, insertMention, mentionCandidates } from '../../../lib/mentions';
 import { SheetSaySlot, useAnnounce } from '../../../lib/announce';
@@ -32,6 +30,7 @@ import { useToneHint } from '../../../lib/useToneHint';
 import { logToneEvent } from '../../../lib/toneEvents';
 import { supabase } from '../../../lib/supabase';
 import { useTheme } from '../../../lib/theme';
+import { slotFor } from '../../../lib/thread';
 import type { Tables } from '../../../lib/types/db';
 
 
@@ -360,13 +359,12 @@ function RoomBody({ id, me }: { id: string; me: string }) {
 
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[1], paddingHorizontal: space[1], borderBottomWidth: 1, borderBottomColor: colors.border }}>
-        <IconButton icon={ArrowLeft} label="뒤로" onPress={() => (router.canGoBack() ? router.back() : router.replace('/'))} />
-        <AppText accessibilityRole="header" aria-level={1} variant="title" numberOfLines={1} style={{ flex: 1 }}>
-          {title}
-        </AppText>
-        <IconButton icon={Info} label="방 정보" onPress={() => router.push(`/room/${id}/info` as Href)} />
-      </View>
+      <NavBar
+        title={title}
+        subtitle={info ? (group ? `${info.members.length}명` : '1:1') : undefined}
+        onBack={() => (router.canGoBack() ? router.back() : router.replace('/'))}
+        onMore={() => router.push(`/room/${id}/info` as Href)}
+      />
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         {failed && (
           <View style={{ padding: space[3], gap: space[1], alignItems: 'flex-start' }}>
@@ -416,12 +414,23 @@ function RoomBody({ id, me }: { id: string; me: string }) {
           contentContainerStyle={{ paddingHorizontal: space[3], paddingVertical: space[2] }}
           renderItem={({ item, index }) => {
             const older = data[index + 1]; // 화면에서 바로 위(더 오래된) 메시지
+            const slot = slotFor(item, older, data[index - 1]); // 묶음 첫·마지막·시각·날짜 구분(lib/thread.ts)
             const mine = item.sender_id === me;
             const unread = unreadCount(item, others); // 나는 세지 않는다(받은 메시지에 "상대가 안 읽음"이 뜨지 않게)
-            const first = older?.sender_id !== item.sender_id;
+            const first = slot.first;
             return (
-              <View style={{ marginTop: older && !first ? space[0] : older ? space[2] : 0 }}>
+              <View style={{ marginTop: older && !first ? 3 : older ? space[1] : 0 }}>
+                {slot.dateBefore ? (
+                  <View style={{ alignSelf: 'center', marginVertical: space[1], paddingVertical: 4, paddingHorizontal: space[2], borderRadius: 999, backgroundColor: colors.surface }}>
+                    <AppText variant="small" color="textMuted" weight="500" style={{ fontSize: 12, lineHeight: 16 }}>
+                      {slot.dateBefore}
+                    </AppText>
+                  </View>
+                ) : null}
                 <Bubble
+                  tail={slot.last}
+                  showTime={slot.showTime}
+                  showAvatar={!mine && first}
                   message={item}
                   mine={mine}
                   speaker={mine ? '나' : (names.get(item.sender_id) ?? '상대')}
@@ -432,7 +441,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
                   onNavigate={(dir) => navigate(item.id, dir)}
                   quoteFailed={item.reply_to !== null && failedQuotes.has(item.reply_to)}
                   onQuoteRetry={() => item.reply_to !== null && retryQuote(item.reply_to)}
-                  senderName={group && !mine && first ? names.get(item.sender_id) : undefined}
+                  senderName={!mine && first ? names.get(item.sender_id) : undefined}
                   quoted={item.reply_to === null ? null : (byId.get(item.reply_to) ?? extra.get(item.reply_to) ?? null)}
                   quotedName={quotedName(item)}
                   reactions={summarizeReactions(reactionRows, item.id, me)}

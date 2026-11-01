@@ -11,14 +11,15 @@ type Props<T extends string> = {
   accessibilityLabel: string;
   allowNone?: boolean; // 고른 칩을 다시 누르면 선택을 지운다(null)
   labels?: Partial<Record<T, string>>; // 값과 다른 글을 보여 줄 때
+  segmented?: boolean; // iOS 분할 조절기 모양(한 줄, 같은 너비, 고른 칸은 흰 칸)
 };
 
 // MASTER 5장: 칩은 높이 44(터치 영역), 모서리 999, 선택은 primary 바탕. 한 번에 하나만 고르는 묶음이라 radio.
 // 선택은 바탕색과 함께 글자 색(onPrimary)·checked 상태로도 전한다. 눌림은 투명도로만 보여 줘 레이아웃이 안 움직인다.
-export function ChipRow<T extends string>({ options, value, onChange, accessibilityLabel, allowNone = false, labels }: Props<T>) {
-  const { colors, radius, space } = useTheme();
+export function ChipRow<T extends string>({ options, value, onChange, accessibilityLabel, allowNone = false, labels, segmented = false }: Props<T>) {
+  const { colors, radius, space, grouped } = useTheme();
   return (
-    <View accessibilityRole="radiogroup" accessibilityLabel={accessibilityLabel} style={{ flexDirection: 'row', flexWrap: 'wrap', gap: space[1] }}>
+    <View accessibilityRole="radiogroup" accessibilityLabel={accessibilityLabel} style={segmented ? { flexDirection: 'row', backgroundColor: colors.border, borderRadius: 9, padding: 2, opacity: 1 } : { flexDirection: 'row', flexWrap: 'wrap', gap: space[1] }}>
       {options.map((o) => {
         const checked = o === value;
         const label = labels?.[o] ?? o;
@@ -40,7 +41,18 @@ export function ChipRow<T extends string>({ options, value, onChange, accessibil
                 }
               },
             } as object)}
-            style={({ pressed }) => ({
+            style={({ pressed }) => segmented ? ({
+              flex: 1,
+              minHeight: 44, // 누르는 영역 44 이상(MASTER 8장)
+              minWidth: 44,
+              paddingHorizontal: space[1],
+              borderRadius: 7,
+              backgroundColor: checked ? grouped.cell : 'transparent',
+              alignItems: 'center',
+              justifyContent: 'center',
+              opacity: pressed ? 0.7 : 1,
+              ...focusRing(colors.primary),
+            }) : ({
               minHeight: 44,
               minWidth: 44,
               paddingHorizontal: space[3],
@@ -56,9 +68,9 @@ export function ChipRow<T extends string>({ options, value, onChange, accessibil
             })}
           >
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[0] }}>
-              {/* 선택은 색만으로 알리지 않는다(강제 색 모드 · 색 구분이 어려운 사람): 작은 체크도 같이 보인다 */}
-              {checked && <Check color={colors.onPrimary} size={14} aria-hidden />}
-              <AppText weight="600" color={checked ? 'onPrimary' : 'text'}>
+              {/* 선택은 색만으로 알리지 않는다(강제 색 모드 · 색 구분이 어려운 사람): 작은 체크도 같이 보인다. 분할 조절기는 흰 칸 + 굵은 글자 */}
+              {checked && <Check color={segmented ? colors.text : colors.onPrimary} size={14} aria-hidden />}
+              <AppText weight="600" color={segmented || !checked ? 'text' : 'onPrimary'} style={segmented ? { fontSize: 14 } : undefined}>
                 {label}
               </AppText>
             </View>

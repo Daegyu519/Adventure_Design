@@ -193,6 +193,7 @@ flowchart LR
 - 앱은 Expo **네이티브**(expo-dev-client + EAS), Expo Go로 파일럿하지 않는다. 아이폰 기본 경로는 **웹 + 웹 푸시**(iOS 16.4+, 홈 화면에 추가); 네이티브 iOS는 Apple Developer 계정이 생길 때만.
 - Supabase는 클라우드 서울 리전, dev와 pilot 프로젝트를 따로.
 - 디자인 목업(`design/mockups/index.html`)은 사용자 승인됨. 화면은 MASTER와 목업을 따른다.
+- 애플(iOS)식 화면 + 메신저식 대화 배치(묶음 첫 말풍선에만 아바타·이름, 꼬리는 묶음 마지막만, 날짜 구분) + 모노 팔레트 — 2026-11-01 사용자 결정(P-26). 시안 `design/mockups/2026-11-01-apple-mono.html`, 규칙은 MASTER. 틸 팔레트·"꼬리 없음"은 폐기.
 - 저장소는 GitHub 비공개 `Daegyu519/Adventure_Design`.
 
 ### 배포
