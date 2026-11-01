@@ -51,7 +51,7 @@ async def realtime(reg: Registry, draft: str, convo: Conversation, store: Profil
 
     ctx = next((r.output for r in results if r.role == "context"), None)
     tones = [(r.output, reg.weight(r.expert_id)) for r in results if r.role == "tone"]
-    v = aggregate(draft, g, ctx, tones, store, convo, agg, clf)
+    v = aggregate(draft, g, ctx, tones, store, convo, agg, clf, cues=True)
     hint = render_hint(v)
     return RealtimeOutcome(g, v, hint, results, "abstain" if v.abstain else "alert" if v.alert else "none", clf)
 

@@ -46,6 +46,26 @@ def top_reading(readings: dict[str, float], alert: bool) -> str:
     return max(NEGATIVE if alert else READINGS, key=readings.__getitem__)
 
 
+# 실시간 4B 모델은 부정 읽힘 셋을 거의 못 가른다(P-32: 합성 12문장 중 3개, 화나게 0개). 실시간 알림은 겉 신호로 고른다(앞이 우선)
+CUE_READING = {"따지는 말투": "화나게", "자음만 쓴 답": "성의없게", "감정 표현에 짧은 답": "성의없게",
+               "상대 말에 비해 짧은 답": "성의없게", "이유 없는 거절": "차갑게", "마침표로 끝남": "차갑게"}
+
+
+def pick_reading(readings: dict[str, float], alert: bool, signals: list[str], pair: dict, matched: list[str],
+                 cues: bool) -> tuple[str, str | None]:
+    """(제목 읽힘, 그 읽힘을 정한 신호). 알림이면 켜진 하소연 패턴의 느낌(가장 센 것) → 겉 신호(cues일 때) → 모델 최대."""
+    if alert:
+        felt = [s for s in matched if pair[s].get("feeling") in NEGATIVE]
+        if felt:
+            s = max(felt, key=lambda k: pair[k]["strength"])
+            return pair[s]["feeling"], s
+        if cues:
+            s = next((s for s in CUE_READING if s in signals), None)
+            if s:
+                return CUE_READING[s], s
+    return top_reading(readings, alert), None
+
+
 def missing_points(draft: str, ctx: ContextReading, tones: Tones) -> list[str]:
     """상대가 기대했을 요소 중 문장에 없는 것."""
     s = K.surface(draft)
@@ -65,8 +85,9 @@ def missing_points(draft: str, ctx: ContextReading, tones: Tones) -> list[str]:
 
 
 def aggregate(draft: str, gate: GateResult, ctx: ContextReading | None, tones: Tones,
-              store: ProfileStore, convo: Conversation, cfg: dict, clf: float | None = None) -> Verdict:
-    """clf: 학습된 판별기의 cold_score(0~1, P-28). 없으면 항(feature·가중합)을 통째로 뺀다(0 가중이 아님)."""
+              store: ProfileStore, convo: Conversation, cfg: dict, clf: float | None = None, cues: bool = False) -> Verdict:
+    """clf: 학습된 판별기의 cold_score(0~1, P-28). 없으면 항(feature·가중합)을 통째로 뺀다(0 가중이 아님).
+    cues: 제목 읽힘을 겉 신호로 고른다(실시간만, pick_reading)."""
     used = _used(tones)
     if not used:
         return Verdict(risk=0.0, top_reading=NEUTRAL, signals=gate.signals, disagreement=0.0, confidence=0.0,
@@ -97,9 +118,13 @@ def aggregate(draft: str, gate: GateResult, ctx: ContextReading | None, tones: T
     abstain = f["disagreement"] > cfg["max_disagreement"] or f["confidence"] < cfg["min_confidence"]
     alert = not abstain and risk >= cfg["alert_threshold"]
 
+    signals = list(dict.fromkeys(gate.signals + [f"{p} 없음" for p in missing]))
+    reading, why = pick_reading(m, alert, signals, pair, matched, cues)
+    if why:   # 읽힘을 정한 신호를 맨 앞에: 힌트 이유 문구가 제목과 맞는다
+        signals = [why] + [s for s in signals if s != why]
     return Verdict(
-        risk=round(risk, 3), top_reading=top_reading(m, alert),
-        signals=list(dict.fromkeys(gate.signals + [f"{p} 없음" for p in missing])),
+        risk=round(risk, 3), top_reading=reading,
+        signals=signals,
         disagreement=round(f["disagreement"], 3), confidence=round(f["confidence"], 3),
         abstain=abstain, alert=alert, pattern_used=bool(matched), features=f,
     )

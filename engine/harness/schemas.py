@@ -8,10 +8,10 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 READINGS = ("차갑게", "성의없게", "화나게", "무난하게", "따뜻하게")
 NEGATIVE = ("차갑게", "성의없게", "화나게")
-# 패턴 태그: gate 신호 7개 + feedback 프롬프트 태그
+# 패턴 태그: gate 신호 9개 + feedback 프롬프트 태그
 TRIGGERS: frozenset[str] = frozenset({
     "이유 없는 거절", "마침표로 끝남", "짧은 답", "감정 표현에 짧은 답", "상대 말에 비해 짧은 답",
-    "평소보다 짧음", "존댓말이 갑자기 빠짐",
+    "평소보다 짧음", "존댓말이 갑자기 빠짐", "따지는 말투", "자음만 쓴 답",
     "늦은 답에 사과 없음", "반말 전환", "농담에 정색",
 })
 
