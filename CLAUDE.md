@@ -74,5 +74,5 @@
 | 작업 잡기 | `scripts/claim T-07 login` (마지막 줄이 worktree 경로) |
 | 합치기 | worktree 안에서 `scripts/land T-07` |
 | 검사 | `scripts/check` |
-| 로컬 SEED(학교 GPU) | `scripts/gpu up` → 엔진을 `USE_LOCAL_MODEL=1`로 실행 → 끝나면 `scripts/gpu down` (README "학교 GPU 서버") |
-| 배포(학교 GPU) | `scripts/deploy-school [--env FILE]` (엔진 + Tailscale Funnel, README "배포") |
+| 로컬 SEED(GPU 서버) | `scripts/gpu up` → 엔진을 `USE_LOCAL_MODEL=1`로 실행 → 끝나면 `scripts/gpu down` (docs/OPERATIONS.md "GPU 서버") |
+| 배포(GPU 서버) | `scripts/deploy-school [--env FILE]` (엔진 + Tailscale Funnel, docs/OPERATIONS.md "배포") |

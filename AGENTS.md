@@ -21,7 +21,7 @@
 
 `docs/tasks.md` 기준으로 직접 센 값이다(`-live` 행과 선택은 따로).
 
-**배포 상태(2026-10-31):** 웹 `https://tone-chat.expo.app`, Android APK(EAS preview), 엔진은 학교 GPU 서버 상시 + Tailscale Funnel, DB는 서울 pilot 프로젝트(T-29b·T-29c·T-30a). 남은 것: pilot SMTP(로그인 메일), 실제 메시지 웹훅 확인, Android 푸시(FCM).
+**배포 상태(2026-10-31):** 웹 `https://tone-chat.expo.app`, Android APK(EAS preview), 엔진은 GPU 서버 상시 + Tailscale Funnel, DB는 서울 pilot 프로젝트(T-29b·T-29c·T-30a). 남은 것: pilot SMTP(로그인 메일), 실제 메시지 웹훅 확인, Android 푸시(FCM).
 
 **필수 작업 48개 중 42개 완료.** `-live` 12개(전부 T-02 필요, 0개 완료). 선택 3개 중 1개 완료(T-38).
 
@@ -62,7 +62,7 @@ P-14 후속 감사(2026-11-01): 기존 모델·ZIP 해시 및 Windows CPU 독립
 
 ## 4. 다음 순서 — 누가 무엇을
 
-배포는 끝났다(웹 `https://tone-chat.expo.app`, Android APK, 엔진은 학교 GPU 서버 상시, 서울 pilot DB). **가장 큰 문제는 말투 힌트가 거의 안 뜨는 것**이다: 실시간 게이트가 엄격해 문장이 모델까지 가지 못하고, 실시간 모델(SEED 1.5B)이 차가운 문장을 거의 구분하지 못한다(pilot 힌트 요청 44건 모두 게이트에서 멈춤, 대조 세트에서 SEED 단독 정밀도·재현율 0). 그래서 다음 일은 엔진 성능이다.
+배포는 끝났다(웹 `https://tone-chat.expo.app`, Android APK, 엔진은 GPU 서버 상시, 서울 pilot DB). **가장 큰 문제는 말투 힌트가 거의 안 뜨는 것**이다: 실시간 게이트가 엄격해 문장이 모델까지 가지 못하고, 실시간 모델(SEED 1.5B)이 차가운 문장을 거의 구분하지 못한다(pilot 힌트 요청 44건 모두 게이트에서 멈춤, 대조 세트에서 SEED 단독 정밀도·재현율 0). 그래서 다음 일은 엔진 성능이다.
 
 **다른 사람·다른 AI에게 줄 작업은 `docs/handoff/`에 지시서로 있다.** AI에게 "`docs/handoff/<ID>.md` 지시서대로 작업해 줘"라고만 하면 된다([목록](docs/handoff/README.md)).
 
@@ -86,21 +86,21 @@ P-14 후속 감사(2026-11-01): 기존 모델·ZIP 해시 및 Windows CPU 독립
 
 | 우선 | 할 일 | 왜 |
 |---|---|---|
-| 높음 | **AI-Hub 가입·데이터 신청**: "감성 대화 말뭉치", "공감형 대화"(가능하면 "한국어 SNS") | P-14 분류기 학습 데이터. 승인까지 며칠 걸릴 수 있다. 받은 데이터는 학교 서버에만 두고 저장소에 넣지 않는다 |
+| 높음 | **AI-Hub 가입·데이터 신청**: "감성 대화 말뭉치", "공감형 대화"(가능하면 "한국어 SNS") | P-14 분류기 학습 데이터. 승인까지 며칠 걸릴 수 있다. 받은 데이터는 GPU 서버에만 두고 저장소에 넣지 않는다 |
 | 높음 | **T-16 라벨 30쌍** — 같은 문장, 다른 맥락. 두 사람이 각자 블라인드로 라벨한 뒤 합의 | 어떤 모델·구성이 나은지 판단하는 기준(지금 8쌍은 너무 적다). 학습에는 쓰지 않는다 |
 | 보통 | **pilot DB 비밀번호 재설정**(대화에 노출됨) | 바꾼 뒤 `.env.pilot`·`.env.pilot.engine`의 DB 주소를 고치고 `scripts/deploy-school --env .env.pilot.engine` |
 | 보통 | pilot Supabase → Authentication → **Rate Limits**에서 메일을 시간당 100 정도로 | 파일럿 첫날 동시 가입(기본 30/시간) |
 | 낮음 | **Firebase 프로젝트**(Android FCM, `google-services.json` + 서비스 계정 키를 EAS에) | 앱이 꺼져 있을 때 Android 푸시. 앱이 열려 있을 때 실시간은 지금도 된다 |
 | 나중 | **T-31 파일럿 모집**(동의서, 10~15쌍 + 팀 그룹방) | P-12·P-13 뒤가 좋다 |
 
-pilot 준비 상태: 서울 Supabase(SMTP는 Brevo — SMTP Login `…@smtp-brevo.com` + SMTP key, API key 아님, Brevo Security → Authorized IPs에서 모르는 IP 차단 끔), 학교 GPU 서버(`ssh tone-gpu`), Tailscale Funnel, Expo(@daegyu_oh). `NVIDIA_API_KEY`(build.nvidia.com, `nvapi-`로 시작)는 서버 엔진 env에 있다.
+pilot 준비 상태: 서울 Supabase(SMTP는 Brevo — SMTP Login `…@smtp-brevo.com` + SMTP key, API key 아님, Brevo Security → Authorized IPs에서 모르는 IP 차단 끔), GPU 서버(`ssh tone-gpu`), Tailscale Funnel, Expo(@daegyu_oh). `NVIDIA_API_KEY`(build.nvidia.com, `nvapi-`로 시작)는 서버 엔진 env에 있다.
 
 새 Supabase 프로젝트를 만들 때(참고, dev·pilot 때 한 순서):
    - 서울 리전에 만들고 `supabase link`. 대시보드에서 Realtime을 먼저 켜지 않은 채로 `supabase db push`(마이그레이션 7개 전부, `_platform` 포함). Realtime "Allow public access" 끄기. Settings → JWT Keys는 비대칭 키(JWKS)로.
    - Auth → Email Templates → Magic Link 본문에 `{{ .Token }}`(앱은 6자리 코드로 로그인한다). 기본 메일 한도가 작으니 계정 2개로만 확인.
    - Auth → Sign In / Providers → Email → **Email OTP Length = 6** 권장(새 프로젝트 기본은 8자리. 앱은 6~10자리를 모두 받지만(P-08) 6자리가 입력하기 편하다). SMTP는 직접 설정(기본 SMTP는 템플릿 수정 불가) — Brevo면 Security → Authorized IPs에서 **모르는 IP 차단을 끈다**(Supabase 발송 IP가 바뀌어 `525 5.7.1 Unauthorized IP address`), Gmail이면 2단계 인증 + 앱 비밀번호(일반 비밀번호는 `535 5.7.8`).
    - 루트 `.env`(`.env.example` 복사): `SUPABASE_URL`, `SUPABASE_DB_URL`, `HOOK_SECRET`(`openssl rand -hex 32`), `MIRROR_SECRET`(32바이트 이상). `apps/mobile/.env`(`apps/mobile/.env.example` 복사): `EXPO_PUBLIC_SUPABASE_URL`, `EXPO_PUBLIC_SUPABASE_ANON_KEY`, `EXPO_PUBLIC_ENGINE_URL`.
-   - DB 웹훅은 `README.md`의 "dev 웹훅 연결" 순서(T-10-live).
+   - DB 웹훅은 `docs/OPERATIONS.md`의 "dev 웹훅 연결" 순서(T-10-live).
 
 ## 6. 구조도
 
@@ -202,15 +202,15 @@ flowchart LR
 ### 배포
 - **주 사용 경로는 아이폰 웹(홈 화면에 추가한 앱, `https://tone-chat.expo.app`)이다.** Android APK 빌드는 사용자 결정으로 우선순위 낮음(2026-11-01) — 새로 빌드하지 않는다. 화면 보정·테스트는 아이폰 16 계열 크기(393~440폭) 기준으로 한다.
 - 힌트 기준은 테스트 중에 서버 엔진 env(`.env.pilot.engine`)의 `HINT_GATE_THRESHOLD`·`HINT_ALERT_THRESHOLD`·`HINT_MIN_CONFIDENCE`로 낮출 수 있다(P-21). 2026-11-01 사용자 요청으로 0 / 0.3 / 0.2(힌트가 자주 뜸, 틀린 힌트 섞임). 원래대로는 세 줄을 지우고 `scripts/deploy-school --env .env.pilot.engine`.
-- 학교 GPU는 사용자도 학습에 쓴다. 쓰는 동안은 서버의 `gpu.off` 스위치(`up.sh gpu-off`)로 우리 모델 서버를 끄고, 배포·`scripts/gpu up`도 GPU를 건드리지 않는다. 다시 쓰려면 `gpu-on`(P-18). **`gpu.off`가 있으면 지우지 말고 사용자에게 먼저 묻는다.**
-- 엔진은 학교 GPU 서버 컨테이너에서 상시(`scripts/deploy-school`, tmux `tone-llm`·`tone-engine`·`tone-ts`), 공개 HTTPS는 Tailscale Funnel(`https://tone-chat.<tailnet>.ts.net`, 도메인 불필요·주소 고정), 아이폰은 웹앱(홈 화면 추가), Android는 EAS preview APK, pilot DB는 서울 Supabase(엔진이 힌트마다 DB를 보므로 지연 때문에) — 2026-10-31 사용자 결정.
+- GPU 서버는 사용자도 학습에 쓴다. 쓰는 동안은 서버의 `gpu.off` 스위치(`up.sh gpu-off`)로 우리 모델 서버를 끄고, 배포·`scripts/gpu up`도 GPU를 건드리지 않는다. 다시 쓰려면 `gpu-on`(P-18). **`gpu.off`가 있으면 지우지 말고 사용자에게 먼저 묻는다.**
+- 엔진은 GPU 서버 컨테이너에서 상시(`scripts/deploy-school`, tmux `tone-llm`·`tone-engine`·`tone-ts`), 공개 HTTPS는 Tailscale Funnel(`https://tone-chat.<tailnet>.ts.net`, 도메인 불필요·주소 고정), 아이폰은 웹앱(홈 화면 추가), Android는 EAS preview APK, pilot DB는 서울 Supabase(엔진이 힌트마다 DB를 보므로 지연 때문에) — 2026-10-31 사용자 결정.
 - 앱 공개값(Supabase URL·publishable key·엔진 URL·VAPID 공개키)은 저장소가 아니라 **EAS env**(preview/production)에 둔다. 웹 배포는 같은 값을 셸 env로 넣고 `npx expo export -p web` → `eas deploy --prod`.
 - pilot 메시지 웹훅은 대시보드가 아니라 `scripts/pilot-webhook <엔진 URL> .env.pilot.engine`(pg_net 트리거, 비밀값은 env 파일에서 DB로만). HOOK_SECRET을 바꾸면 다시 실행.
 
 ### 엔진 모델
 - 모델은 laguna-xs-2.1(빠른 쪽)과 nemotron-3.5-bolt-e4b(깊은 쪽·폴백)로 — 이 NVIDIA 계정에서 실제 프롬프트로 JSON이 통과하고 지연이 가장 짧았다(1~3초). deepseek-v4.1-flash·kimi·mistral-large-4는 응답 없음, 추론 모델은 생각 토큰 때문에 3~15초(공급자에 모델별 추가 요청 옵션이 없어 `enable_thinking:false`는 못 씀). 지연은 1~3초, 부하 때 4~12초. **실시간 힌트는 지금 사실상 꺼짐(전문가가 1.2초 안에 못 옴 → 기권)**(P-06). 실제 평가는 8쌍(n=8)이라 게이트가 아니다. GitHub Models는 무료 등급 데이터 약관 미확인이라 사슬에서 뺐다.
-- 로컬 SEED(tone_hcx)는 학교 GPU 서버(P100, 공유 컨테이너)의 llama.cpp `llama-server`에서, 쓸 때만 `scripts/gpu up`/`down`(ssh 터널, 바깥 포트 없음, 접속 정보는 `~/.ssh/config`에만). Ollama 최신판은 P100에 드라이버 550+가 필요해 CPU로 떨어져서 뺐다(서버 535). 실시간 기권은 0.31→0.06으로 줄지만 재현율은 0.12 그대로 — 1.5B 혼자는 맥락을 못 읽는다(P-07).
-- **상세·거울 로컬 말투 = Qwen3-30B-A3B-Instruct-2507(IQ3_XXS, P-24).** `tone_hcx`(id는 옛 이름 흔적)를 SEED 1.5B(0/0)에서 `local_detail:qwen3-30b-a3b`(포트 11436, 학교 GPU, 선택)로 바꿨다. 상세 풀 프롬프트 대조 세트 n=16 2회: 정밀도 0.75·재현율 0.38, 평균 1.3~1.4초, p95 1.8~1.9초. 실시간 2모델 앙상블(Gemma+Qwen30B, 동일 가중치, 게이트 0.1, 1.2초): 정밀도 0.67·재현율 0.25, p95 1.1~1.2초로 Gemma 단독(1.0·0.25~0.38)보다 나빠 채택하지 않았다(실시간은 Gemma만). 서버는 셋(`tone-llm` 11434 SEED, `tone-llm-fast` 11435, `tone-llm-detail` 11436).
+- 로컬 SEED(tone_hcx)는 GPU 서버(P100, 공유 컨테이너)의 llama.cpp `llama-server`에서, 쓸 때만 `scripts/gpu up`/`down`(ssh 터널, 바깥 포트 없음, 접속 정보는 `~/.ssh/config`에만). Ollama 최신판은 P100에 드라이버 550+가 필요해 CPU로 떨어져서 뺐다(서버 535). 실시간 기권은 0.31→0.06으로 줄지만 재현율은 0.12 그대로 — 1.5B 혼자는 맥락을 못 읽는다(P-07).
+- **상세·거울 로컬 말투 = Qwen3-30B-A3B-Instruct-2507(IQ3_XXS, P-24).** `tone_hcx`(id는 옛 이름 흔적)를 SEED 1.5B(0/0)에서 `local_detail:qwen3-30b-a3b`(포트 11436, GPU 서버, 선택)로 바꿨다. 상세 풀 프롬프트 대조 세트 n=16 2회: 정밀도 0.75·재현율 0.38, 평균 1.3~1.4초, p95 1.8~1.9초. 실시간 2모델 앙상블(Gemma+Qwen30B, 동일 가중치, 게이트 0.1, 1.2초): 정밀도 0.67·재현율 0.25, p95 1.1~1.2초로 Gemma 단독(1.0·0.25~0.38)보다 나빠 채택하지 않았다(실시간은 Gemma만). 서버는 셋(`tone-llm` 11434 SEED, `tone-llm-fast` 11435, `tone-llm-detail` 11436).
 - **실시간 = 로컬 Gemma3-4B 짧은 출력(`tone_fast`, P-12).** 실시간 게이트 0.3 → 0.1(0.3이면 pilot 요청이 전부 멈췄다). 실시간에서 SEED·NVIDIA 맥락·말투 전문가를 뺐다(SEED 정밀도·재현율 0, NVIDIA는 1.2초에 못 옴). 프로토타입 8쌍 실제 평가: 0/0 → 정밀도 1.0·재현율 0.38, p95 0.87~1.0초(`eval/results/2026-10-31-p12-realtime-bakeoff.txt`). **mock baseline을 다시 잡았다(mock만): 정밀도 0.83→0.5, 재현율 0.62→0.12, 맥락 구분 4/8→0/8.** 옛 숫자는 실시간 경로의 mock 맥락 전문가에서 나왔는데 실시간에 맥락 전문가가 없어져서 구조가 달라졌다(mock_rules를 고쳐 숫자를 올리지 않는다). 위 실제 측정(정밀도 1.0·재현율 0.38·p95 0.87~1.0초, n=16)은 게이트가 아니다. GPU가 꺼지면 실시간은 NVIDIA로 폴백하지 않고 기권한다. Gemma 라이선스는 Gemma Terms of Use. 서버는 둘(`tone-llm` 11434 SEED, `tone-llm-fast` 11435 Gemma).
 - 실제 대화(가린 문장)는 NVIDIA API 카탈로그 무료 등급으로 간다 — 파일럿을 위한 의도된 결정(원 설계 ARCHITECTURE의 공급자 선택), [NVIDIA API Trial 약관](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf)(내용은 사람이 확인 필요), Masker가 이름·개인정보를 먼저 가린다(규칙 16).
 
@@ -278,7 +278,7 @@ flowchart LR
 ## 9. 미뤄 둔 것 (파일럿 전에 중요한 것만)
 
 - (P-12) 실시간 비교 평가는 8쌍(n=16)이라 너무 작다 — 재현율 0.38이 실제인지는 T-16 30쌍 뒤에 다시 본다. 경고 기준 `alert_threshold` 0.5는 정밀도와 재현율의 맞바꿈(정밀도 0.56 / 재현율 0.62)이라 정밀도를 우선할지 사람이 정한다.
-- (P-07) 실시간 재현율이 낮다(8쌍 중 1): 맥락 전문가(NVIDIA)가 1.2초 안에 못 와서 SEED 1.5B 혼자 판단한다. 후보 — 학교 GPU의 빈 카드에 더 큰 로컬 맥락 모델(7~14B Q4), nemotron `enable_thinking: false`(공급자에 모델별 요청 옵션 추가, ~1.1초), 실시간 게이트 기준값 조정. 대조 세트 30쌍(T-16) 뒤에 비교해서 고른다.
+- (P-07) 실시간 재현율이 낮다(8쌍 중 1): 맥락 전문가(NVIDIA)가 1.2초 안에 못 와서 SEED 1.5B 혼자 판단한다. 후보 — GPU 서버의 빈 카드에 더 큰 로컬 맥락 모델(7~14B Q4), nemotron `enable_thinking: false`(공급자에 모델별 요청 옵션 추가, ~1.1초), 실시간 게이트 기준값 조정. 대조 세트 30쌍(T-16) 뒤에 비교해서 고른다.
 - (P-07) 엔진 시작 때 JWKS 미리 받기가 1초 제한에 걸린다(eu-west-1, 첫 TLS 연결). 첫 요청 때 다시 받으니 로그인은 된다. 서울 pilot 프로젝트면 사라질 것.
 - (P-06) deepseek-v4.1-flash(500·시간 초과)·kimi-k3(카탈로그에 없음)·kimi-k2.6(404)·mistral-large-4(시간 초과)를 나중에 다시 확인(`GET /v1/models` + models.yaml로 5역할 측정). 실시간 말투 전문가가 1.2초에 못 맞춰 기권이 많다 — 모델별 요청 옵션(`chat_template_kwargs: {enable_thinking: false}`로 nemotron 추론 끄기, 측정 ~1.1초)을 공급자에 더할지, 더 빠른 모델/로컬 모델을 쓸지 사람이 결정.
 - (T-02 뒤) 초대·멤버 상한의 동시성은 추론만 했다 — 실제 Postgres에서 경쟁 테스트. `_platform.sql`을 실제 프로젝트에서 재확인(Realtime을 먼저 켰으면 `alter publication` 실패). Storage 업로드는 `upsert: false`.

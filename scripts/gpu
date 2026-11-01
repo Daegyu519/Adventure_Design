@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # 사용법: scripts/gpu up|down [--force]|status
-# 학교 GPU 서버의 로컬 모델(Gemma :11435, 선택 Qwen3-30B :11436, 선택 판별기 tone-clf :11481)을 쓸 때만 켠다. SEED(:11434)는 더는 안 띄운다(P-28).
+# GPU 서버의 로컬 모델(Gemma :11435, 선택 Qwen3-30B :11436, 선택 판별기 tone-clf :11481)을 쓸 때만 켠다. SEED(:11434)는 더는 안 띄운다(P-28).
 #   up:     서버에 모델 서버를 띄우고(각각 가장 한가한 GPU) 이 컴퓨터 127.0.0.1로 ssh 터널을 연다.
 #   down:   터널을 닫고 서버 프로세스를 끈다(공유 GPU 반납). 파일럿 엔진(tone-engine)이 떠 있으면 llama-server는 두고 터널만 닫는다(--force면 끈다).
 #   status: 서버·터널·GPU 상태.
 # 엔진은 USE_LOCAL_MODEL=1일 때 models.yaml의 local_fast·local_detail·classifiers를 쓴다. Gemma 카드가 바빠지면: ssh tone-gpu 'bash -s -- relocate-fast' < deploy/school-gpu/up.sh
-# 접속은 ~/.ssh/config의 Host(기본 tone-gpu, GPU_SSH로 바꿈), 키 인증만. 서버 한 번 준비는 README "학교 GPU 서버".
+# 접속은 ~/.ssh/config의 Host(기본 tone-gpu, GPU_SSH로 바꿈), 키 인증만. 서버 한 번 준비는 docs/OPERATIONS.md "GPU 서버".
 set -euo pipefail
 H="${GPU_SSH:-tone-gpu}"
 SOCK="${TMPDIR:-/tmp}/tone-gpu-${USER:-me}.sock"

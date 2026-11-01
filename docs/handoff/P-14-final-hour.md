@@ -69,7 +69,7 @@
 
 ## C. 추가 작업 결과
 
-- 원본에서 냉담 관련 어휘를 가진 **미검수 후보 724개(train650/validation74)**를 서버 `private-review-queue/`에 보존했다. 모두 uncertain/pending/is_training_data=false다. 인용·부정·타인의 행동 설명일 수 있어 양성으로 자동 확정하지 않았다. 원문은 학교 서버에만 있으며 전달 ZIP·Git에는 없다.
+- 원본에서 냉담 관련 어휘를 가진 **미검수 후보 724개(train650/validation74)**를 서버 `private-review-queue/`에 보존했다. 모두 uncertain/pending/is_training_data=false다. 인용·부정·타인의 행동 설명일 수 있어 양성으로 자동 확정하지 않았다. 원문은 GPU 서버에만 있으며 전달 ZIP·Git에는 없다.
 - **재학습하지 않았다.** 새로 타당성이 확인된 레이블은 0개, 확대한 독립 검증 그룹도 0개다. 원래 2개보다 충분한 검증 그룹과 다양한 신뢰 가능한 사례라는 조건을 충족하지 않았다. 규칙을 느슨하게 하거나 ChatGPT·Claude 레이블을 넣어 수를 채우지 않았다.
 - 구현 수정의 최소 검증으로 generic Fast regression, tiny v2 학습→저장→재로드→TorchScript와 epoch 기록을 시험했다. 새로운 실제 KcELECTRA 성능 결과는 아니다.
 - **추가 진단 실험 1회:** 기존 검증 6행·2그룹에서 실제 맥락 / context와 last_them을 모두 제거 / 같은 그룹의 다른 원본 맥락을 비교했다. relation과 답장은 유지했다.

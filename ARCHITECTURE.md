@@ -91,7 +91,7 @@ tone-chat/
     prompts/*.md
     tests/
   supabase/
-    migrations/           표 · RLS · 함수 (이름에 _platform이 붙은 파일은 실제 Supabase에서만). DB 웹훅은 여기 없고 대시보드 Database → Webhooks에서 만든다(README)
+    migrations/           표 · RLS · 함수 (이름에 _platform이 붙은 파일은 실제 Supabase에서만). DB 웹훅은 여기 없고 대시보드 Database → Webhooks에서 만든다(docs/OPERATIONS.md)
     tests/                PGlite로 RLS 테스트 (Docker 없이)
     seed.sql
   eval/
@@ -422,7 +422,7 @@ risk = sigmoid( w0 + w1·prior + w2·Σk(αk·negk)/Σk(αk) + w3·violation + w
 - 이름 목록은 `.env.example`(엔진·협업)과 `apps/mobile/.env.example`(앱)에 있다. 값은 `.env`(git 밖)에만 넣는다.
 - **앱 변수는 `apps/mobile/.env`에 둔다.** Expo는 프로젝트 루트(`apps/mobile`)의 dotenv 파일만 읽으므로, 저장소 루트 `.env`에 채워도 앱의 `supabase`는 `null`로 남는다(개발 중에는 콘솔 경고가 뜬다). 엔진은 `--env-file ../.env`로 루트 `.env`를 읽는다. 값을 바꾼 뒤에는 `npx expo start -c`.
 - 웹 푸시 공개키는 앱이 `EXPO_PUBLIC_VAPID_PUBLIC_KEY`로 받아 구독에 쓴다. 개인키(`VAPID_PRIVATE_KEY`)와 `VAPID_SUBJECT`는 엔진에만 둔다.
-- dev Supabase는 클라우드 프로젝트(서울 리전)다. 로컬 Supabase(Docker)는 쓰지 않는다. 로컬 SEED 말투 전문가는 학교 GPU 서버(P100)의 llama-server에서 돌리고, 쓸 때만 ssh 터널로 연결한다(`scripts/gpu`, README "학교 GPU 서버"). DB 테스트는 PGlite로 한다(`supabase/tests`). pilot 프로젝트는 나중에 따로 만든다.
+- dev Supabase는 클라우드 프로젝트(서울 리전)다. 로컬 Supabase(Docker)는 쓰지 않는다. 로컬 SEED 말투 전문가는 GPU 서버(P100)의 llama-server에서 돌리고, 쓸 때만 ssh 터널로 연결한다(`scripts/gpu`, docs/OPERATIONS.md "GPU 서버"). DB 테스트는 PGlite로 한다(`supabase/tests`). pilot 프로젝트는 나중에 따로 만든다.
 - dev 웹훅은 `cloudflared` 임시 터널로 로컬 엔진에 닿게 한다. pilot은 T-29의 배포 서버로 보낸다.
 - 키가 없으면 `FORCE_MOCK`으로 엔진·평가·앱을 모두 돌린다. `FORCE_MOCK` 없이 키가 없으면 엔진은 뜨지만 그 모델은 쓰이지 않고(시작 경고, `/health` down) 결과 없음으로 기권한다.
 - **엔진은 프로세스 하나(`uvicorn --workers 1`)로 돌린다.** 사용자별 요청 한도, 작업 큐와 멱등 키, 주간 상한 확인, JWKS 캐시가 프로세스 메모리에 있다. `MIRROR_SECRET`은 배포에서 필수(없으면 프로세스마다 임의 키라 재시작·여러 프로세스에서 거울 카드 서명이 깨진다). 배포 뒤 `/health`에서 `nvidia:*`가 up인지 확인한다. 프로세스를 늘리려면 한도·큐·잠금을 Redis/DB로 옮긴다.
