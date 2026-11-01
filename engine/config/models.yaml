@@ -27,6 +27,11 @@ providers:
     api_key_env: LOCAL_API_KEY
     rpm: 600
     allow_no_key: true
+  local_detail:
+    base_url: http://localhost:11436/v1  # 상세·거울용 Qwen3-30B-A3B llama-server(학교 GPU, up.sh llm·scripts/gpu up). P-24
+    api_key_env: LOCAL_API_KEY
+    rpm: 600
+    allow_no_key: true
   mock:
     rpm: 100000
 
@@ -44,12 +49,14 @@ experts:
   - {id: ctx_deep,  role: context,  model: nvidia:nvidia/nemotron-3.5-bolt-e4b,              prompt: context,  paths: [detail, mirror]}
   - {id: tone_ds,   role: tone,     model: nvidia:poolside/laguna-xs-2.1, prompt: tone,     paths: [detail, mirror], weight: 1.0}
   - {id: tone_kimi, role: tone,     model: nvidia:nvidia/nemotron-3.5-bolt-e4b,              prompt: tone,     paths: [detail, mirror], weight: 1.0, mock: tone_alt}
-  - {id: tone_hcx,  role: tone,     model: local:naver-hyperclovax/HyperCLOVAX-SEED-Text-Instruct-1.5B, prompt: tone, paths: [detail, mirror], weight: 1.0, optional: true}
+  # 상세·거울 로컬 말투: Qwen3-30B-A3B-Instruct-2507(IQ3_XXS, Apache-2.0). 상세 풀 프롬프트 P 0.75·R 0.38, 평균 1.4초(SEED 1.5B는 0/0). 실시간 앙상블은 정밀도가 떨어져 안 씀(P-24). id는 옛 이름의 흔적
+  - {id: tone_hcx,  role: tone,     model: local_detail:qwen3-30b-a3b, prompt: tone, paths: [detail, mirror], weight: 1.0, optional: true}
   - {id: judge,     role: judge,    model: nvidia:nvidia/nemotron-3.5-bolt-e4b,              prompt: judge,    paths: [detail, mirror]}
   - {id: rewrite,   role: rewrite,  model: nvidia:poolside/laguna-xs-2.1, prompt: rewrite,  paths: [detail, mirror]}
   - {id: feedback,  role: feedback, model: nvidia:nvidia/nemotron-3.5-bolt-e4b,              prompt: feedback, paths: [async]}
 fallback:   # 실제 문장이 지나가므로 gemini 금지
   local_fast:gemma-3-4b-it: [mock:auto]   # NVIDIA로 폴백하지 않는다: 학교 GPU가 꺼져 있으면 실시간 힌트는 기권(공유 NVIDIA 40rpm을 안 쓴다). 운영(force_mock 아님)에서 mock은 건너뛴다
+  local_detail:qwen3-30b-a3b: [mock:auto]
   nvidia:poolside/laguna-xs-2.1: [nvidia:nvidia/nemotron-3.5-bolt-e4b, mock:auto]
   nvidia:nvidia/nemotron-3.5-bolt-e4b: [nvidia:poolside/laguna-xs-2.1, mock:auto]
 paths:

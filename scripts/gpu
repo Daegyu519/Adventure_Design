@@ -21,10 +21,12 @@ up)
   # 터널은 항상 새로 연다(11435 전달이 없는 옛 터널을 재사용하지 않는다). 남은 소켓 파일도 지운다.
   tunnel_up && ssh -S "$SOCK" -O exit "$H" 2>/dev/null || true
   rm -f "$SOCK"
-  ssh -f -N -M -S "$SOCK" -o BatchMode=yes -o ExitOnForwardFailure=yes -L "127.0.0.1:$PORT:127.0.0.1:11434" -L "127.0.0.1:11435:127.0.0.1:11435" "$H"
+  ssh -f -N -M -S "$SOCK" -o BatchMode=yes -o ExitOnForwardFailure=yes -L "127.0.0.1:$PORT:127.0.0.1:11434" -L "127.0.0.1:11435:127.0.0.1:11435" -L "127.0.0.1:11436:127.0.0.1:11436" "$H"
   for _ in $(seq 60); do
     if curl -sf "http://127.0.0.1:$PORT/health" >/dev/null && curl -sf "http://127.0.0.1:11435/health" >/dev/null; then
-      echo "ready: http://127.0.0.1:$PORT/v1 (SEED) and http://127.0.0.1:11435/v1 (Gemma)  (engine: USE_LOCAL_MODEL=1)"; exit 0
+      # 11436(Qwen3-30B 상세)은 선택: 맞는 GPU가 없으면 안 뜬다. 막지 않고 경고만.
+      curl -sf "http://127.0.0.1:11436/health" >/dev/null && d="and :11436 (Qwen3-30B)" || { d="(:11436 Qwen3-30B not up, optional: no free GPU or still loading)"; echo "warning: $d" >&2; }
+      echo "ready: http://127.0.0.1:$PORT/v1 (SEED) and http://127.0.0.1:11435/v1 (Gemma) $d (engine: USE_LOCAL_MODEL=1)"; exit 0
     fi
     sleep 1
   done
@@ -37,11 +39,11 @@ down)
   if [ "${2:-}" != --force ] && remote "tmux has-session -t tone-engine 2>/dev/null"; then
     echo "down: tunnel closed; tone-llm kept running because the pilot engine (tone-engine) uses it. Use 'down --force' to kill it anyway."
   else
-    remote "tmux kill-session -t tone-llm 2>/dev/null; tmux kill-session -t tone-llm-fast 2>/dev/null; true"
+    remote "tmux kill-session -t tone-llm 2>/dev/null; tmux kill-session -t tone-llm-fast 2>/dev/null; tmux kill-session -t tone-llm-detail 2>/dev/null; true"
     echo "down: tunnel closed, GPU released"
   fi ;;
 status)
-  remote "for t in tone-llm tone-llm-fast; do tmux has-session -t \$t 2>/dev/null && echo \"\$t: running\" || echo \"\$t: stopped\"; done; nvidia-smi --query-gpu=index,memory.used,utilization.gpu --format=csv,noheader"
+  remote "for t in tone-llm tone-llm-fast tone-llm-detail; do tmux has-session -t \$t 2>/dev/null && echo \"\$t: running\" || echo \"\$t: stopped\"; done; nvidia-smi --query-gpu=index,memory.used,utilization.gpu --format=csv,noheader"
   if tunnel_up; then echo "tunnel: open (127.0.0.1:$PORT)"; else echo "tunnel: closed"; fi
   curl -sf "http://127.0.0.1:$PORT/health" >/dev/null && echo "local :$PORT: ok" || echo "local :$PORT: not answering" ;;
 *) echo "usage: $0 up|down [--force]|status" >&2; exit 2 ;;
