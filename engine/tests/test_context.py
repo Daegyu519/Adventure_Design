@@ -73,6 +73,15 @@ def test_image_only_becomes_placeholder(fake):
     assert ctx.convo.reply_to.text == "(사진)"
 
 
+def test_file_only_becomes_placeholder(fake):
+    me, you = fake.add_user("김지은"), fake.add_user("박민수")
+    room = fake.add_room("direct", "친구", [me, you])
+    doc = fake.add_message(room, you, "", file_path=f"{room}/a.pdf")
+    ctx = _load(fake, room, me, reply_to=doc)
+    assert ctx.convo.turns[0].text == "(파일)"
+    assert ctx.convo.reply_to.text == "(파일)"
+
+
 def test_patterns_respect_active_from(fake):
     me, you = fake.add_user("김지은"), fake.add_user("박민수")
     room = fake.add_room("group", "친구", [me, you, fake.add_user("최수아")])

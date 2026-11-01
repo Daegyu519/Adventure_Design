@@ -13,6 +13,7 @@ import { VentSheet } from '../../../components/VentSheet';
 import { canVent } from '../../../lib/vent';
 import { Button } from '../../../components/Button';
 import { NavBar } from '../../../components/NavBar';
+import { pickAndSendFile } from '../../../lib/files';
 import { pickAndSendImage } from '../../../lib/images';
 import { activeMentionQuery, extractMentions, insertMention, mentionCandidates } from '../../../lib/mentions';
 import { SheetSaySlot, useAnnounce } from '../../../lib/announce';
@@ -228,7 +229,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
     if (!messages.length) return;
     const top = messages[messages.length - 1];
     if (seen.current !== null && top.id > seen.current && top.sender_id !== me) {
-      (sheetSay.current ?? say)(`${names.get(top.sender_id) ?? '상대'}: ${top.text || '사진'}`); // 시트가 열려 있으면 그 시트 영역으로
+      (sheetSay.current ?? say)(`${names.get(top.sender_id) ?? '상대'}: ${top.text || (top.image_path ? '사진' : top.file_name ? `파일: ${top.file_name}` : '')}`); // 시트가 열려 있으면 그 시트 영역으로
     }
     seen.current = top.id;
   }, [messages, me, names, say]);
@@ -276,6 +277,30 @@ function RoomBody({ id, me }: { id: string; me: string }) {
       if (!unmounted.current) {
         setPhotoSending(false);
         // 웹: 파일 선택창이 닫히면(취소 포함) 포커스가 body로 떨어지지 않게 입력창으로
+        if (Platform.OS === 'web') inputRef.current?.focus();
+      }
+    }
+  }, [id, send, say, fail]);
+
+  const fileBusy = useRef(false);
+  const [fileSending, setFileSending] = useState(false);
+  const pickFile = useCallback(async () => {
+    if (fileBusy.current) return;
+    fileBusy.current = true;
+    setSendError(null);
+    try {
+      const r = await pickAndSendFile(id, send, () => {
+        setFileSending(true);
+        say('파일 보내는 중');
+      });
+      if (unmounted.current) return;
+      if (r === 'sent') say('파일 보냄');
+      else if (r === 'toolarge') fail('파일이 너무 커요 (20MB 이하)');
+      else if (r === 'failed') fail('파일을 보내지 못했어요');
+    } finally {
+      fileBusy.current = false;
+      if (!unmounted.current) {
+        setFileSending(false);
         if (Platform.OS === 'web') inputRef.current?.focus();
       }
     }
@@ -460,6 +485,8 @@ function RoomBody({ id, me }: { id: string; me: string }) {
           onChangeText={changeDraft}
           onPickImage={() => void pickImage()}
           photoBusy={photoSending}
+          onPickFile={() => void pickFile()}
+          fileBusy={fileSending}
           typingLabel={typing.label}
           mentionCandidates={candidates}
           onSelectionChange={(c) => {

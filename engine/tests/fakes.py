@@ -80,10 +80,10 @@ class FakeRepo:
         self.members[rid] = {m: False for m in members}
         return rid
 
-    def add_message(self, room_id: UUID, sender_id: UUID, text: str, *, image_path: str | None = None,
+    def add_message(self, room_id: UUID, sender_id: UUID, text: str, *, image_path: str | None = None, file_path: str | None = None,
                     reply_to: int | None = None, at: datetime | None = None) -> int:
         mid = next(self._ids)
-        self.messages[mid] = Msg(mid, room_id, sender_id, text, image_path, reply_to, at or _now())
+        self.messages[mid] = Msg(mid, room_id, sender_id, text, image_path, reply_to, at or _now(), file_path)
         return mid
 
     def set_muted(self, room_id: UUID, user_id: UUID) -> None:
@@ -259,7 +259,7 @@ class FakeRepo:
         if not others:
             return None
         x = max(others, key=lambda x: (x.id == m.reply_to, x.created_at, x.id))
-        return context_text(x.text, x.image_path)
+        return context_text(x.text, x.image_path, x.file_path)
 
     async def mirror_refs(self, user_id: UUID, before: datetime) -> set[str]:
         return {f"{a['kind']}|{a['card_ref']}" for a in self.mirror_attempts

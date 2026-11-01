@@ -5,7 +5,7 @@ import { freshTopic, watchStatus } from './realtime';
 import { supabase } from './supabase';
 import type { TablesInsert } from './types/db';
 
-export type SendInput = Pick<TablesInsert<'messages'>, 'text' | 'reply_to' | 'image_path' | 'mentions'>;
+export type SendInput = Pick<TablesInsert<'messages'>, 'text' | 'reply_to' | 'image_path' | 'file_path' | 'file_name' | 'file_size' | 'mentions'>;
 export type SendError = Error & { status?: number };
 
 // 방 하나의 메시지. 모든 경로(첫 페이지, Realtime, 재연결 따라잡기, 이전 페이지, 내 insert 응답)가 mergeMessages 한 길로 들어온다.

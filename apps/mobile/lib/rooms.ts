@@ -10,7 +10,7 @@ export type RoomListItem = {
   relation: string;
   muted: boolean;
   unread: number;
-  last: { text: string; isImage: boolean; created_at: string } | null;
+  last: { text: string; isImage: boolean; fileName: string | null; created_at: string } | null;
   created_at: string;
 };
 
@@ -54,7 +54,7 @@ export async function fetchRoomList(me: string): Promise<RoomListItem[]> {
       let unreadQ = c.from('messages').select('id', { count: 'exact', head: true }).eq('room_id', room.id).neq('sender_id', me);
       if (mm.last_read_at) unreadQ = unreadQ.gt('created_at', mm.last_read_at);
       const [lastQ, unread] = await Promise.all([
-        c.from('messages').select('text,image_path,created_at').eq('room_id', room.id).order('id', { ascending: false }).limit(1),
+        c.from('messages').select('text,image_path,file_name,created_at').eq('room_id', room.id).order('id', { ascending: false }).limit(1),
         unreadQ,
       ]);
       if (lastQ.error) throw lastQ.error;
@@ -67,7 +67,7 @@ export async function fetchRoomList(me: string): Promise<RoomListItem[]> {
         relation: room.relation,
         muted: mm.muted,
         unread: unread.count ?? 0,
-        last: l ? { text: l.text, isImage: !!l.image_path && !l.text, created_at: l.created_at } : null,
+        last: l ? { text: l.text, isImage: !!l.image_path && !l.text, fileName: l.text ? null : l.file_name, created_at: l.created_at } : null,
         created_at: room.created_at,
       };
     }),

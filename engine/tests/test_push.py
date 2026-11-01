@@ -196,12 +196,14 @@ def test_notice_texts(fake):
     d = asyncio.run(fake.room(room_id))
     g = asyncio.run(fake.room(fake.add_room("group", "팀원", [a], title="팀플방")))
 
-    def msg(text, image=None):
-        return asyncio.run(fake.message(fake.add_message(room_id, a, text, image_path=image)))
+    def msg(text, image=None, file=None):
+        return asyncio.run(fake.message(fake.add_message(room_id, a, text, image_path=image, file_path=file)))
 
     assert build_notice(msg("hi"), d, "민수") == {"title": "민수", "body": "hi", "url": f"/room/{room_id}"}
     assert build_notice(msg("hi"), g, "민수")["title"] == "팀플방 · 민수"
     assert build_notice(msg("", "chat-images/x.jpg"), d, "민수")["body"] == "사진을 보냈어요"
+    assert build_notice(msg("", file=f"{room_id}/x.pdf"), d, "민수")["body"] == "파일을 보냈어요"
+    assert build_notice(msg("같이 봐요", file=f"{room_id}/x.pdf"), d, "민수")["body"] == "같이 봐요"
     long = build_notice(msg("가" * 120), d, "민수")["body"]
     assert long == "가" * 100 + "…" and len(long) == 101
     assert build_notice(msg("가" * 100), d, "민수")["body"] == "가" * 100  # 딱 100자는 그대로

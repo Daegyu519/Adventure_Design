@@ -78,12 +78,12 @@ export default function Chats() {
           renderItem={({ item }) => (
             <ChatRow
               title={item.title}
-              preview={item.last ? (item.last.isImage ? '사진' : item.last.text) : '아직 메시지가 없어요'}
+              preview={item.last ? (item.last.isImage ? '사진' : item.last.fileName ? `파일: ${item.last.fileName}` : item.last.text) : '아직 메시지가 없어요'}
               time={item.last ? formatStamp(item.last.created_at) : undefined}
               unread={item.unread}
               muted={item.muted}
               onPress={() => router.push(`/room/${item.id}` as Href)}
-              accessibilityLabel={`${item.title}${item.unread ? `, 안 읽은 메시지 ${item.unread}개` : ''}${item.muted ? ', 알림 꺼짐' : ''}${item.last ? `, ${item.last.isImage ? '사진' : item.last.text}` : ''}`}
+              accessibilityLabel={`${item.title}${item.unread ? `, 안 읽은 메시지 ${item.unread}개` : ''}${item.muted ? ', 알림 꺼짐' : ''}${item.last ? `, ${item.last.isImage ? '사진' : item.last.fileName ? `파일: ${item.last.fileName}` : item.last.text}` : ''}`}
             />
           )}
         />

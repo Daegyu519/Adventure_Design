@@ -60,7 +60,7 @@ def build_notice(msg: Msg, room: Room, sender_name: str) -> dict:
     """Expo와 웹이 같은 모양: {title, body, url}. 본문은 짧은 미리보기."""
     title = f"{room.title} · {sender_name}" if room.kind == "group" and room.title else sender_name
     if not msg.text:
-        body = "사진을 보냈어요"
+        body = "파일을 보냈어요" if msg.file_path else "사진을 보냈어요"
     elif len(msg.text) > PREVIEW_CHARS:
         body = msg.text[:PREVIEW_CHARS] + "…"
     else:

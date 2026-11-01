@@ -1,6 +1,6 @@
 import { mergeMessages, shouldMarkRead, tsMicros, type Msg } from '../messages';
 
-const m = (id: number): Msg => ({ id, room_id: 'r', sender_id: 'u', text: `m${id}`, image_path: null, reply_to: null, mentions: [], created_at: '2026-10-27T01:32:17.000000+00:00' });
+const m = (id: number): Msg => ({ id, room_id: 'r', sender_id: 'u', text: `m${id}`, image_path: null, file_path: null, file_name: null, file_size: null, reply_to: null, mentions: [], created_at: '2026-10-27T01:32:17.000000+00:00' });
 const ids = (xs: Msg[]) => xs.map((x) => x.id);
 const range = (a: number, b: number) => Array.from({ length: b - a + 1 }, (_, i) => m(a + i));
 

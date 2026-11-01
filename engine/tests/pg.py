@@ -115,12 +115,13 @@ class PgSeeder:
             await self.conn.execute("insert into public.room_members(room_id, user_id) values ($1, $2)", rid, m)
         return rid
 
-    async def add_message(self, room_id: UUID, sender_id: UUID, text: str, *, image_path: str | None = None,
+    async def add_message(self, room_id: UUID, sender_id: UUID, text: str, *, image_path: str | None = None, file_path: str | None = None,
                           reply_to: int | None = None, at: datetime | None = None) -> int:
         return await self.conn.fetchval(
-            """insert into public.messages(room_id, sender_id, text, image_path, reply_to, created_at)
-               values ($1, $2, $3, $4, $5, coalesce($6, now())) returning id""",
-            room_id, sender_id, text, image_path, reply_to, at)
+            """insert into public.messages(room_id, sender_id, text, image_path, file_path, file_name, file_size, reply_to, created_at)
+               values ($1, $2, $3, $4, $5, case when $5::text is null then null else 'x.pdf' end,
+                       case when $5::text is null then null else 10 end, $6, coalesce($7, now())) returning id""",
+            room_id, sender_id, text, image_path, file_path, reply_to, at)
 
     async def set_muted(self, room_id: UUID, user_id: UUID) -> None:
         await self.conn.execute(

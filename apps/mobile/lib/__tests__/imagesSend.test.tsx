@@ -1,4 +1,5 @@
 import { act } from 'react';
+import { Platform } from 'react-native';
 import { createRoot } from 'test-renderer';
 
 import { clearSignedUrls, MAX_IMAGE_BYTES, pickAndSendImage, useSignedUrl } from '../images';
@@ -99,6 +100,78 @@ test('file over 5 MB: "toolarge", nothing uploaded', async () => {
   expect(mockUpload).not.toHaveBeenCalled();
 });
 
+// 웹: 캔버스로 긴 변 2048 이하 JPEG로 줄여 올린다
+describe('web conversion', () => {
+  const g = globalThis as Record<string, unknown>;
+  let draw: jest.Mock;
+  let cv: { width: number; height: number };
+  let blob: { size: number };
+  const web = (nw: number, nh: number, loads = true) => {
+    draw = jest.fn();
+    blob = { size: 1000 };
+    g.Image = class {
+      naturalWidth = nw;
+      naturalHeight = nh;
+      onload: () => void = () => {};
+      onerror: () => void = () => {};
+      set src(_: string) {
+        setTimeout(() => (loads ? this.onload() : this.onerror()));
+      }
+    };
+    g.document = {
+      createElement: () => (cv = { width: 0, height: 0, getContext: () => ({ fillRect: jest.fn(), drawImage: draw }), toBlob: (cb: (b: unknown) => void, t: string, q: number) => (g.toBlobArgs = [t, q], cb(blob)) } as never),
+    };
+  };
+  beforeEach(() => (Platform.OS = 'web'));
+  afterEach(() => {
+    Platform.OS = 'ios';
+    delete g.Image;
+    delete g.document;
+  });
+
+  test('big HEIC is scaled to 2048 long side, uploaded as image/jpeg .jpg', async () => {
+    web(4032, 3024);
+    mockPick = asset('image/heic', 9 * 1024 * 1024);
+    const send = jest.fn().mockResolvedValue({});
+    expect(await pickAndSendImage('r1', send)).toBe('sent');
+    expect([cv.width, cv.height]).toEqual([2048, 1536]);
+    expect(g.toBlobArgs).toEqual(['image/jpeg', 0.82]);
+    const [, path, body, o] = mockUpload.mock.calls[0];
+    expect(path).toMatch(/^r1\/[A-Za-z0-9_-]+\.jpg$/);
+    expect(body).toBe(blob);
+    expect(o).toEqual({ contentType: 'image/jpeg', upsert: false });
+    expect(send).toHaveBeenCalledWith({ text: '', image_path: path });
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  test('small image is never upscaled', async () => {
+    web(800, 600);
+    mockPick = asset('image/png');
+    await pickAndSendImage('r1', jest.fn().mockResolvedValue({}));
+    expect([cv.width, cv.height]).toEqual([800, 600]);
+  });
+
+  test('converted blob over 5 MB: toolarge', async () => {
+    web(100, 100);
+    blob.size = 6 * 1024 * 1024;
+    mockPick = asset('image/jpeg');
+    expect(await pickAndSendImage('r1', jest.fn())).toBe('toolarge');
+    expect(mockUpload).not.toHaveBeenCalled();
+  });
+
+  test('decode failure falls back to the original bytes when supported, else unsupported', async () => {
+    web(0, 0, false);
+    mockPick = asset('image/png', 1000);
+    const send = jest.fn().mockResolvedValue({});
+    expect(await pickAndSendImage('r1', send)).toBe('sent');
+    expect(mockUpload.mock.calls[0][3]).toEqual({ contentType: 'image/png', upsert: false });
+    mockPick = asset('image/heic', 1000);
+    expect(await pickAndSendImage('r1', send)).toBe('unsupported');
+    mockPick = asset('image/png', MAX_IMAGE_BYTES + 1);
+    expect(await pickAndSendImage('r1', send)).toBe('toolarge');
+  });
+});
+
 let url: string | null = '';
 let retry: () => void = () => {};
 let failed = false;
@@ -190,4 +263,20 @@ test('clearSignedUrls drops cached bearer URLs', async () => {
   await act(async () => root.render(<Probe path="r1/d.jpg" />));
   await act(async () => root.render(<Probe path="r1/c.jpg" />));
   expect(mockSign.mock.calls.filter((c) => c[1] === 'r1/c.jpg')).toHaveLength(2);
+});
+
+test('useSignedUrl: other bucket + download option; cache keyed by bucket and path', async () => {
+  mockSign.mockResolvedValue({ data: { signedUrl: 'https://s/f' }, error: null });
+  function P({ bucket }: { bucket?: 'chat-files' }) {
+    url = useSignedUrl('r1/same', bucket ? { bucket, download: '보고서.pdf' } : undefined).url;
+    return null;
+  }
+  const root = newRoot();
+  await act(async () => root.render(<P bucket="chat-files" />));
+  expect(mockSign).toHaveBeenCalledWith('chat-files', 'r1/same', 3600, { download: '보고서.pdf' });
+  expect(url).toBe('https://s/f');
+  mockSign.mockResolvedValue({ data: { signedUrl: 'https://s/img' }, error: null });
+  await act(async () => root.render(<P />));
+  expect(mockSign).toHaveBeenLastCalledWith('chat-images', 'r1/same', 3600);
+  expect(url).toBe('https://s/img');
 });

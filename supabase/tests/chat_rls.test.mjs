@@ -193,6 +193,32 @@ test('rooms and invites are written only through functions', async () => {
   await assert.rejects(invite(db, a, room), /not_group/) // 1:1 방에는 초대 못 함
 })
 
+test('message files: all-or-none fields, own-room path, name/size limits, one attachment, content required', async () => {
+  const { db, a, b, c } = await abc()
+  const r1 = await direct(db, a, b)
+  const r2 = await direct(db, a, c)
+  const ins = (text, img, path, name, size) => as(db, a,
+    'insert into public.messages(room_id, sender_id, text, image_path, file_path, file_name, file_size) values ($1, $2, $3, $4, $5, $6, $7) returning id',
+    [r1, a, text, img, path, name, size])
+  assert.ok((await ins('', null, `${r1}/1-abc.pdf`, '보고서.pdf', 340000)).rows[0].id) // 글 없는 파일 메시지
+  assert.ok((await ins('같이 봐요', null, `${r1}/2-abc`, 'a'.repeat(200), 20971520)).rows[0].id)
+  await assert.rejects(ins('', null, `${r1}/x.pdf`, null, null), /messages_file_all_or_none/) // 일부만
+  await assert.rejects(ins('', null, null, 'a.pdf', 10), /messages_file_all_or_none/)
+  await assert.rejects(ins('hi', null, null, null, 10), /messages_file_all_or_none/)
+  await assert.rejects(ins('', null, `${r2}/x.pdf`, 'a.pdf', 10), /messages_file_path_room/) // 다른 방 폴더
+  await assert.rejects(ins('', null, 'x.pdf', 'a.pdf', 10), /messages_file_path_room/)
+  await assert.rejects(ins('', null, `${r1}/a/b.pdf`, 'a.pdf', 10), /messages_file_path_room/)
+  await assert.rejects(ins('', null, `${r1}/a..b.pdf`, 'a.pdf', 10), /messages_file_path_room/)
+  await assert.rejects(ins('', null, `${r1}/x.pdf`, 'a\u0007b.pdf', 10), /messages_file_name_ok/) // 제어 문자
+  await assert.rejects(ins('', null, `${r1}/x.pdf`, 'a\nb.pdf', 10), /messages_file_name_ok/)
+  await assert.rejects(ins('', null, `${r1}/x.pdf`, 'a'.repeat(201), 10), /messages_file_name_ok/)
+  await assert.rejects(ins('', null, `${r1}/x.pdf`, '', 10), /messages_file_name_ok/)
+  await assert.rejects(ins('', null, `${r1}/x.pdf`, 'a.pdf', 0), /messages_file_size_ok/)
+  await assert.rejects(ins('', null, `${r1}/x.pdf`, 'a.pdf', 20971521), /messages_file_size_ok/)
+  await assert.rejects(ins('', `${r1}/p.jpg`, `${r1}/x.pdf`, 'a.pdf', 10), /messages_one_attachment/) // 사진+파일
+  await assert.rejects(ins('', null, null, null, null), /messages_has_content/) // 빈 메시지
+})
+
 test('deleting a replied-to user keeps replies with reply_to null', async () => {
   const { db, a, b } = await abc()
   const room = await direct(db, a, b)
