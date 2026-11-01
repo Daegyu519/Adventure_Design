@@ -310,7 +310,7 @@ class Expert(Protocol):
 ```
 
 - `LLMExpert`(`experts/llm.py`): 프롬프트 + 라우터(사슬) + 출력 스키마 검사. role별 스키마(context → `ContextReading`, tone → `ToneReading`, judge → `JudgeOut`, rewrite → `RewriteSet`, feedback → `FeedbackResult`). confidence는 출력에 있으면 그 값, 없으면 1.0.
-- `ClassifierExpert`: KcELECTRA 같은 분류기. 같은 `ToneReading`을 돌려준다(T-18).
+- `ClassifierExpert` (P-14): KcELECTRA 이진 분류기는 별도 `ColdSignal(cold_score, model_id, latency_ms)`을 돌려준다. `cold_score`는 `negative`나 최종 `risk`와 다르며 `confidence`를 대체하지 않는다. `ToneReading`으로 변환하지 않는다. 선택적 최상위 `classifiers` 설정으로 `Registry.classifiers`에 별도 등록되며 기본 설정은 비활성이다. 실시간·상세 파이프라인과 L3는 이 목록을 호출하거나 집계하지 않는다. 연구 호출자는 이미 가려진 `ExpertRequest`와 deadline을 전달한다. 실제 경고 통합은 별도 검증 후 수행한다.
 - 레지스트리(`experts/registry.py`)는 경로·역할별로 쓸 전문가 목록을 설정 순서대로 만든다. `force_mock`인데 사슬에 mock이 없는 전문가, `optional`인데 첫 모델 공급자를 쓸 수 없는 전문가는 빠진다. 로드할 때 role, prompt 파일, 사슬의 공급자가 `providers`에 있는지, `mock:<이름>`이 `mock_rules`에 있는지 검사한다(실패하면 시작 실패).
 - `run_all`은 전문가를 동시에 돌리고, 시간 안에 못 온 전문가와 모든 모델이 실패한 전문가는 뺀다.
 

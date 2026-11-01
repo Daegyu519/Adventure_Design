@@ -15,3 +15,11 @@ supabase/.temp/
 
 # 파일럿 로컬 값(커밋하지 않는다)
 .env.pilot*
+
+# P-14 private data and trained artifacts
+ml/local/
+ml/runs/
+*.safetensors
+*.onnx
+model.ts
+*.pt

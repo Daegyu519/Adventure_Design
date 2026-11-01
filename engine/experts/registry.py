@@ -4,7 +4,7 @@ from __future__ import annotations
 import asyncio
 import os
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from harness import mock_rules
@@ -14,6 +14,7 @@ from harness.router import NoResult, Router
 
 from .base import Expert, ExpertRequest, ExpertResult
 from .llm import SCHEMAS, LLMExpert
+from .classifier import ClassifierExpert, load_classifiers
 
 
 def _check(e: dict, chain: list[str], providers: dict) -> None:
@@ -33,6 +34,7 @@ def _check(e: dict, chain: list[str], providers: dict) -> None:
 class Registry:
     router: Router
     experts: list[Expert]
+    classifiers: list[ClassifierExpert] = field(default_factory=list)
 
     @property
     def cfg(self) -> dict:
@@ -53,7 +55,8 @@ class Registry:
                 continue
             experts.append(LLMExpert(e["id"], e["role"], set(e["paths"]), float(e.get("weight", 1.0)),
                                      e["prompt"], router))
-        return cls(router, experts)
+        classifiers = load_classifiers(router.config.get("classifiers", []), Path(path).resolve().parent, force_mock)
+        return cls(router, experts, classifiers)
 
     def for_path(self, path: str, role: str) -> list[Expert]:
         return [e for e in self.experts if path in e.paths and e.role == role]

@@ -1,0 +1,7 @@
+{
+  "model": "beomi/KcELECTRA-base",
+  "revision": "681201a097b8120e6dd2a2e63a3e13d338736f88",
+  "max_length": 256,
+  "context_turns": 8,
+  "seed": 14
+}

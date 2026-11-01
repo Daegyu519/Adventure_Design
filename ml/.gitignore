@@ -1,0 +1,16 @@
+# All corpus/review/run artifacts stay off Git. No real examples in fixtures.
+.venv*/
+data/
+artifacts/
+runs/
+cache/
+*.jsonl
+*.csv
+*.zip
+*.pt
+*.pth
+*.bin
+*.safetensors
+*.onnx
+*.log
+model/

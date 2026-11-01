@@ -1,0 +1,10 @@
+# Merge this top-level key into a PRIVATE copy of models.yaml only for offline research.
+# No classifier is installed or enabled in the default models.yaml.
+classifiers:
+  - id: cold_binary
+    model_id: beomi/KcELECTRA-base
+    checkpoint: /root/p14-work/REPLACE/training/model
+    enabled: false
+    optional: true
+    device: cpu
+    paths: [realtime]
