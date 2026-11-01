@@ -60,6 +60,8 @@ flowchart LR
   Push --> App
 ```
 
+**더 자세한 그림**(전체 구성·실시간 힌트·상세 보기·웹훅/푸시·털어놓기/거울·데이터 모델·학교 GPU 배치·배포·개인정보 경계): [`docs/architecture-diagrams.md`](docs/architecture-diagrams.md)
+
 안전 원칙은 이렇다(전체 규칙은 [`CLAUDE.md`](CLAUDE.md)).
 
 - 이름과 개인정보는 모델을 부르기 전에 가린다.
