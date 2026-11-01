@@ -76,6 +76,18 @@ def test_production_detail_local_is_qwen30b():
     assert cfg["fallback"][e["model"]] == ["mock:auto"]
 
 
+def test_production_detail_hcx8():
+    """상세 HyperCLOVA X Omni 8B(P-29): tone_hcx8 → local_hcx8, optional, 가중치 0.5, 상세만(실시간은 p95 1.36초라 없음)."""
+    cfg = yaml.safe_load(DEFAULT_MODELS_PATH.read_text(encoding="utf-8"))
+    e = next(e for e in cfg["experts"] if e["id"] == "tone_hcx8")
+    assert e["model"].startswith("local_hcx8:") and e["optional"] is True and e["weight"] == 0.5
+    assert e["paths"] == ["detail"] and e["role"] == "tone"
+    assert cfg["providers"]["local_hcx8"]["base_url"].endswith(":11491/v1")
+    assert cfg["fallback"][e["model"]] == ["mock:auto"]
+    assert providers.available("local_hcx8", {}, {"USE_LOCAL_MODEL": "1"})
+    assert not providers.available("local_hcx8", {}, {})
+
+
 def test_paths_in_mock_mode():
     reg = make_registry()
     assert _ids(reg, "realtime", "tone") == ["tone_fast"]

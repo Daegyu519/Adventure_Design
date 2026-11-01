@@ -32,6 +32,11 @@ providers:
     api_key_env: LOCAL_API_KEY
     rpm: 600
     allow_no_key: true
+  local_hcx8:
+    base_url: http://localhost:11491/v1  # 상세용 HyperCLOVA X SEED Omni 8B(NAVER llama.cpp 포크, 학교 GPU, up.sh llm·scripts/gpu up). P-29
+    api_key_env: LOCAL_API_KEY
+    rpm: 600
+    allow_no_key: true
   mock:
     rpm: 100000
 
@@ -51,12 +56,15 @@ experts:
   - {id: tone_kimi, role: tone,     model: nvidia:nvidia/nemotron-3.5-bolt-e4b,              prompt: tone,     paths: [detail, mirror], weight: 1.0, mock: tone_alt}
   # 상세·거울 로컬 말투: Qwen3-30B-A3B-Instruct-2507(IQ3_XXS, Apache-2.0). 상세 풀 프롬프트 P 0.75·R 0.38, 평균 1.4초(SEED 1.5B는 0/0). 실시간 앙상블은 정밀도가 떨어져 안 씀(P-24). id는 옛 이름의 흔적
   - {id: tone_hcx,  role: tone,     model: local_detail:qwen3-30b-a3b, prompt: tone, paths: [detail, mirror], weight: 1.0, optional: true}
+  # 상세 HyperCLOVA X SEED Omni 8B(HyperCLOVA X SEED license, 말투 판정 전용·생성 아님): 가중치 0.5(P-29: 어느 가중치에서도 정밀도·재현율을 못 올렸지만 사용자 결정으로 포함, 0.5가 손해 최소). 실시간은 p95 1.36초라 못 씀. Think 14B는 JSON 실패 50%·p95 15초라 뺌
+  - {id: tone_hcx8, role: tone,     model: local_hcx8:hcx-omni-8b, prompt: tone, paths: [detail], weight: 0.5, optional: true, mock: tone_alt}
   - {id: judge,     role: judge,    model: nvidia:nvidia/nemotron-3.5-bolt-e4b,              prompt: judge,    paths: [detail, mirror]}
   - {id: rewrite,   role: rewrite,  model: nvidia:poolside/laguna-xs-2.1, prompt: rewrite,  paths: [detail, mirror]}
   - {id: feedback,  role: feedback, model: nvidia:nvidia/nemotron-3.5-bolt-e4b,              prompt: feedback, paths: [async]}
 fallback:   # 실제 문장이 지나가므로 gemini 금지
   local_fast:gemma-3-4b-it: [mock:auto]   # NVIDIA로 폴백하지 않는다: 학교 GPU가 꺼져 있으면 실시간 힌트는 기권(공유 NVIDIA 40rpm을 안 쓴다). 운영(force_mock 아님)에서 mock은 건너뛴다
   local_detail:qwen3-30b-a3b: [mock:auto]
+  local_hcx8:hcx-omni-8b: [mock:auto]
   nvidia:poolside/laguna-xs-2.1: [nvidia:nvidia/nemotron-3.5-bolt-e4b, mock:auto]
   nvidia:nvidia/nemotron-3.5-bolt-e4b: [nvidia:poolside/laguna-xs-2.1, mock:auto]
 # 학습된 판별기(KcELECTRA, P-14b → P-28 사용자 결정). 학교 GPU의 tone-clf(ml/classifier_shim.py, 127.0.0.1:11481)를 HTTP로 부른다.
