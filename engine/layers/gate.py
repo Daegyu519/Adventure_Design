@@ -28,6 +28,11 @@ def score(draft: str, convo: Conversation, store: ProfileStore, user_id: str, th
     if s["short"]:
         prior += 0.15
         signals.append("짧은 답")
+    if s["blame"]:
+        prior += 0.2
+        signals.append("따지는 말투")
+    if s["consonants"]:   # 읽힘 고르기용 표시(짧은 답이 이미 사전점수를 올렸다)
+        signals.append("자음만 쓴 답")
     # 겉 신호만 보면 맥락이 중요한 경우를 놓친다. 상대 말이 무거우면 짧은 답도 LLM에 넘긴다.
     if K.high_stakes(last) and (s["short"] or s["length"] < 10):
         prior += 0.25

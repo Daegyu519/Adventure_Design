@@ -384,12 +384,12 @@ def test_bad_pattern_error_has_no_value(world, caplog):
 
 
 def test_known_triggers_all_storable():
-    """gate의 신호 이름 7개가 모두 TRIGGERS에 있다(어휘가 gate와 어긋나지 않음)."""
+    """gate의 신호 이름 9개가 모두 TRIGGERS에 있다(어휘가 gate와 어긋나지 않음)."""
     src = ast.parse(inspect.getsource(gate.score))
     names = {c.value for call in ast.walk(src) if isinstance(call, ast.Call)
              and ast.unparse(call.func) == "signals.append"
              for c in ast.walk(call.args[0]) if isinstance(c, ast.Constant) and isinstance(c.value, str)}
-    assert len(names) == 7 and names <= TRIGGERS
+    assert len(names) == 9 and names <= TRIGGERS
 
 
 def test_week_start_kst():
