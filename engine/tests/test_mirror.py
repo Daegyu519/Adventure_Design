@@ -20,7 +20,7 @@ BEFORE_TODAY = DAY_START - timedelta(seconds=1)   # 어제 답한 것: 오늘 �
 TOPICS = {"일정 조율": "sched", "역할 요청": "role", "거절": "refuse", "마감 독촉": "due"}
 OTHER_APPS = re.compile(r"카카오|카톡|인스타|디스코드|kakao|instagram|discord", re.I)
 KINDS = ["roleplay", "receive", "predict"]
-CARD_KEYS = {"card_id", "kind", "persona", "relation", "situation", "message"}
+CARD_KEYS = {"card_id", "kind", "persona", "relation", "situation", "message", "context"}
 ANSWER_KEYS = {"readings", "inner_voice", "reveal", "options", "gap"}
 CONTENT = mirror.load_content(mirror.CONTENT_PATH)
 
@@ -458,3 +458,64 @@ def test_mirror_key_warns_once_when_unset(monkeypatch, caplog, fresh_key, force_
     with caplog.at_level(logging.WARNING, logger="mirror"):
         assert len(mirror.get_mirror_key()) == 32 and mirror.get_mirror_key() == mirror.get_mirror_key()
     assert len([r for r in caplog.records if "MIRROR_SECRET" in r.getMessage()]) == int(warned)
+
+
+# ── 앞선 말(P-19) ────────────────────────────────────────
+
+def test_cards_carry_context(client, login, fake):
+    me, you, room = _room(fake)
+    fake.add_message(room, you, "내일까지 가능해요?")
+    fake.add_message(room, me, "그건 어렵겠어요.")
+    login(me)
+    cards = _by_kind(_today(client))
+    assert cards["roleplay"]["context"] is None
+    assert cards["receive"]["message"] == "그건 어렵겠어요." and cards["receive"]["context"] == "내일까지 가능해요?"
+    login(fake.add_user("이도현"))   # 보낸 글이 없으면 카드 sample_reply + 카드 message
+    other = _by_kind(_today(client))
+    for k in ("receive", "predict"):
+        c = next(x for x in CONTENT.cards if x.sample_reply == other[k]["message"])
+        assert other[k]["context"] == c.message
+
+
+def test_answer_sends_masked_context_turn(client, login, fake, spy):
+    me, you, room = _room(fake)
+    fake.add_message(room, you, "민수야 내일 전화번호 010-1234-5678 줄래?")
+    fake.add_message(room, me, "그건 어렵겠어요.")
+    login(me)
+    card = _by_kind(_today(client))["receive"]   # 보낸 글이 하나면 되돌려 받기가 가져간다
+    assert card["context"].startswith("민수야")
+    spy.calls.clear()
+    assert _answer(client, card["card_id"], score=2).status_code == 200
+    turns = [c["payload"]["turns"] for c in spy.calls]
+    assert turns and all(len(t) == 1 and t[0]["speaker"] == "me" for t in turns)
+    assert all("민수" not in t[0]["text"] and "010-1234" not in t[0]["text"] for t in turns)
+    assert all(c["payload"]["draft"] == "그건 어렵겠어요." for c in spy.calls)
+
+
+def test_answer_receive_context_is_my_turn_and_card_based(client, login, fake, spy):
+    me, you, room = _room(fake)
+    fake.add_message(room, you, "이거 맡아줄래요?")
+    fake.add_message(room, me, "알겠어요.")
+    login(me)
+    card = _by_kind(_today(client))["receive"]
+    spy.calls.clear()
+    assert _answer(client, card["card_id"], score=3).status_code == 200
+    assert all(c["payload"]["turns"][0]["speaker"] == "me" for c in spy.calls)
+    login(fake.add_user("이도현"))   # 카드 기반: 카드 message가 한 턴
+    card = _by_kind(_today(client))["predict"]
+    spy.calls.clear()
+    assert _answer(client, card["card_id"], predicted=3).status_code == 200
+    assert all(c["payload"]["turns"] == [{"speaker": "them", "text": card["context"], "label": ""}] for c in spy.calls)
+
+
+def test_context_not_in_logs_or_traces(client, login, fake, registry, caplog):
+    me, you, room = _room(fake)
+    fake.add_message(room, you, "비밀문장앞선말")
+    fake.add_message(room, me, "그건 어렵겠어요.")
+    login(me)
+    card = _by_kind(_today(client))["receive"]
+    with caplog.at_level(logging.DEBUG):
+        assert _answer(client, card["card_id"], score=2).status_code == 200
+    assert "비밀문장앞선말" not in caplog.text
+    assert "비밀문장앞선말" not in json.dumps(fake.mirror_attempts, default=str)
+    assert "비밀문장앞선말" not in json.dumps(list(registry.router.traces), default=str, ensure_ascii=False)

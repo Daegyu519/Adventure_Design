@@ -232,6 +232,29 @@ def test_sent_messages(world):
     world(body)
 
 
+def test_sent_messages_context(world):
+    async def body(repo, seed):
+        a, b, c, room = await trio(seed, "팀원")
+        first = await w(seed.add_message(room, a, "처음", at=NOW - timedelta(hours=9)))
+        q = await w(seed.add_message(room, b, "가" * 130, at=NOW - timedelta(hours=8)))
+        m_prev = await w(seed.add_message(room, a, "바로 앞이 남", at=NOW - timedelta(hours=7)))
+        await w(seed.add_message(room, c, "끼어든 말", at=NOW - timedelta(hours=6)))
+        await w(seed.add_message(room, a, "내 말 둘", at=NOW - timedelta(hours=5)))
+        m_reply = await w(seed.add_message(room, a, "답장", reply_to=q, at=NOW - timedelta(hours=4)))
+        await w(seed.add_message(room, b, "", image_path=f"{room}/p.png", at=NOW - timedelta(hours=3)))
+        m_img = await w(seed.add_message(room, a, "사진 뒤", at=NOW - timedelta(hours=2)))
+        got = {s.id: s.context for s in await repo.sent_messages(a, NOW - timedelta(days=1))}
+        assert got[first] is None                                  # 앞선 말 없음
+        assert got[m_prev] == "가" * 119 + "…" and len(got[m_prev]) == 120   # 남의 말, 120자 제한
+        assert got[m_reply] == "가" * 119 + "…"                    # reply_to가 이긴다
+        assert got[m_img] == "(사진)"
+        by_text = {s.text: s.context for s in await repo.sent_messages(a, NOW - timedelta(days=1))}
+        assert by_text["내 말 둘"] == "끼어든 말"                    # 내 이전 말은 건너뛴다
+        assert await repo.message_context(m_img) == "(사진)" and await repo.message_context(first) is None
+        assert await repo.message_context(999999) is None
+    world(body)
+
+
 def test_mirror_and_stats(world):
     async def body(repo, seed):
         a, b, c, room = await trio(seed)

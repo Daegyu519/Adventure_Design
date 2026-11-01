@@ -268,6 +268,8 @@ export interface components {
         MirrorCard: {
             /** Card Id */
             card_id: string;
+            /** Context */
+            context?: string | null;
             /**
              * Kind
              * @enum {string}

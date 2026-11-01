@@ -193,6 +193,7 @@ sequenceDiagram
 3. **예측 맞히기**: 내 문장과 관계("선배라면?")를 보여 주고 "얼마나 부정적으로 읽을까" 1~5점을 먼저 고르게 한다. 패널의 부정 확률(차갑게 + 성의없게 + 화나게)을 0.2 간격으로 1~5칸에 나눠 비교한다. `gap = |예측 칸 − 패널 칸|`이 자기객관화 점수다. 되돌려 받기 점수도 같은 방식으로 gap을 낸다.
 
 - 문장 출처: 본인이 보낸 메시지(엔진이 서비스 키로 읽음)와 `engine/content/mirror_cards.yaml`(팀플 상황 카드: 일정 조율, 역할 요청, 거절, 마감 독촉. 20장부터 시작).
+- 받은·예측 카드의 `context`는 보낸 문장 바로 앞 상대의 말(답장이면 답장 대상, 사진뿐이면 "(사진)", 120자 제한)이고 카드 문장이면 카드의 `message`다. 답할 때 엔진이 다시 읽어 가린 뒤 문장 앞 한 턴으로 판정에 넣고, 로그·trace에는 남기지 않는다(P-19).
 - `card_id`는 엔진이 서명한 값이다. 앱이 문장 출처를 위조할 수 없다.
 - 실제 대화에서 뽑은 카드도 `pii.mask`를 거치고, Gemini에 보내지 않는다.
 - 피드백은 문장에만 한다. 점수는 "예측과 한 칸 차이"처럼 차이로만 보여 준다. 점수 폭죽, 연속 출석 압박은 없다.
@@ -209,7 +210,7 @@ sequenceDiagram
 | POST | `/v1/hint` | `{room_id, text(1~500자, 앞뒤 공백 제외), seq(0 이상), reply_to?(같은 방이 아니면 422)}` | `{seq, hint: {title, detail} \| null, trace_id}` |
 | POST | `/v1/detail` | `{room_id, text, intent?, reply_to?(같은 방이 아니면 422)}` | `{alert, top_reading, readings: {읽힘: "자주"\|"가끔"\|"드물어요"}, why: [str], options: [{label, text, keep, change}], mismatch?: str \| null, footnote, trace_id}` |
 | POST | `/v1/feedback` | `{room_id, message_id(이 방에서 받은 메시지), text(1~1000자)}` | 202 `{ack}`(큐가 가득 차도 같은 202) |
-| POST | `/v1/mirror/today` | 없음 | `{cards: [{card_id, kind: "roleplay"\|"receive"\|"predict", persona, relation, situation, message}]}` |
+| POST | `/v1/mirror/today` | 없음 | `{cards: [{card_id, kind: "roleplay"\|"receive"\|"predict", persona, relation, situation, message, context?}]}` |
 | POST | `/v1/mirror/answer` | `{card_id, reply?, score?, predicted?}` | `{readings, inner_voice?, reveal?, options?, gap?}` |
 | GET | `/v1/stats/me` | 없음 | `{hints, details, fixed, fix_rate, predict_gap_trend, hints_by_week}` |
 | POST | `/hooks/message` | Supabase 웹훅 페이로드 `{type, table, schema, record, old_record}` + `X-Hook-Secret` 헤더 | 202 |

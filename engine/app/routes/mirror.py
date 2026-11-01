@@ -67,11 +67,13 @@ async def mirror_answer(body: MirrorAnswerIn, user: UUID = Depends(current_user)
             if m is None or m.sender_id != user:
                 raise HTTPException(status_code=403, detail="forbidden")
             text, names, sent_on = m.text, list((await repo.member_names(m.room_id)).values()), m.created_at
+            context = await repo.message_context(m.id)
         else:
             card = next((x for x in content.cards if f"card:{x.id}" == ref), None)
             if card is None:
                 raise HTTPException(status_code=422, detail="bad_card")
             text, names, sent_on = card.message if kind == "roleplay" else card.sample_reply, [], None
+            context = card.message
 
         if kind == "roleplay":
             convo = Conversation(pair_id="mirror", relation=relation,
@@ -86,7 +88,9 @@ async def mirror_answer(body: MirrorAnswerIn, user: UUID = Depends(current_user)
                                   options=[OptionOut(**o.model_dump()) for o in out.report.options[:1]])
             score = predicted = panel = gap = None
         else:
-            p = await pipeline.panel(reg, text, relation, names, t0)
+            # 앞선 말 한 턴: 예측은 상대가 말하고 내가 답한 것, 받은 카드는 내가 말하고 페르소나가 답한 것(가린 뒤 전달)
+            turn = Turn(speaker="them" if kind == "predict" else "me", text=context) if context else None
+            p = await pipeline.panel(reg, text, relation, names, t0, turn)
             if p is None:
                 return None
             score, predicted = (body.score, None) if kind == "receive" else (None, body.predicted)

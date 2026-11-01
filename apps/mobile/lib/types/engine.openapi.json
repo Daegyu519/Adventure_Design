@@ -429,6 +429,17 @@
             "title": "Card Id",
             "type": "string"
           },
+          "context": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Context"
+          },
           "kind": {
             "enum": [
               "roleplay",

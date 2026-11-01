@@ -12,7 +12,7 @@ from itertools import count
 from typing import Any
 from uuid import UUID
 
-from app.db import FeedbackWrite, Msg, PushTarget, Room, SentMsg, TraceRow, check_patterns, week_start
+from app.db import FeedbackWrite, Msg, PushTarget, Room, SentMsg, TraceRow, check_patterns, context_text, week_start
 
 
 # DB CHECK 제약과 같은 값 범위(supabase/migrations). 어긋나면 운영처럼 실패한다.
@@ -247,7 +247,19 @@ class FakeRepo:
     async def sent_messages(self, user_id: UUID, since: datetime, limit: int = 50) -> list[SentMsg]:
         mine = [m for m in self.messages.values() if m.sender_id == user_id and m.text and m.created_at >= since]
         mine.sort(key=lambda m: (m.created_at, m.id), reverse=True)
-        return [SentMsg(m.id, m.room_id, m.text, self.rooms[m.room_id]["relation"], m.created_at) for m in mine[:limit]]
+        return [SentMsg(m.id, m.room_id, m.text, self.rooms[m.room_id]["relation"], m.created_at,
+                        await self.message_context(m.id)) for m in mine[:limit]]
+
+    async def message_context(self, message_id: int) -> str | None:
+        m = self.messages.get(message_id)
+        if m is None:
+            return None
+        others = [x for x in self.messages.values() if x.room_id == m.room_id and x.sender_id != m.sender_id
+                  and (x.id == m.reply_to or (x.created_at, x.id) < (m.created_at, m.id))]
+        if not others:
+            return None
+        x = max(others, key=lambda x: (x.id == m.reply_to, x.created_at, x.id))
+        return context_text(x.text, x.image_path)
 
     async def mirror_refs(self, user_id: UUID, before: datetime) -> set[str]:
         return {f"{a['kind']}|{a['card_ref']}" for a in self.mirror_attempts
