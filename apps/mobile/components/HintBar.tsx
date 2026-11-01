@@ -13,7 +13,7 @@ import { AppText } from './AppText';
 export const HINT_TEXT_ID = 'tone-hint'; // 입력창의 aria-describedby 대상
 
 export function HintBar({ hint, onDismiss, onOpenDetail, onFocusInside }: { hint: Hint | null; onDismiss(): void; onOpenDetail?(): void; onFocusInside?(inside: boolean): void }) {
-  const { colors, radius, space } = useTheme();
+  const { colors, space } = useTheme();
   const reduced = useReducedMotion();
   const [anim] = useState(() => new Animated.Value(1));
   const title = hint?.title ?? null;
@@ -38,12 +38,12 @@ export function HintBar({ hint, onDismiss, onOpenDetail, onFocusInside }: { hint
         flexDirection: 'row',
         alignItems: 'center',
         gap: space[1],
-        borderRadius: radius.chip,
+        borderRadius: 14,
         backgroundColor: colors.hintBg,
       }}
     >
       <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colors.hintText }} />
-      <AppText nativeID={HINT_TEXT_ID} variant="small" style={{ flex: 1, color: colors.hintText }}>
+      <AppText nativeID={HINT_TEXT_ID} numberOfLines={1} variant="small" style={{ flex: 1, color: colors.hintText, fontSize: 14.5, lineHeight: 20 }}>
         {hint.title}
       </AppText>
       {onOpenDetail ? (

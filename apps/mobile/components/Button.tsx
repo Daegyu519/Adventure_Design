@@ -6,7 +6,7 @@ import { AppText } from './AppText';
 type Props = {
   label: string;
   onPress(): void;
-  kind?: 'primary' | 'secondary' | 'ghost';
+  kind?: 'primary' | 'secondary' | 'ghost' | 'danger';
   disabled?: boolean;
   loading?: boolean;
   accessibilityLabel?: string;
@@ -23,6 +23,7 @@ export function Button({ label, onPress, kind = 'primary', disabled = false, loa
     primary: { bg: colors.primary, fg: 'onPrimary', border: colors.primary },
     secondary: { bg: colors.surface, fg: 'text', border: colors.border },
     ghost: { bg: 'transparent', fg: 'primary', border: 'transparent' },
+    danger: { bg: 'transparent', fg: 'danger', border: 'transparent' }, // iOS 묶음 목록의 빨간 글자 줄(로그아웃)
   };
   const look = looks[kind];
 

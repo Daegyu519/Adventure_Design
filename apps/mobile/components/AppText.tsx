@@ -3,7 +3,7 @@ import { Platform, Text, type TextProps, type TextStyle } from 'react-native';
 import { useTheme, type Colors } from '../lib/theme';
 
 export type AppTextProps = TextProps & {
-  variant?: 'body' | 'small' | 'title';
+  variant?: 'body' | 'small' | 'title' | 'large';
   color?: keyof Colors;
   weight?: '400' | '500' | '600' | '700';
 };
@@ -24,8 +24,10 @@ export function AppText({ variant = 'body', color = 'text', weight, style, ...re
           color: colors[color],
           fontFamily: font.family,
           fontSize: size,
-          lineHeight: size * font.lineHeight,
-          fontWeight: weight ?? (variant === 'title' ? '600' : '400'),
+          // large = iOS 큰 제목(34/41, 굵게, 자간 -0.022em). 큰 글자는 자간을 좁히고 본문은 0(MASTER 3장)
+          lineHeight: variant === 'large' ? 41 : size * font.lineHeight,
+          letterSpacing: variant === 'large' ? -0.75 : variant === 'title' ? -0.2 : 0,
+          fontWeight: weight ?? (variant === 'large' ? '700' : variant === 'title' ? '600' : '400'),
         },
         KEEP_ALL,
         style,

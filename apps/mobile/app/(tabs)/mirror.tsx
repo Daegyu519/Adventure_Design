@@ -65,7 +65,7 @@ export default function Mirror() {
     <SafeAreaView edges={['top']} style={{ flex: 1, backgroundColor: colors.background }}>
       <ScrollView contentContainerStyle={{ padding: space[3], paddingBottom: space[6] }} keyboardShouldPersistTaps="handled">
         <View style={{ width: '100%', maxWidth: 560, alignSelf: 'center', gap: space[3] }}>
-          <AppText accessibilityRole="header" aria-level={1} variant="title">
+          <AppText accessibilityRole="header" aria-level={1} variant="large">
             거울
           </AppText>
           {region}
