@@ -74,7 +74,7 @@ P-14 후속 감사(2026-11-01): 기존 모델·ZIP 해시 및 Windows CPU 독립
 | 4 | **P-15** 파일럿 지표 집계·그래프 | 다른 AI | `docs/handoff/P-15.md` |
 | 5 | **P-16** 대조 세트 라벨 도구(T-16용) | 다른 AI | `docs/handoff/P-16.md` |
 | 6 | **LIVE** 실제 앱으로 -live 행 확인 | 팀원 + AI | `docs/handoff/LIVE.md` |
-| 7 | **P-17** Android 푸시(FCM) 준비 | 다른 AI (+ 소유자 Firebase) | `docs/handoff/P-17.md` |
+| 7 | **P-17** Android 푸시(FCM) 준비 | 보류(Android 우선순위 낮음) | `docs/handoff/P-17.md` |
 | 8 | **T-33** 실시간 헤지 요청 | 다른 AI, **P-12 뒤** | `docs/handoff/T-33.md` |
 | 9 | T-20 앙상블 가중치 학습 | 나중 (T-16·P-12·P-14 뒤) | — |
 
@@ -196,6 +196,7 @@ flowchart LR
 - 저장소는 GitHub 비공개 `Daegyu519/Adventure_Design`.
 
 ### 배포
+- **주 사용 경로는 아이폰 웹(홈 화면에 추가한 앱, `https://tone-chat.expo.app`)이다.** Android APK 빌드는 사용자 결정으로 우선순위 낮음(2026-11-01) — 새로 빌드하지 않는다. 화면 보정·테스트는 아이폰 16 계열 크기(393~440폭) 기준으로 한다.
 - 힌트 기준은 테스트 중에 서버 엔진 env(`.env.pilot.engine`)의 `HINT_GATE_THRESHOLD`·`HINT_ALERT_THRESHOLD`·`HINT_MIN_CONFIDENCE`로 낮출 수 있다(P-21). 2026-11-01 사용자 요청으로 0 / 0.3 / 0.2(힌트가 자주 뜸, 틀린 힌트 섞임). 원래대로는 세 줄을 지우고 `scripts/deploy-school --env .env.pilot.engine`.
 - 학교 GPU는 사용자도 학습에 쓴다. 쓰는 동안은 서버의 `gpu.off` 스위치(`up.sh gpu-off`)로 우리 모델 서버를 끄고, 배포·`scripts/gpu up`도 GPU를 건드리지 않는다. 다시 쓰려면 `gpu-on`(P-18). **`gpu.off`가 있으면 지우지 말고 사용자에게 먼저 묻는다.**
 - 엔진은 학교 GPU 서버 컨테이너에서 상시(`scripts/deploy-school`, tmux `tone-llm`·`tone-engine`·`tone-ts`), 공개 HTTPS는 Tailscale Funnel(`https://tone-chat.<tailnet>.ts.net`, 도메인 불필요·주소 고정), 아이폰은 웹앱(홈 화면 추가), Android는 EAS preview APK, pilot DB는 서울 Supabase(엔진이 힌트마다 DB를 보므로 지연 때문에) — 2026-10-31 사용자 결정.
