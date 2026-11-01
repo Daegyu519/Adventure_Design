@@ -45,6 +45,7 @@ DB 웹훅은 SQL 마이그레이션이 아니라 Supabase 대시보드에서 만
 - `tone-llm-fast`(포트 11435, `--swa-full`): Gemma3-4B(`gemma-3-4b-it-q4_k_m.gguf`), 실시간 말투 전문가 `tone_fast`(짧은 출력, P-12). 서버가 없으면 실시간 힌트는 기권한다(NVIDIA 폴백 없음).
 
 - `tone-clf`(포트 11481, P-28): KcELECTRA 판별기(`ml/classifier_shim.py`, TorchScript, `127.0.0.1`만). 모델은 `/root/tone-chat-llm/clf/kcelectra-p14b/`, 코드는 `scripts/deploy-school`이 올리는 `/root/tone-chat-deploy/app/ml`, python은 `/root/p14-work/source/ml/.venv-demo/bin/python`. 여유 1500MiB 이상인 가장 한가한 GPU(없으면 cpu, 경고). 엔진은 `USE_LOCAL_MODEL=1`일 때만 `http://localhost:11481/score`를 150ms 제한으로 부르고, 못 오면 집계에서 `clf` 항만 뺀다. 요청 문장은 로그에 남지 않는다.
+- `tone-hcx-8b`(포트 11491, P-29): HyperCLOVA X SEED Omni 8B(`bakeoff/clova-omni8b.gguf`, Q4_K_M, 약 7GB) — 상세·거울 말투 전문가 `tone_hcx8`(가중치 0.5). NAVER 공식 llama.cpp 개조판(`bakeoff/hcx-llama.cpp/build/bin/llama-server`, `--jinja -np 4 -c 8192`)으로만 열린다(일반 llama.cpp는 이 모델을 못 연다). 여유 7000MiB 이상·사용률 50% 이하 카드에만, 없으면 건너뜀. 개조판을 다시 빌드할 때는 외부 코드라 사람이 직접 실행한다.
 
 ```bash
 scripts/gpu up      # 서버에 모델 서버(각각 가장 한가한 GPU 1장) + 이 컴퓨터 127.0.0.1:11435·11436·11481 터널 (11435 Gemma만 필수; 11436·11481은 선택: 없으면 경고만; 11481은 tone-clf)

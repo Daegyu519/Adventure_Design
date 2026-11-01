@@ -16,7 +16,7 @@ flowchart LR
   end
   ENG["AI 엔진<br/>FastAPI"]
   subgraph M["모델"]
-    LLM["자체 호스팅 LLM (llama.cpp)<br/>Gemma 3 4B · Qwen3-30B-A3B<br/>HyperCLOVA X SEED"]
+    LLM["자체 호스팅 LLM (llama.cpp)<br/>Gemma 3 4B · Qwen3-30B-A3B<br/>HyperCLOVA X SEED Omni 8B"]
     CLF["KcELECTRA 판별기"]
     NV["NVIDIA API 모델"]
   end
@@ -62,7 +62,7 @@ sequenceDiagram
 ```mermaid
 flowchart LR
   REQ["상세 요청"] --> MASK["가리기"]
-  MASK --> EXP["전문가 병렬<br/>맥락 · 말투 · 판별기"]
+  MASK --> EXP["전문가 병렬<br/>맥락 · 말투(Qwen3-30B · HyperCLOVA X · NVIDIA) · 판별기"]
   EXP --> J["심판"]
   J --> RW["고쳐 쓰기"]
   RW --> CHK["스키마·금지어 검사"]
