@@ -48,7 +48,7 @@
 - **평가**: 대조 세트와 `--mock` 평가 스크립트, `eval/baseline.json`(정밀도 게이트)이 있다. 이 mock 수치는 배관 확인용이다. 라벨된 30쌍(T-16)이 있어야 `-live` 평가가 된다.
 - **배포**: 아직 없음. T-29(엔진), T-30(웹 + Android EAS), T-31(파일럿 1주).
 
-P-14 Phase 1(2026-11-01): 실제 학습·저장·재로드·평가·TorchScript와 선택적 이진 전문가 기반 완료. 검증 F1=0이므로 운영 미연결. ML33·엔진533 통과(27skip), scripts/check 통과. 상세는 `docs/handoff/P-14-result.md`. GitHub 쓰기403으로 코드 패치 인계, main 미반영.
+P-14 Phase 1(2026-11-01): 실제 학습·저장·재로드·평가·TorchScript와 선택적 이진 전문가 기반 완료. 검증 F1=0이므로 운영 미연결. ML33·엔진533 통과(27skip), scripts/check 통과. 상세는 `docs/handoff/P-14-result.md`. main에 land됨(2026-11-01, Claude가 리뷰 후 대신 합침).
 
 P-14 후속 감사(2026-11-01): 기존 모델·ZIP 해시 및 Windows CPU 독립 복원 확인. generic Fast 직렬화의 CLS/SEP 누락을 확인해 새 학습용 opt-in v2와 epoch 기록을 추가했다. 새 레이블·독립 검증 그룹을 확보하지 못해 실제 재학습은 하지 않았다. 맥락 제거/교환 진단 1회 완료. `docs/handoff/P-14-final-hour.md` 참조.
 
@@ -56,7 +56,7 @@ P-14 후속 감사(2026-11-01): 기존 모델·ZIP 해시 및 Windows CPU 독립
 
 | 작업 | 누가 | 상태 |
 |---|---|---|
-| P-14 | Codex | Phase 1 기반 완료, 성능·독립 인간 평가·통합 후속. `p14-context` 로컬 worktree, 원격 쓰기 권한 없음 |
+| (없음) | | |
 
 보류(paused): 없음.
 
@@ -70,7 +70,7 @@ P-14 후속 감사(2026-11-01): 기존 모델·ZIP 해시 및 Windows CPU 독립
 |---|---|---|---|
 | 1 | **P-12** 실시간 말투 모델 교체 | Claude (완료, land 대기) | — |
 | 2 | **P-13** "말투 살펴보기" 버튼 + 고쳐 쓰기 3가지·배지 | 다른 AI/팀원 (앱+엔진) | `docs/handoff/P-13.md` |
-| 3 | **P-14** 말투 분류기(KcELECTRA) 학습 파이프라인 | 다른 AI (ML) | `docs/handoff/P-14.md` |
+| 3 | ~~P-14~~ 완료(기반, 기본 꺼짐) → **P-14b** 레이블 확충·재학습·앙상블 연결 | 다른 AI (ML) | `docs/handoff/P-14.md`, `docs/handoff/P-14-result.md` |
 | 4 | **P-15** 파일럿 지표 집계·그래프 | 다른 AI | `docs/handoff/P-15.md` |
 | 5 | **P-16** 대조 세트 라벨 도구(T-16용) | 다른 AI | `docs/handoff/P-16.md` |
 | 6 | **LIVE** 실제 앱으로 -live 행 확인 | 팀원 + AI | `docs/handoff/LIVE.md` |
