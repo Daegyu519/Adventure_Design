@@ -6,7 +6,8 @@ set -euo pipefail
 BASE=/root/tone-chat-deploy; LLM=/root/tone-chat-llm
 PORT=11434; ENGINE_PORT=8000
 TS="$BASE/tailscale_1.104.4_amd64"; SOCK="$BASE/tailscaled.sock"
-MODEL_ID=naver-hyperclovax/HyperCLOVAX-SEED-Text-Instruct-1.5B   # models.yaml tone_hcx의 local: 뒤 이름과 같아야 한다
+MODEL_ID=naver-hyperclovax/HyperCLOVAX-SEED-Text-Instruct-1.5B   # SEED는 이제 models.yaml 어디에도 안 쓴다(옛 전문가 흔적, 11434는 그대로 띄움)
+DETAIL_PORT=11436; DETAIL_ID=qwen3-30b-a3b; DETAIL_GGUF=qwen3-30b-a3b-2507-iq3xxs.gguf   # tone_hcx의 local_detail: 뒤 이름과 같아야 한다(P-24)
 FAST_PORT=11435; FAST_ID=gemma-3-4b-it; FAST_GGUF=gemma-3-4b-it-q4_k_m.gguf   # tone_fast의 local_fast: 뒤 이름과 같아야 한다(P-12)
 GPU_OFF="$BASE/gpu.off"   # 이 파일이 있으면 GPU 모델을 띄우지 않는다(사용자가 학습 등에 GPU를 쓸 때). gpu-off / gpu-on
 has() { tmux has-session -t "$1" 2>/dev/null; }
@@ -14,14 +15,16 @@ ts() { "$TS/tailscale" --socket="$SOCK" "$@"; }
 logged_in() { ts status --json 2>/dev/null | grep -q '"BackendState": "Running"'; }
 funnel_url() { ts funnel status 2>/dev/null | grep -o 'https://[^ ]*' | head -1 || true; }
 
-serve() {   # serve <tmux> <gguf> <port> <alias> [추가 옵션]
+serve() {   # serve <tmux> <gguf> <port> <alias> [추가 옵션]. 환경변수 MIN_FREE_MIB(기본 0)보다 여유 메모리가 큰 GPU만 쓴다(없으면 건너뜀)
   has "$1" && return 0
   cd "$LLM"
+  [ -f "$2" ] || { echo "$1: $2 missing, skipped"; return 0; }
   # 가장 한가한 GPU: 사용률 50% 초과는 뒤로, 그다음 메모리 사용량, 사용률 순(호스트는 여러 사람이 공유)
   export CUDA_DEVICE_ORDER=PCI_BUS_ID
-  G=$(nvidia-smi --query-gpu=index,memory.used,utilization.gpu --format=csv,noheader,nounits | awk -F', *' '{print ($3>50), $2, $3, $1}' | sort -n -k1,1 -k2,2 -k3,3 | head -1 | awk '{print $4}')
+  G=$(nvidia-smi --query-gpu=index,memory.total,memory.used,utilization.gpu --format=csv,noheader,nounits | awk -F', *' -v min="${MIN_FREE_MIB:-0}" '$2-$3>=min && (min==0 || $4<=50) {print ($4>50), $3, $4, $1}' | sort -n -k1,1 -k2,2 -k3,3 | head -1 | awk '{print $4}')
+  [ -n "$G" ] || { echo "$1: no GPU with >= ${MIN_FREE_MIB:-0} MiB free and util <= 50%, skipped"; return 0; }
   # 기본 로그 수준은 요청 문장을 남기지 않는다 — -v·--verbose·--log-verbosity를 붙이지 않는다(문장이 <세션>.log에 남음).
-  tmux new-session -d -s "$1" "CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=$G ./llama.cpp/build/bin/llama-server -m $2 --host 127.0.0.1 --port $3 -ngl 99 -np 4 -c 16384 --no-slots --alias $4 ${5:-} > $1.log 2>&1"
+  tmux new-session -d -s "$1" "CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=$G ./llama.cpp/build/bin/llama-server -m $2 --host 127.0.0.1 --port $3 -ngl 99 -np 4 -c ${CTX:-16384} --no-slots --alias $4 ${5:-} > $1.log 2>&1"
   echo "$1 started on GPU $G"
 }
 
@@ -30,6 +33,8 @@ llm() {
   serve tone-llm hcx-seed-1.5b-q4_k_m.gguf "$PORT" "$MODEL_ID"
   # Gemma는 SWA라 --swa-full이 있어야 고정 프롬프트 캐시를 다시 쓴다(없으면 요청마다 1초 더)
   serve tone-llm-fast "$FAST_GGUF" "$FAST_PORT" "$FAST_ID" --swa-full
+  # Qwen3-30B-A3B: GPU 메모리 ~13.5GB. 여유 14000MiB 이상·사용률 50% 이하인 카드가 없으면 건너뛴다(선택 전문가라 엔진은 그대로 돈다)
+  MIN_FREE_MIB=14000 CTX=8192 serve tone-llm-detail "$DETAIL_GGUF" "$DETAIL_PORT" "$DETAIL_ID"
 }
 
 engine() {
@@ -68,7 +73,7 @@ funnel() {
 }
 
 status() {
-  for s in tone-llm tone-llm-fast tone-engine tone-ts; do has "$s" && echo "$s: running" || echo "$s: stopped"; done
+  for s in tone-llm tone-llm-fast tone-llm-detail tone-engine tone-ts; do has "$s" && echo "$s: running" || echo "$s: stopped"; done
   echo "health: $(curl -sf "http://127.0.0.1:$ENGINE_PORT/health" | head -c 300 || echo 'not answering')"
   if [ -S "$SOCK" ] && logged_in; then echo "public: $(funnel_url)"; else echo "tailscale: not logged in"; fi
 }
@@ -79,7 +84,7 @@ engine) engine ;;
 funnel) funnel ;;
 all) llm; engine; funnel ;;
 status) status; [ -f "$GPU_OFF" ] && echo "gpu: off (model servers not allowed)" || echo "gpu: on" ;;
-gpu-off) touch "$GPU_OFF"; for s in tone-llm tone-llm-fast; do has "$s" && tmux kill-session -t "$s"; done
+gpu-off) touch "$GPU_OFF"; for s in tone-llm tone-llm-fast tone-llm-detail; do has "$s" && tmux kill-session -t "$s"; done
          has tone-engine && { tmux kill-session -t tone-engine; engine; }; echo "gpu off: model servers stopped, engine uses no local model" ;;
 gpu-on) rm -f "$GPU_OFF"; llm; has tone-engine && { tmux kill-session -t tone-engine; engine; }; echo "gpu on" ;;
 stop) has tone-engine && tmux kill-session -t tone-engine; echo "engine stopped" ;;

@@ -150,29 +150,32 @@ DB 웹훅은 SQL 마이그레이션이 아니라 Supabase 대시보드에서 만
 </details>
 
 <details>
-<summary>학교 GPU 서버 (로컬 Gemma·SEED)</summary>
+<summary>학교 GPU 서버 (로컬 Gemma·Qwen3-30B)</summary>
 
-### 학교 GPU 서버 (로컬 Gemma·SEED)
+### 학교 GPU 서버 (로컬 Gemma·Qwen3-30B)
 
-로컬 모델 서버가 둘이다. 둘 다 학교 GPU 서버(P100 16GB, GPU 호스트는 여러 사람이 같이 쓰고, 컨테이너는 우리 것)의 llama.cpp `llama-server`에서 돈다. **쓸 때만 켠다.**
+로컬 모델 서버가 셋이다(GPU 메모리 약 3 + 2.5 + 13.5GB). 둘 다 학교 GPU 서버(P100 16GB, GPU 호스트는 여러 사람이 같이 쓰고, 컨테이너는 우리 것)의 llama.cpp `llama-server`에서 돈다. **쓸 때만 켠다.**
 
-- `tone-llm`(포트 11434): HyperCLOVAX-SEED-Text-Instruct-1.5B, 말투 전문가 `tone_hcx`(상세·거울, 선택).
+- `tone-llm`(포트 11434): HyperCLOVAX-SEED-Text-Instruct-1.5B. 지금은 어느 전문가도 안 쓴다(P-24에서 `tone_hcx`가 Qwen3-30B로 바뀜).
+- `tone-llm-detail`(포트 11436, `-c 8192 -np 4`): Qwen3-30B-A3B-Instruct-2507 UD-IQ3_XXS(`qwen3-30b-a3b-2507-iq3xxs.gguf`, Apache-2.0), 상세·거울 말투 전문가 `tone_hcx`(선택, P-24). 여유 메모리 14000MiB 이상·사용률 50% 이하인 GPU가 없으면 건너뛴다(엔진은 그대로 돈다).
 - `tone-llm-fast`(포트 11435, `--swa-full`): Gemma3-4B(`gemma-3-4b-it-q4_k_m.gguf`), 실시간 말투 전문가 `tone_fast`(짧은 출력, P-12). 서버가 없으면 실시간 힌트는 기권한다(NVIDIA 폴백 없음).
 
 ```bash
-scripts/gpu up      # 서버에 llama-server 둘(각각 가장 한가한 GPU 1장) + 이 컴퓨터 127.0.0.1:11434·11435 터널
+scripts/gpu up      # 서버에 llama-server 셋(각각 가장 한가한 GPU 1장) + 이 컴퓨터 127.0.0.1:11434·11435·11436 터널 (11436은 선택: 없으면 경고만)
 (cd engine && USE_LOCAL_MODEL=1 uv run uvicorn app.main:app --env-file ../.env --port 8000)
 scripts/gpu down    # 끝나면 터널 닫고 GPU 반납 (scripts/gpu status로 상태 확인)
 ```
 
-**GPU를 다른 일(학습 등)에 쓸 때**는 GPU 끄기 스위치를 켠다. 모델 서버를 끄고, 그 뒤로는 `scripts/deploy-school`·`scripts/gpu up`도 GPU 모델을 띄우지 않는다(엔진은 로컬 모델 없이 돈다: 실시간 힌트는 기권, 상세는 NVIDIA만, 채팅은 그대로).
+**GPU를 다른 일(학습 등)에 쓸 때**는 GPU 끄기 스위치를 켠다. 모델 서버 셋을 모두 끄고, 그 뒤로는 `scripts/deploy-school`·`scripts/gpu up`도 GPU 모델을 띄우지 않는다(엔진은 로컬 모델 없이 돈다: 실시간 힌트는 기권, 상세는 NVIDIA만, 채팅은 그대로).
 
 ```bash
 ssh tone-gpu 'bash -s -- gpu-off' < deploy/school-gpu/up.sh   # 끄기(서버에 /root/tone-chat-deploy/gpu.off)
 ssh tone-gpu 'bash -s -- gpu-on'  < deploy/school-gpu/up.sh   # 다시 쓰기
 ```
 
-접속은 `~/.ssh/config`의 `Host tone-gpu`(키 인증. 주소·포트·계정은 저장소에 넣지 않는다, 다른 이름이면 `GPU_SSH=`). 서버는 바깥 포트를 열지 않는다(llama-server는 컨테이너의 127.0.0.1, 이 컴퓨터는 ssh 터널로만). 서버 로그(`/root/tone-chat-llm/tone-llm.log`, `tone-llm-fast.log`)에는 요청 문장이 남지 않는다(기본 로그 수준, 토큰 수·시간만). GPU 서버가 꺼져 있으면 엔진은 `tone_hcx` 없이 돌고(선택 전문가), 실시간 힌트는 기권한다(공유 NVIDIA 한도를 쓰지 않으려고 폴백하지 않는다).
+접속은 `~/.ssh/config`의 `Host tone-gpu`(키 인증. 주소·포트·계정은 저장소에 넣지 않는다, 다른 이름이면 `GPU_SSH=`). 서버는 바깥 포트를 열지 않는다(llama-server는 컨테이너의 127.0.0.1, 이 컴퓨터는 ssh 터널로만). 서버 로그(`/root/tone-chat-llm/tone-llm.log`, `tone-llm-fast.log`)에는 요청 문장이 남지 않는다(기본 로그 수준, 토큰 수·시간만). GPU 서버가 꺼져 있으면 엔진은 `tone_hcx`(Qwen3-30B) 없이 돌고(선택 전문가), 실시간 힌트는 기권한다(공유 NVIDIA 한도를 쓰지 않으려고 폴백하지 않는다).
+
+P-24 한 번 할 일: 상세 모델 파일 이름 맞추기 `ssh tone-gpu 'mv /root/tone-chat-llm/bakeoff/x-qwen30b.gguf /root/tone-chat-llm/qwen3-30b-a3b-2507-iq3xxs.gguf'`(12.9GB, 같은 디스크라 즉시). `up.sh`는 이 이름을 기대하고, 없으면 건너뛴다.
 
 서버 한 번 준비(`/root/tone-chat-llm`, 해 둠). Ollama 최신판은 P100(compute 6.0)에 드라이버 550 이상을 요구해서 이 서버(535)에서는 CPU로 떨어진다. 그래서 llama.cpp를 서버의 CUDA 12.2로 직접 빌드했다(llama.cpp 0ec4027).
 

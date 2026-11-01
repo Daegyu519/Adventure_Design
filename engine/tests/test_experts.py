@@ -66,33 +66,43 @@ def test_production_realtime_experts_and_gate():
     assert tone_fast["model"].startswith("local_fast:") and not tone_fast.get("optional")
 
 
+def test_production_detail_local_is_qwen30b():
+    """상세·거울 로컬 말투(P-24): tone_hcx → local_detail, optional, 실시간에는 없음."""
+    cfg = yaml.safe_load(DEFAULT_MODELS_PATH.read_text(encoding="utf-8"))
+    e = next(e for e in cfg["experts"] if e["id"] == "tone_hcx")
+    assert e["model"].startswith("local_detail:") and e["optional"] is True
+    assert sorted(e["paths"]) == ["detail", "mirror"]
+    assert cfg["providers"]["local_detail"]["base_url"].endswith(":11436/v1")
+    assert cfg["fallback"][e["model"]] == ["mock:auto"]
+
+
 def test_paths_in_mock_mode():
     reg = make_registry()
     assert _ids(reg, "realtime", "tone") == ["tone_fast"]
     assert _ids(reg, "realtime", "context") == []
-    assert _ids(reg, "detail", "tone") == ["tone_ds", "tone_kimi"]   # tone_hcx(local, mock 없음) 빠짐
+    assert _ids(reg, "detail", "tone") == ["tone_ds", "tone_kimi"]   # tone_hcx(local_detail)는 USE_LOCAL_MODEL 없으면 빠짐
     assert _ids(reg, "mirror", "context") == ["ctx_deep"]
     assert _ids(reg, "async", "feedback") == ["feedback"]
 
 
 def test_optional_local_when_available(monkeypatch):
-    """tone_hcx는 detail·mirror에서만 optional. local·local_fast는 USE_LOCAL_MODEL=1일 때만 켜진다."""
+    """tone_hcx(Qwen3-30B, local_detail)는 detail·mirror에서만 optional. local 공급자는 USE_LOCAL_MODEL=1일 때만 켜진다."""
     monkeypatch.setenv("USE_LOCAL_MODEL", "1")
     live = Registry.load(DEFAULT_MODELS_PATH, force_mock=False)
     for path in ("detail", "mirror"):
         assert "tone_hcx" in _ids(live, path, "tone")
-        assert "tone_hcx" not in _ids(make_registry(), path, "tone")   # force_mock인데 사슬에 mock 없음
+        assert "tone_hcx" in _ids(make_registry(), path, "tone")   # force_mock: 사슬 끝 mock:auto(P-24)
     assert _ids(live, "realtime", "tone") == ["tone_fast"]
-    assert all(providers.available(n, {}, os.environ) for n in ("local", "local_fast"))
+    assert all(providers.available(n, {}, os.environ) for n in ("local", "local_fast", "local_detail"))
     monkeypatch.delenv("USE_LOCAL_MODEL")
     off = Registry.load(DEFAULT_MODELS_PATH, force_mock=False)
     assert all("tone_hcx" not in _ids(off, p, "tone") for p in ("detail", "mirror"))
-    assert not any(providers.available(n, {}, os.environ) for n in ("local", "local_fast"))
+    assert not any(providers.available(n, {}, os.environ) for n in ("local", "local_fast", "local_detail"))
     assert _ids(off, "realtime", "tone") == ["tone_fast"]   # optional 아님: 남는다(사슬 끝에서 기권)
 
 
 def test_available_local_providers_follow_use_local_model():
-    for name in ("local", "local_fast"):
+    for name in ("local", "local_fast", "local_detail"):
         assert providers.available(name, {}, {"USE_LOCAL_MODEL": "1"})
         assert not providers.available(name, {}, {})
         assert not providers.available(name, {"allow_no_key": True}, {"USE_LOCAL_MODEL": "0"})
