@@ -1,6 +1,7 @@
 {
-  "name": "tone-chat",
-  "short_name": "tone-chat",
+  "name": "톤챗",
+  "short_name": "톤챗",
+  "lang": "ko",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#FFFFFF",
