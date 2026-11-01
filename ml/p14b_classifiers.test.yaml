@@ -1,0 +1,9 @@
+# TEST-ONLY (ml.ensemble_eval). Not merged into models.yaml; nothing is enabled in production.
+classifiers:
+  - id: cold_teacher
+    model_id: beomi/KcELECTRA-base+teacher-soft
+    checkpoint: .          # placeholder dir; the test backend talks to ml.classifier_shim on 127.0.0.1
+    enabled: true
+    optional: false
+    device: cpu
+    paths: [realtime]
