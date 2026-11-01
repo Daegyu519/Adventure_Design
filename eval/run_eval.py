@@ -1,5 +1,5 @@
 """대조 세트 평가. 같은 문장이 맥락에 따라 다르게 판단되는지, 알림이 얼마나 정확한지 본다.
-프롬프트나 모델을 바꿀 때마다 돌린다.   uv run --project engine python eval/run_eval.py [--mock] [--detail] [--json]
+프롬프트나 모델을 바꿀 때마다 돌린다.   uv run --project engine python eval/run_eval.py [--mock] [--detail] [--json] [--set 파일.jsonl]
 
 보는 숫자
 - 정밀도: 알림을 띄운 것 중 실제로 알림이 맞았던 비율 (가장 중요). 알림이 0개면 0.0
@@ -25,8 +25,8 @@ from harness.store import ProfileStore  # noqa: E402
 from pipeline import detail as run_detail, realtime  # noqa: E402
 
 
-async def evaluate(force_mock: bool, detail: bool, rows_out: list | None = None) -> dict:
-    items = [json.loads(l) for l in (HERE / "contrast_set.jsonl").read_text(encoding="utf-8").splitlines() if l.strip()]
+async def evaluate(force_mock: bool, detail: bool, rows_out: list | None = None, set_path: Path | None = None) -> dict:
+    items = [json.loads(l) for l in (set_path or HERE / "contrast_set.jsonl").read_text(encoding="utf-8").splitlines() if l.strip()]
     reg = Registry.load(DEFAULT_MODELS_PATH, force_mock)
     store = ProfileStore()
     rows = []
@@ -62,7 +62,8 @@ async def evaluate(force_mock: bool, detail: bool, rows_out: list | None = None)
 
 def main(argv: list[str]) -> None:
     rows: list = []
-    m = asyncio.run(evaluate("--mock" in argv, "--detail" in argv, rows))
+    m = asyncio.run(evaluate("--mock" in argv, "--detail" in argv, rows,
+                                  Path(argv[argv.index("--set") + 1]) if "--set" in argv else None))
     if "--json" not in argv:
         print(f"{'쌍':<3}{'면':<3}{'상대의 말':<28}{'문장':<10}{'정답':<6}{'예측':<6}{'risk':<6}")
         for r in rows:
