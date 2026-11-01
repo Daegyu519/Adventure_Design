@@ -3,30 +3,55 @@
   <head>
     <meta charset="utf-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <!-- viewport-fit=cover: 노치·다이내믹 아일랜드·홈 막대의 안전 영역(env(safe-area-inset-*))을 SafeAreaView가 읽게 한다(iPhone X 이후, 16 계열 포함) -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>%WEB_TITLE%</title>
     <!-- 홈 화면에 추가(iOS 웹 푸시 조건)와 웹 푸시용. 색은 tokens.json light.primary와 같은 값 -->
     <link rel="manifest" href="/manifest.json" />
     <link rel="apple-touch-icon" href="/icon.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="theme-color" content="#0F766E" />
     <style id="expo-reset">
       html,
       body {
         height: 100%;
+        margin: 0;
+        -webkit-text-size-adjust: 100%;
       }
       body {
         overflow: hidden;
+        overscroll-behavior: none;
       }
       #root {
         display: flex;
-        height: 100%;
         flex: 1;
+        height: 100%;
+        /* 주소창이 나타났다 사라져도 보이는 높이를 따른다(iOS 15.4+) */
+        height: 100dvh;
       }
     </style>
   </head>
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
     <div id="root"></div>
+    <script>
+      // iOS Safari는 키보드가 올라와도 레이아웃 높이를 줄이지 않아 화면 전체가 밀리고 입력창·머리말이 잘린다.
+      // 보이는 높이(visualViewport)에 #root를 맞추고 밀린 스크롤을 되돌린다. 손가락으로 확대한 동안(scale≠1)은 건드리지 않는다.
+      (function () {
+        var vv = window.visualViewport;
+        if (!vv) return;
+        function fit() {
+          var root = document.getElementById('root');
+          if (!root || Math.abs(vv.scale - 1) > 0.01) return;
+          root.style.height = vv.height + 'px';
+          if (window.scrollY) window.scrollTo(0, 0);
+        }
+        vv.addEventListener('resize', fit);
+        vv.addEventListener('scroll', fit);
+        fit();
+      })();
+    </script>
   </body>
 </html>
