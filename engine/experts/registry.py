@@ -91,6 +91,14 @@ def override_thresholds(cfg: dict, env) -> None:
             d = d[k]
         d[keys[-1]] = v
         log.warning("hint threshold overridden by env: %s=%s", name, v)
+    # 하소연 반영 기준(신호별 서로 다른 신고자 수, 규칙 7). 테스트 중 바로 반영되게 낮출 때(P-32)
+    raw = (env.get("PATTERN_MIN_OBS") or "").strip()
+    if raw:
+        n = int(raw)
+        if n < 1:
+            raise ValueError("PATTERN_MIN_OBS는 1 이상이어야 한다")
+        cfg["aggregate"]["global_min_obs"] = n
+        log.warning("pattern min obs overridden by env: PATTERN_MIN_OBS=%s", n)
 
 
 async def run_all(experts: list[Expert], req: ExpertRequest, deadline: float) -> list[ExpertResult]:

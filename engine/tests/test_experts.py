@@ -436,3 +436,16 @@ def test_hint_thresholds_env_rejects_out_of_range(monkeypatch):
         monkeypatch.setenv("HINT_ALERT_THRESHOLD", bad)
         with pytest.raises(ValueError):
             Registry.load(DEFAULT_MODELS_PATH, force_mock=True)
+
+
+def test_pattern_min_obs_env_override(monkeypatch):
+    # P-32: 하소연 반영 기준을 테스트 중 배포 env로 낮춘다. 1 미만·숫자 아님은 시작 실패
+    import pytest
+    from experts.registry import Registry
+    from app.settings import DEFAULT_MODELS_PATH
+    monkeypatch.setenv("PATTERN_MIN_OBS", "1")
+    assert Registry.load(DEFAULT_MODELS_PATH, force_mock=True).cfg["aggregate"]["global_min_obs"] == 1
+    for bad in ("0", "-1", "abc", "1.5"):
+        monkeypatch.setenv("PATTERN_MIN_OBS", bad)
+        with pytest.raises(ValueError):
+            Registry.load(DEFAULT_MODELS_PATH, force_mock=True)

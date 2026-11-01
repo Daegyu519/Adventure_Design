@@ -165,3 +165,30 @@ def test_missing_points_uses_tone_reason():
     reasoned = ToneReading(readings={"무난하게": 1}, has_reason=True)
     assert A.missing_points(DRAFT, CTX, [(tone(0.5), 1.0)]) == ["이유 설명"]
     assert A.missing_points(DRAFT, CTX, [(reasoned, 1.0)]) == []
+
+
+def test_realtime_reading_from_cues_vent_then_model():
+    # P-32: 실시간 알림 제목은 하소연 느낌 → 겉 신호 → 모델 최대. 정한 신호가 signals 맨 앞(이유 문구가 제목과 맞게)
+    neg = ToneReading(readings={"차갑게": 0.1, "성의없게": 0.6, "화나게": 0.1, "무난하게": 0.2}, confidence=0.8)
+    angry = GateResult(prior=0.6, signals=["짧은 답", "따지는 말투"], passed=True)
+    v = A.aggregate("왜 매번 이래?", angry, None, [(neg, 1.0)], ProfileStore(), CONVO, CFG, cues=True)
+    assert v.alert and v.top_reading == "화나게" and v.signals[0] == "따지는 말투"
+    assert A.aggregate("왜 매번 이래?", angry, None, [(neg, 1.0)], ProfileStore(), CONVO, CFG).top_reading == "성의없게"
+    plain = GateResult(prior=0.6, signals=["짧은 답"], passed=True)
+    assert A.aggregate("음", plain, None, [(neg, 1.0)], ProfileStore(), CONVO, CFG, cues=True).top_reading == "성의없게"
+    felt = ProfileStore(pair_patterns={"p": {"짧은 답": {"count": 1, "strength": 2, "feeling": "차갑게"}}},
+                        global_patterns={"짧은 답": 1})
+    cfg1 = {**CFG, "global_min_obs": 1}
+    v = A.aggregate("왜 매번 이래?", angry, None, [(neg, 1.0)], felt, CONVO, cfg1, cues=True)
+    assert v.top_reading == "차갑게" and v.signals[0] == "짧은 답" and v.pattern_used
+    # 기준(5명) 아래면 하소연 느낌을 쓰지 않는다(규칙 7)
+    assert A.aggregate("왜 매번 이래?", angry, None, [(neg, 1.0)], felt, CONVO, CFG, cues=True).top_reading == "화나게"
+
+
+def test_gate_blame_and_consonant_cues():
+    s = gate.score("왜 매번 이래?", CONVO, ProfileStore(), "me", 0.0, 5).signals
+    assert "따지는 말투" in s
+    assert "자음만 쓴 답" in gate.score("ㅇㅋ", CONVO, ProfileStore(), "me", 0.0, 5).signals
+    for t in ("ㅋㅋ", "다 됐어!", "좋잖아"):
+        sig = gate.score(t, CONVO, ProfileStore(), "me", 0.0, 5).signals
+        assert "따지는 말투" not in sig and "자음만 쓴 답" not in sig, t

@@ -11,6 +11,10 @@ HEDGE = re.compile(r"(것\s?같|듯|혹시|조금|좀|일단|아마)")
 APOLOGY = re.compile(r"(미안|죄송|ㅈㅅ)")
 SHORT_ACK = {"ㅇㅇ", "ㅇ", "응", "네", "넹", "ㅇㅋ", "ok", "오키", "그래", "알겠어", "알겠습니다", "네.", "응.", "ㅇㅇ."}
 POLITE_END = re.compile(r"(요|니다|세요|죠)[.!?~ㅎㅠ\s]*$")
+# 따지는 말투: 반문·탓하기·"됐어"로 끊기(화나게 쪽 겉 신호). "다 됐어"처럼 끝난 일을 알리는 말은 문장 맨 앞만 본다
+BLAME = re.compile(r"(왜\s?(이제|매번|맨날|또|자꾸|이래|그래|그랬)|몇\s?번|^(아\s)?됐어|됐거든|됐다고|그만\s?(해|좀|하라)|도대체|어이없|짜증|하라고|잖아요?\?|했잖아|말했잖|\?!|!\?)")
+CONSONANTS = re.compile(r"^[ㄱ-ㅎ\s.!?~]+$")   # ㅇㅇ·ㅇㅋ·ㄴㄴ
+LAUGH = re.compile(r"^[ㅋㅎ\s.!?~]+$")         # ㅋㅋ·ㅎㅎ만이면 자음 답으로 보지 않는다
 
 
 def surface(text: str) -> dict:
@@ -27,6 +31,8 @@ def surface(text: str) -> dict:
         "apology": bool(APOLOGY.search(t)),
         "polite": bool(POLITE_END.search(t)),
         "question_back": t.endswith("?"),
+        "blame": bool(BLAME.search(t)),
+        "consonants": bool(CONSONANTS.match(t)) and not LAUGH.match(t),
     }
 
 
