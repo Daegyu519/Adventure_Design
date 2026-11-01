@@ -106,6 +106,7 @@ class MirrorCard(BaseModel):
     relation: str
     situation: str
     message: str
+    context: str | None = None   # 앞선 말(받은·예측 카드): 보낸 문장 바로 앞 상대의 말, 또는 카드의 message
 
 
 class MirrorTodayOut(BaseModel):

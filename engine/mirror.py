@@ -129,10 +129,11 @@ def today_cards(user_id: UUID, today: date, sent: list[SentMsg], used: set[str],
     같은 사용자·같은 날·같은 기록이면 같은 카드다."""
     rng = random.Random(f"{user_id}:{today.isoformat()}")
 
-    def card(kind: MirrorKind, ref: str, relation: str, persona: str, situation: str, message: str) -> MirrorCard:
+    def card(kind: MirrorKind, ref: str, relation: str, persona: str, situation: str, message: str,
+             context: str | None = None) -> MirrorCard:
         payload = {"u": str(user_id), "k": kind, "s": ref, "r": relation, "p": persona, "d": today.isoformat()}
         return MirrorCard(card_id=sign(payload, key), kind=kind, persona=persona, relation=relation,
-                          situation=situation, message=message)
+                          situation=situation, message=message, context=context)
 
     rp = rng.choice([c for c in content.cards if f"roleplay|card:{c.id}" not in used] or content.cards)
     out = [card("roleplay", f"card:{rp.id}", rp.relation, rp.persona, rp.situation, rp.message)]
@@ -141,14 +142,14 @@ def today_cards(user_id: UUID, today: date, sent: list[SentMsg], used: set[str],
         msgs = [m for m in sent if f"{kind}|msg:{m.id}" not in used and m.text not in taken and len(m.text) <= MAX_LEN]
         if msgs:
             m = rng.choice(msgs)
-            ref, text, relation = f"msg:{m.id}", m.text, m.relation
+            ref, text, relation, context = f"msg:{m.id}", m.text, m.relation, m.context
             persona = next((p["name"] for p in content.personas if p["relation"] == relation),
                            content.personas[0]["name"])
         else:
             pool = [c for c in content.cards if c.sample_reply not in taken]
             c = rng.choice([c for c in pool if f"{kind}|card:{c.id}" not in used] or pool)
-            ref, text, relation, persona = f"card:{c.id}", c.sample_reply, c.relation, c.persona
+            ref, text, relation, persona, context = f"card:{c.id}", c.sample_reply, c.relation, c.persona, c.message
         taken.add(text)
         situation = f"{persona}에게서 온 메시지" if kind == "receive" else f"{WORD[relation]}에게 보낸다면"
-        out.append(card(kind, ref, relation, persona, situation, text))
+        out.append(card(kind, ref, relation, persona, situation, text, context))
     return out

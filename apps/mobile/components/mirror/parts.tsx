@@ -10,6 +10,7 @@ import { Button } from '../Button';
 
 export type CardProps = { card: Card; onDone(): void; onRefresh(): void; say(t: string): void }; // say: 화면의 useAnnounce().say(영역은 화면에 하나)
 
+const CONTEXT_LABEL: Partial<Record<Card['kind'], string>> = { receive: '내가 먼저 한 말', predict: '상대가 먼저 한 말' };
 const KIND: Record<Card['kind'], string> = { roleplay: '역할극', receive: '되돌려 받기', predict: '예측 맞히기' };
 
 // 폼이 사라지고 결과가 나타날 때 포커스가 <body>로 떨어지지 않게, 나타나는 순간 이 상자로 옮긴다(WCAG 2.4.3).
@@ -44,6 +45,14 @@ export function CardShell({ card, children }: { card: Card; children: ReactNode 
         </AppText>
       </View>
       <AppText variant="small" color="textMuted">{`${card.persona} · ${card.relation} · ${card.situation}`}</AppText>
+      {card.context && CONTEXT_LABEL[card.kind] ? (
+        <View accessible accessibilityLabel={`${CONTEXT_LABEL[card.kind]}: ${card.context}`} style={{ gap: 2, paddingLeft: space[2], borderLeftWidth: 2, borderLeftColor: colors.border }}>
+          <AppText variant="small" weight="600" color="textMuted">
+            {CONTEXT_LABEL[card.kind]}
+          </AppText>
+          <AppText variant="small" color="textMuted">{`“${card.context}”`}</AppText>
+        </View>
+      ) : null}
       <View style={{ alignSelf: 'flex-start', maxWidth: '88%', paddingVertical: space[1], paddingHorizontal: space[2], borderRadius: radius.bubble, backgroundColor: colors.bubbleOther }}>
         <AppText selectable color="onBubbleOther">
           {card.message}

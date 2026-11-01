@@ -64,6 +64,17 @@ class SentMsg:
     text: str
     relation: str
     created_at: datetime
+    context: str | None = None   # 바로 앞 상대의 말(답장이면 답장 대상). 사진뿐이면 "(사진)", 없으면 None
+
+
+CONTEXT_MAX = 120
+
+
+def context_text(text: str | None, image_path: str | None) -> str | None:
+    """거울 카드의 앞선 말: 글이 있으면 120자까지(넘으면 …), 사진뿐이면 "(사진)", 아무것도 없으면 None."""
+    if text:
+        return text if len(text) <= CONTEXT_MAX else text[:CONTEXT_MAX - 1] + "…"
+    return "(사진)" if image_path else None
 
 
 @dataclass(frozen=True)
@@ -116,6 +127,7 @@ class Repo(Protocol):
     async def push_targets(self, room_id: UUID, sender_id: UUID) -> list[PushTarget]: ...
     async def delete_push_token(self, user_id: UUID, token: str) -> None: ...
     async def sent_messages(self, user_id: UUID, since: datetime, limit: int = 50) -> list[SentMsg]: ...
+    async def message_context(self, message_id: int) -> str | None: ...   # sent_messages의 context와 같은 규칙
     async def mirror_refs(self, user_id: UUID, before: datetime) -> set[str]: ...   # before 전에 답한 "kind|card_ref"
     async def insert_mirror_attempt(self, user_id: UUID, kind: str, card_ref: str, answer_score: int | None,
                                     predicted: int | None, panel_bin: int | None, gap: int | None) -> None: ...
@@ -125,6 +137,13 @@ class Repo(Protocol):
 
 
 _MSG = "id, room_id, sender_id, text, image_path, reply_to, created_at"
+# 내 메시지 m의 앞선 말: 남(보낸 사람이 다른)의 메시지 중 reply_to가 있으면 그것, 없으면 바로 앞 것. 읽기 전용, 줄마다 한 번(lateral)
+_CTX_JOIN = """left join lateral (
+    select x.text, x.image_path from public.messages x
+    where x.room_id = m.room_id and x.sender_id <> m.sender_id
+      and (x.id = m.reply_to or (x.created_at, x.id) < (m.created_at, m.id))
+    order by coalesce(x.id = m.reply_to, false) desc, x.created_at desc, x.id desc limit 1
+  ) c on true"""
 _WEEK = "date_trunc('week', created_at at time zone 'Asia/Seoul')::date"  # KST 주 월요일(세션 TimeZone과 무관)
 
 
@@ -292,11 +311,18 @@ class PgRepo:
 
     async def sent_messages(self, user_id: UUID, since: datetime, limit: int = 50) -> list[SentMsg]:
         rows = await self._pool.fetch(
-            """select m.id, m.room_id, m.text, r.relation, m.created_at
-               from public.messages m join public.rooms r on r.id = m.room_id
+            f"""select m.id, m.room_id, m.text, r.relation, m.created_at, c.text as ctx_text, c.image_path as ctx_image
+               from public.messages m join public.rooms r on r.id = m.room_id {_CTX_JOIN}
                where m.sender_id = $1 and m.text <> '' and m.created_at >= $2
                order by m.created_at desc, m.id desc limit $3""", user_id, since, limit)
-        return [SentMsg(**r) for r in rows]
+        return [SentMsg(r["id"], r["room_id"], r["text"], r["relation"], r["created_at"],
+                        context_text(r["ctx_text"], r["ctx_image"])) for r in rows]
+
+    async def message_context(self, message_id: int) -> str | None:
+        r = await self._pool.fetchrow(
+            f"select c.text as ctx_text, c.image_path as ctx_image from public.messages m {_CTX_JOIN} where m.id = $1",
+            message_id)
+        return context_text(r["ctx_text"], r["ctx_image"]) if r else None
 
     async def mirror_refs(self, user_id: UUID, before: datetime) -> set[str]:
         rows = await self._pool.fetch(

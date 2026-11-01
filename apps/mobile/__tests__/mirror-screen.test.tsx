@@ -262,3 +262,28 @@ test('am-9: 안드로이드에서 카드 묶음·결과 상자가 겹쳐도 안�
   expect(regions).toHaveLength(1);
   expect(textOf(regions[0])).toContain('역할극 결과');
 });
+
+
+describe('앞선 말(P-19)', () => {
+  it('받은·예측 카드는 라벨과 앞선 말을 문장 위에 보이고, 없으면 아무것도 없다', async () => {
+    today.mockResolvedValue({
+      cards: [
+        CARDS[0],
+        { ...CARDS[1], context: '내일까지 가능해요?' },
+        { ...CARDS[2], context: '그럼 제가 할게요.' },
+      ],
+    });
+    const { text, byLabel } = await setup();
+    expect(text()).toContain('내가 먼저 한 말');
+    expect(text()).toContain('“내일까지 가능해요?”');
+    expect(text()).toContain('상대가 먼저 한 말');
+    expect(text()).toContain('“그럼 제가 할게요.”');
+    expect(text().indexOf('내가 먼저 한 말')).toBeLessThan(text().indexOf('안 돼요.'));
+    expect(byLabel('상대가 먼저 한 말: 그럼 제가 할게요.')).toHaveLength(1);
+  });
+
+  it('context가 없으면 라벨이 없다', async () => {
+    const { text } = await setup();
+    expect(text()).not.toContain('먼저 한 말');
+  });
+});

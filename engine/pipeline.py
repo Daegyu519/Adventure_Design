@@ -10,7 +10,7 @@ from typing import Literal
 from experts.base import ExpertRequest, ExpertResult
 from experts.registry import Registry, run_all
 from harness.pii import TOKEN, Masker
-from harness.schemas import Conversation, DetailReport, FeedbackResult, GateResult, Hint, RewriteOption, Verdict
+from harness.schemas import Conversation, DetailReport, FeedbackResult, GateResult, Hint, RewriteOption, Turn, Verdict
 from harness.store import ProfileStore
 from layers import gate, rewrite
 from layers.aggregate import aggregate, merged, top_reading
@@ -140,9 +140,12 @@ def _restored(m: Masker, i: int, c: RewriteOption, raw: str) -> RewriteOption | 
     return None if any(t not in raw for t in strays) else o
 
 
-async def panel(reg: Registry, draft: str, relation: str, names: list[str], t0: float) -> dict[str, float] | None:
-    """거울 경로의 말투 전문가만, 대화 없이 읽은 읽힘(키 5개). 아무도 답하지 못하면 None."""
-    req = ExpertRequest(path="mirror", draft=Masker(names)(draft), relation=relation)
+async def panel(reg: Registry, draft: str, relation: str, names: list[str], t0: float,
+                context: Turn | None = None) -> dict[str, float] | None:
+    """거울 경로의 말투 전문가만, 읽힘(키 5개). context가 있으면 문장 앞의 한 턴으로 같은 Masker를 거쳐 넣는다.
+    아무도 답하지 못하면 None."""
+    m = Masker(names)
+    req = ExpertRequest(path="mirror", draft=m(draft), turns=m.turns([context]) if context else [], relation=relation)
     end = t0 + reg.cfg["paths"]["mirror"]["deadline_ms"] / 1000 - 0.3
     results = await run_all(reg.for_path("mirror", "tone"), req, end)
     return merged([(r.output, reg.weight(r.expert_id)) for r in results]) if results else None
