@@ -182,12 +182,11 @@ export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, 
           }
           style={{
             flex: 1,
-            minHeight: 36,
+            minHeight: 44, // 누르는 영역 44 이상: 바깥 margin이 아니라 입력칸 안 여백으로 높인다
             maxHeight: 140,
-            marginVertical: 4,
             paddingHorizontal: 14,
-            paddingTop: 7,
-            paddingBottom: 7,
+            paddingTop: 11,
+            paddingBottom: 11,
             borderWidth: 1,
             borderColor: colors.border,
             borderRadius: radius.input,

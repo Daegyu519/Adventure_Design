@@ -43,7 +43,7 @@ export function HintBar({ hint, onDismiss, onOpenDetail, onFocusInside }: { hint
       }}
     >
       <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colors.hintText }} />
-      <AppText nativeID={HINT_TEXT_ID} variant="small" style={{ flex: 1, color: colors.hintText, fontSize: 14.5, lineHeight: 20 }}>
+      <AppText nativeID={HINT_TEXT_ID} numberOfLines={1} variant="small" style={{ flex: 1, color: colors.hintText, fontSize: 14.5, lineHeight: 20 }}>
         {hint.title}
       </AppText>
       {onOpenDetail ? (

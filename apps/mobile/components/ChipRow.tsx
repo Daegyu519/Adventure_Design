@@ -43,7 +43,7 @@ export function ChipRow<T extends string>({ options, value, onChange, accessibil
             } as object)}
             style={({ pressed }) => segmented ? ({
               flex: 1,
-              minHeight: 40,
+              minHeight: 44, // 누르는 영역 44 이상(MASTER 8장)
               minWidth: 44,
               paddingHorizontal: space[1],
               borderRadius: 7,
