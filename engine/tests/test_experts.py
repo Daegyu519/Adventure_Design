@@ -384,3 +384,33 @@ def test_schema_additions():
     assert c.model_copy(update={"reply_to": Turn(speaker="me", text="내 말")}).last_them() == "최근"
     assert turns_text([{"speaker": "them", "text": "hi", "label": "민수"}, {"speaker": "me", "text": "yo"}]) \
         == "[민수] hi\n[나] yo"
+
+
+def test_hint_thresholds_env_override(monkeypatch):
+    # P-21: 배포 env로 힌트 기준을 덮는다. 비우면 models.yaml 그대로
+    from experts.registry import Registry
+    from app.settings import DEFAULT_MODELS_PATH
+    base = Registry.load(DEFAULT_MODELS_PATH, force_mock=True).cfg
+    monkeypatch.setenv("HINT_GATE_THRESHOLD", "0")
+    monkeypatch.setenv("HINT_ALERT_THRESHOLD", "0.3")
+    monkeypatch.setenv("HINT_MIN_CONFIDENCE", " 0.2 ")
+    cfg = Registry.load(DEFAULT_MODELS_PATH, force_mock=True).cfg
+    assert cfg["paths"]["realtime"]["gate_threshold"] == 0.0
+    assert cfg["aggregate"]["alert_threshold"] == 0.3
+    assert cfg["aggregate"]["min_confidence"] == 0.2
+    monkeypatch.setenv("HINT_GATE_THRESHOLD", "")
+    monkeypatch.delenv("HINT_ALERT_THRESHOLD")
+    monkeypatch.delenv("HINT_MIN_CONFIDENCE")
+    again = Registry.load(DEFAULT_MODELS_PATH, force_mock=True).cfg
+    assert again["paths"]["realtime"]["gate_threshold"] == base["paths"]["realtime"]["gate_threshold"]
+    assert again["aggregate"]["alert_threshold"] == base["aggregate"]["alert_threshold"]
+
+
+def test_hint_thresholds_env_rejects_out_of_range(monkeypatch):
+    import pytest
+    from experts.registry import Registry
+    from app.settings import DEFAULT_MODELS_PATH
+    for bad in ("1.5", "-0.1", "nan", "abc"):
+        monkeypatch.setenv("HINT_ALERT_THRESHOLD", bad)
+        with pytest.raises(ValueError):
+            Registry.load(DEFAULT_MODELS_PATH, force_mock=True)
