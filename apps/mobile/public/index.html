@@ -6,14 +6,16 @@
     <!-- viewport-fit=cover: 노치·다이내믹 아일랜드·홈 막대의 안전 영역(env(safe-area-inset-*))을 SafeAreaView가 읽게 한다(iPhone X 이후, 16 계열 포함) -->
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>%WEB_TITLE%</title>
-    <!-- 홈 화면에 추가(iOS 웹 푸시 조건)와 웹 푸시용. 색은 tokens.json light.primary와 같은 값 -->
+    <!-- 홈 화면에 추가(iOS 웹 푸시 조건)와 웹 푸시용. 색은 화면 바탕(tokens.json background)과 같은 값 -->
     <link rel="manifest" href="/manifest.json" />
     <link rel="apple-touch-icon" href="/icon.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="톤챗" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <meta name="theme-color" content="#0F766E" />
+    <!-- 모노(P-26): 주소창·상태 표시줄 색을 화면 바탕(라이트 흰색·다크 검정)에 맞춘다 -->
+    <meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)" />
     <style id="expo-reset">
       html,
       body {
