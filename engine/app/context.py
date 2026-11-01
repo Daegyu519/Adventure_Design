@@ -14,7 +14,8 @@ from harness.schemas import Conversation, Turn
 from harness.store import ProfileStore
 
 RECENT = 8
-PHOTO = "(사진)"   # 사진은 모델에 보내지 않는다
+PHOTO = "(사진)"   # 사진·파일은 모델에 보내지 않는다
+FILE = "(파일)"
 
 
 @dataclass(frozen=True)
@@ -40,7 +41,7 @@ class _Labels:
         else:
             speaker = "them"
             label = self._seen.setdefault(m.sender_id, f"상대{len(self._seen) + 1}" if self._group else "상대")
-        return Turn(speaker=speaker, text=m.text or PHOTO, label=prefix + label)
+        return Turn(speaker=speaker, text=m.text or (FILE if m.file_path else PHOTO), label=prefix + label)
 
 
 async def load_context(repo: Repo, room_id: UUID, user_id: UUID, reply_to: int | None, now: datetime) -> RoomContext:

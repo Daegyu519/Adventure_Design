@@ -33,14 +33,14 @@ isOneToOne: false
                   ]
                 },"messages": {
                   Row: {
-                    "created_at": string,"id": number,"image_path": string | null,"mentions": (string)[],"reply_to": number | null,"room_id": string,"sender_id": string,"text": string
+                    "created_at": string,"file_name": string | null,"file_path": string | null,"file_size": number | null,"id": number,"image_path": string | null,"mentions": (string)[],"reply_to": number | null,"room_id": string,"sender_id": string,"text": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "created_at"?: string,"id"?: never,"image_path"?: string | null,"mentions"?: (string)[],"reply_to"?: number | null,"room_id": string,"sender_id": string,"text"?: string
+                    "created_at"?: string,"file_name"?: string | null,"file_path"?: string | null,"file_size"?: number | null,"id"?: never,"image_path"?: string | null,"mentions"?: (string)[],"reply_to"?: number | null,"room_id": string,"sender_id": string,"text"?: string
                   }
                   Update: {
-                    "created_at"?: string,"id"?: never,"image_path"?: string | null,"mentions"?: (string)[],"reply_to"?: number | null,"room_id"?: string,"sender_id"?: string,"text"?: string
+                    "created_at"?: string,"file_name"?: string | null,"file_path"?: string | null,"file_size"?: number | null,"id"?: never,"image_path"?: string | null,"mentions"?: (string)[],"reply_to"?: number | null,"room_id"?: string,"sender_id"?: string,"text"?: string
                   }
                   Relationships: [
                     {

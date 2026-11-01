@@ -1,5 +1,6 @@
 import ArrowUp from 'lucide-react-native/icons/arrow-up';
-import Plus from 'lucide-react-native/icons/plus';
+import ImageIcon from 'lucide-react-native/icons/image';
+import Paperclip from 'lucide-react-native/icons/paperclip';
 import X from 'lucide-react-native/icons/x';
 import { useEffect, useRef, useState, type ComponentRef, type RefObject } from 'react';
 import { Platform, StyleSheet, TextInput, View } from 'react-native';
@@ -14,7 +15,7 @@ import { IconButton } from './IconButton';
 import { MAX_SHOWN, MENTION_LIST_ID, MentionPicker, mentionOptionId } from './MentionPicker';
 import type { Member } from '../lib/rooms';
 
-// MASTER 4·5장: iOS식 입력줄. 둥근 + 버튼(사진), 둥근 입력창(모서리 18, 최소 높이 36), 둥근 보내기. 눌림 영역은 모두 44. 웹은 Enter로 보내고 Shift+Enter는 줄바꿈, 한글 조합 중 Enter는 보내지 않는다.
+// MASTER 4·5장: iOS식 입력줄. 둥근 사진·파일 버튼, 둥근 입력창(모서리 18, 최소 높이 36), 둥근 보내기. 눌림 영역은 모두 44. 웹은 Enter로 보내고 Shift+Enter는 줄바꿈, 한글 조합 중 Enter는 보내지 않는다.
 // 입력창은 보낸 뒤에도 그대로 있어서 포커스를 잃지 않는다. 글이 비면 보내기는 aria-disabled(진짜 disabled 아님).
 // 답장 막대: 답장 대상을 고르면 입력창으로, 취소하면(막대가 사라지므로) 입력창으로 포커스를 옮긴다.
 export type InputHandle = ComponentRef<typeof TextInput>;
@@ -26,6 +27,7 @@ type Props = {
   onCancelReply(): void;
   inputRef?: RefObject<InputHandle | null>;
   onPickImage?(): void;
+  onPickFile?(): void;
   typingLabel?: string | null; // "지은님이 입력 중". 입력창 위 polite 영역(바뀔 때만 읽힌다)
   mentionCandidates?: Pick<Member, 'user_id' | 'name'>[] | null; // null = 목록 없음
   onSelectMention?(name: string): void;
@@ -36,9 +38,10 @@ type Props = {
   hint?: Hint | null; // 입력 중 힌트(보낸 사람에게만). 입력창 바로 위, 보내기를 막지 않는다
   onDismissHint?(): void;
   onOpenHintDetail?(): void; // T-22가 넘긴다
+  fileBusy?: boolean; // 파일을 올리는 중: 파일 버튼이 aria-busy
   photoBusy?: boolean; // 사진을 올리는 중: 사진 버튼이 aria-busy(진짜 disabled 아님)
 };
-export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, inputRef, onPickImage, typingLabel, mentionCandidates, onSelectMention, onSelectionChange, selection, onBlur, photoBusy, say, hint, onDismissHint, onOpenHintDetail }: Props) {
+export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, inputRef, onPickImage, onPickFile, typingLabel, mentionCandidates, onSelectMention, onSelectionChange, selection, onBlur, photoBusy, fileBusy, say, hint, onDismissHint, onOpenHintDetail }: Props) {
   const { colors, radius, space, font } = useTheme();
   const own = useRef<InputHandle>(null);
   const ref = inputRef ?? own;
@@ -126,7 +129,8 @@ export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, 
         </View>
       )}
       <View style={{ flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: space[0], paddingVertical: space[0] }}>
-        {onPickImage ? <IconButton icon={Plus} label="사진 보내기" onPress={onPickImage} busy={photoBusy} disabled={photoBusy} circle={{ bg: 'border', fg: 'textMuted' }} /> : null}
+        {onPickImage ? <IconButton icon={ImageIcon} label="사진 보내기" onPress={onPickImage} busy={photoBusy} disabled={photoBusy} circle={{ bg: 'border', fg: 'textMuted' }} /> : null}
+        {onPickFile ? <IconButton icon={Paperclip} label="파일 보내기" onPress={onPickFile} busy={fileBusy} disabled={fileBusy} circle={{ bg: 'border', fg: 'textMuted' }} /> : null}
         <TextInput
           ref={ref}
           accessibilityLabel={replyTo ? `메시지 입력, ${replyTo.name}에게 답장 중` : '메시지 입력'}

@@ -19,7 +19,7 @@ flowchart LR
     Auth["Auth"]
     PG[("Postgres<br/>public: 채팅<br/>tone: 말투")]
     RT["Realtime<br/>메시지 · Presence"]
-    ST["Storage<br/>chat-images"]
+    ST["Storage<br/>chat-images · chat-files"]
     WH["DB 웹훅"]
   end
   subgraph EN["AI 엔진 (FastAPI)"]
@@ -45,7 +45,7 @@ flowchart LR
 | 구성 요소 | 맡는 일 | 맡지 않는 일 |
 |---|---|---|
 | 앱 (`apps/mobile`) | 화면 11개(시작·동의, 로그인, 대화 목록, 대화방, 살펴보기 시트, 털어놓기 시트, 방 만들기·초대, 방 정보, 거울, 리포트, 설정). 하단 탭은 대화 · 거울 · 리포트 · 설정. 메시지·공감·읽음·사진은 Supabase에 직접 쓰고 Realtime으로 받는다. 입력 중 표시는 Presence로만 한다. 입력이 0.5초 멈추면 엔진에 힌트를 요청한다 | 말투 판단, 모델·서비스 키 보관 |
-| Supabase | 로그인, Postgres, RLS 권한, 메시지 실시간 전달, 입력 중 표시(Presence), 사진 저장(Storage), 새 메시지를 엔진에 알리는 DB 웹훅 | 모델 호출 |
+| Supabase | 로그인, Postgres, RLS 권한, 메시지 실시간 전달, 입력 중 표시(Presence), 사진·파일 저장(Storage), 새 메시지를 엔진에 알리는 DB 웹훅 | 모델 호출 |
 | AI 엔진 (`engine`) | `/v1/hint`, `/v1/detail`, `/v1/feedback`, `/v1/mirror/*`, `/v1/stats/me`, `/hooks/message`. 하네스, 전문가 레지스트리, 집계기, 작업 큐, 푸시(Expo · 웹), trace 기록 | 메시지 저장·전달, 로그인 |
 | 모델 공급자 | OpenAI 호환 `/chat/completions` | 상태 저장 |
 
@@ -55,7 +55,7 @@ flowchart LR
 - 채팅은 엔진 없이 돈다. 엔진이 죽어도 메시지는 오간다.
 - 엔진은 앱이 보낸 맥락을 믿지 않는다. 최근 대화는 엔진이 DB에서 직접 읽는다.
 - `tone` 스키마는 API에 공개하지 않는다. 엔진만 서비스 키로 접근한다.
-- 사진은 모델에 보내지 않는다. 판정은 텍스트만 한다.
+- 사진·파일은 모델에 보내지 않는다(파일 이름도). 판정은 텍스트만 한다.
 - Gemini는 대조 세트·상황 카드 같은 합성 문장 평가에만 쓴다. 실제 대화 문장이 지나가는 경로(실시간·상세·털어놓기·거울)와 폴백 목록에는 넣지 않는다.
 
 ---
@@ -111,7 +111,7 @@ tone-chat/
 ## 3. 주요 흐름
 
 ### 3-1. 메시지 보내기
-1. 앱이 `public.messages`에 insert한다. RLS가 방 멤버인지(`is_member(room_id)`), `sender_id = auth.uid()`인지 확인한다. 답장이면 `reply_to`가 같은 방 메시지여야 한다. 사진은 먼저 Storage `chat-images/<room_id>/…`에 올리고 `image_path`를 넣는다.
+1. 앱이 `public.messages`에 insert한다. RLS가 방 멤버인지(`is_member(room_id)`), `sender_id = auth.uid()`인지 확인한다. 답장이면 `reply_to`가 같은 방 메시지여야 한다. 사진은 먼저 Storage `chat-images/<room_id>/…`에 올리고 `image_path`를 넣는다. 파일(≤20MB)은 Storage `chat-files/<room_id>/…`에 올리고 `file_path`·`file_name`·`file_size`를 함께 넣는다(사진과 한 메시지에 같이 못 담는다). 파일은 서명 주소에 `download`를 붙여 첨부 파일로만 내려받는다(앱 출처에서 열리지 않게).
 2. Realtime(`postgres_changes`, `room_id` 필터)이 다른 멤버 앱에 전달한다. 구독자마다 RLS가 다시 확인된다. 공감(`reactions`)과 읽음(`room_members.last_read_at`)도 같은 방식으로 받는다.
 3. DB 웹훅이 `POST /hooks/message`를 부른다. 엔진은 작업 큐에 기준선 갱신과 푸시를 넣는다. 푸시는 방 멤버 전원(보낸 사람·알림 끈 사람 제외)에게, `push_tokens.platform`에 따라 Expo Push(안드로이드) 또는 웹 푸시(`pywebpush`, VAPID)로 보낸다.
 4. 입력 중 표시는 Realtime Presence(방 채널)로만 하고 DB에 남기지 않는다.
@@ -138,7 +138,7 @@ sequenceDiagram
 - 앱은 0.5초 디바운스로 보내고, 새 입력이 오면 `AbortController`로 이전 요청을 취소한다. 응답은 최신 `seq`만 표시한다.
 - 전체 1.5초(디바운스 제외)를 넘기면 엔진은 `hint=null`을 돌려준다.
 - 힌트가 떠 있어도 보내기는 막지 않는다.
-- 맥락 = 최근 8개 + 화자 표시 + 답장 대상 맨 앞. 최근 대화 8개에는 화자 표시(나 / 1:1은 상대 / 그룹방은 처음 나온 순서로 상대1, 상대2…)를 붙인다. 입력 중인 문장이 답장이면(`reply_to`, 4장) 원문 메시지를 `답장 대상 · 상대N` 표시로 맥락 맨 앞에 넣는다. 사진만 있는 메시지는 `(사진)`이다(`engine/app/context.py`).
+- 맥락 = 최근 8개 + 화자 표시 + 답장 대상 맨 앞. 최근 대화 8개에는 화자 표시(나 / 1:1은 상대 / 그룹방은 처음 나온 순서로 상대1, 상대2…)를 붙인다. 입력 중인 문장이 답장이면(`reply_to`, 4장) 원문 메시지를 `답장 대상 · 상대N` 표시로 맥락 맨 앞에 넣는다. 사진만 있는 메시지는 `(사진)`, 파일만 있는 메시지는 `(파일)`이다(`engine/app/context.py`).
 - 그룹방 판정 기준은 "이 방 사람들이 읽을 때"다. 관계는 방 단위 하나다.
 
 | 구간 | 목표 |
@@ -195,7 +195,7 @@ sequenceDiagram
 3. **예측 맞히기**: 내 문장과 관계("선배라면?")를 보여 주고 "얼마나 부정적으로 읽을까" 1~5점을 먼저 고르게 한다. 패널의 부정 확률(차갑게 + 성의없게 + 화나게)을 0.2 간격으로 1~5칸에 나눠 비교한다. `gap = |예측 칸 − 패널 칸|`이 자기객관화 점수다. 되돌려 받기 점수도 같은 방식으로 gap을 낸다.
 
 - 문장 출처: 본인이 보낸 메시지(엔진이 서비스 키로 읽음)와 `engine/content/mirror_cards.yaml`(팀플 상황 카드: 일정 조율, 역할 요청, 거절, 마감 독촉. 20장부터 시작).
-- 받은·예측 카드의 `context`는 보낸 문장 바로 앞 상대의 말(답장이면 답장 대상, 사진뿐이면 "(사진)", 120자 제한)이고 카드 문장이면 카드의 `message`다. 답할 때 엔진이 다시 읽어 가린 뒤 문장 앞 한 턴으로 판정에 넣고, 로그·trace에는 남기지 않는다(P-19).
+- 받은·예측 카드의 `context`는 보낸 문장 바로 앞 상대의 말(답장이면 답장 대상, 사진뿐이면 "(사진)", 파일뿐이면 "(파일)", 120자 제한)이고 카드 문장이면 카드의 `message`다. 답할 때 엔진이 다시 읽어 가린 뒤 문장 앞 한 턴으로 판정에 넣고, 로그·trace에는 남기지 않는다(P-19).
 - `card_id`는 엔진이 서명한 값이다. 앱이 문장 출처를 위조할 수 없다.
 - 실제 대화에서 뽑은 카드도 `pii.mask`를 거치고, Gemini에 보내지 않는다.
 - 피드백은 문장에만 한다. 점수는 "예측과 한 칸 차이"처럼 차이로만 보여 준다. 점수 폭죽, 연속 출석 압박은 없다.
@@ -237,12 +237,13 @@ sequenceDiagram
 | `public.invites` | code(8자 A–Z0–9), inviter_id, room_id(그룹 초대면 채움), relation, max_uses, uses, expires_at | 초대한 사람 | `create_invite`, `accept_invite` 함수만 |
 | `public.rooms` | id, kind(`direct`·`group`), title(그룹만), relation, created_by, created_at | 방 멤버 | `create_group`, `accept_invite` 함수만 |
 | `public.room_members` | room_id, user_id, joined_at, last_read_at, muted. PK(room_id, user_id) | 방 멤버 | 추가는 함수만. 본인 행의 last_read_at, muted만 수정 |
-| `public.messages` | id(bigint), room_id, sender_id, text(≤2000자), image_path(`<room_id>/<이름>`), reply_to(bigint, 같은 방, 원문이 지워지면 null), mentions(uuid[], ≤8, 방 멤버만), created_at | 방 멤버 | 멤버, `sender_id = auth.uid()`만. 수정·삭제 없음 |
+| `public.messages` | id(bigint), room_id, sender_id, text(≤2000자), image_path(`<room_id>/<이름>`), file_path(`<room_id>/<이름>`)·file_name(≤200자, 제어 문자 없음)·file_size(1~20MB)는 셋이 함께 있거나 함께 없고 image_path와 둘 중 하나만, reply_to(bigint, 같은 방, 원문이 지워지면 null), mentions(uuid[], ≤8, 방 멤버만), created_at | 방 멤버 | 멤버, `sender_id = auth.uid()`만. 수정·삭제 없음 |
 | `public.reactions` | message_id, user_id, emoji(고정 6개 중), created_at. PK(message_id, user_id) | 방 멤버 | 멤버, 본인 행만 |
 | `public.push_tokens` | user_id, token, platform(`ios`·`android`·`web`) | 본인 | 본인 |
 | `public.tone_events` | id, room_id, user_id, kind, risk, top_reading, signals(jsonb), choice, created_at | 본인 | 본인 행 insert만 |
 | `public.mirror_attempts` | id, user_id, kind(`roleplay`·`receive`·`predict`), card_ref, answer_score, predicted, panel_bin, gap, created_at | 본인 | 엔진(서비스 키) |
 | Storage `chat-images` | 경로 `<room_id>/…` | 방 멤버 | 방 멤버 |
+| Storage `chat-files` | 경로 `<room_id>/…`, 비공개, 파일당 20MB, 앱은 attachment로 내려받음 | 방 멤버 | 방 멤버 |
 | `tone.feedback_log` | id, room_id, reporter_id, message_id, usable, pattern_count, created_at | 엔진 | 엔진 |
 | `tone.sender_patterns` | sender_id, relation, trigger, count, strength, feeling, active_from, updated_at. PK(sender_id, relation, trigger, active_from). count는 서로 다른 신고자 수. 읽을 때 `active_from <= now`인 행을 trigger별로 묶어 count 합 · strength count 가중 평균 · feeling은 가장 늦게 켜진 행 | 엔진 | 엔진 |
 | `tone.sender_pattern_reporters` | sender_id, relation, trigger, reporter_id, created_at. PK(sender_id, relation, trigger, reporter_id). 보낸 사람 패턴에 같은 신고자를 한 번만 세려고 둔다 | 엔진 | 엔진 |
@@ -254,7 +255,7 @@ sequenceDiagram
 - RLS는 `is_member(room_id)` security definer 함수 하나로 통일한다. 방·초대는 함수(`create_group`, `create_invite`, `accept_invite`)로만 만든다. `accept_invite(code)`는 1:1 방을 만들거나 그룹에 참여시킨다.
 - 그룹방은 최대 8명(1:1은 2명)이다. 상한은 `room_members` insert 트리거가 방 행을 잠그고 센다(READ COMMITTED 전제).
 - 초대 코드는 8자(A–Z0–9), 72시간 유효. 1:1 초대는 `max_uses` 1, 그룹 초대는 7이고 그룹 멤버만 만든다. 이미 그 방 멤버(1:1은 이미 방이 있는 두 사람)가 다시 수락하면 만료·소진 여부와 관계없이 그 방을 돌려준다.
-- `messages.reply_to`는 `bigint references messages(id) on delete set null`이고 같은 방 메시지만 가리킨다. `image_path`는 `<room_id>/<이름>` 한 단계만 허용한다(이름은 `[A-Za-z0-9_-][A-Za-z0-9._-]*`, `..` 금지). `mentions`는 8개 이하, 그 방 멤버만. 셋 다 DB 제약·insert 트리거로 막는다.
+- `messages.reply_to`는 `bigint references messages(id) on delete set null`이고 같은 방 메시지만 가리킨다. `image_path`·`file_path`는 `<room_id>/<이름>` 한 단계만 허용한다(이름은 `[A-Za-z0-9_-][A-Za-z0-9._-]*`, `..` 금지). `mentions`는 8개 이하, 그 방 멤버만. 셋 다 DB 제약·insert 트리거로 막는다.
 - `push_tokens.platform = 'web'`이면 token 칸에 웹 푸시 구독 JSON을 넣는다.
 - 입력 중 표시는 DB에 남기지 않는다(Realtime Presence). 채널은 private `typing:<room_id>`이고(`{config: {private: true}}`), `realtime.messages` RLS 정책이 방 멤버만 읽고 보내게 한다(`_platform.sql`).
 - `tone_events.kind`: `hint_shown`, `option_chosen`(choice: A/B/original), `sent_with_hint`, `sent_after_fix`는 앱이 본인 JWT로 기록하고, `detail_opened`는 엔진이 기록한다.
@@ -404,7 +405,7 @@ risk = sigmoid( w0 + w1·prior + w2·Σk(αk·negk)/Σk(αk) + w3·violation + w
 | 실시간 힌트 | 디바운스 후 1.5초 이내, 넘으면 표시 안 함 |
 | 알림 정밀도 | 대조 세트 기준 0.8 이상 (재현율보다 우선) |
 | 장애 시 | 엔진·모델 장애가 채팅을 막지 않음. 힌트만 사라짐 |
-| 개인정보 | 하소연 원문 미저장, 파이프라인 입구에서 한 번 마스킹, 실제 대화(거울 카드 포함)는 Gemini 금지, 사진은 모델에 보내지 않음 |
+| 개인정보 | 하소연 원문 미저장, 파이프라인 입구에서 한 번 마스킹, 실제 대화(거울 카드 포함)는 Gemini 금지, 사진·파일은 모델에 보내지 않음 |
 | 무료 한도 | 파일럿 30명 기준 NVIDIA 모델당 분당 40회 안에서 운영 (L0 통과율 10% 가정) |
 | Supabase 무료 플랜 | DB 500MB, Realtime 동시 연결 200, 1주 비활성 시 일시정지 |
 

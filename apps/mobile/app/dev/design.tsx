@@ -17,7 +17,7 @@ import type { Msg } from '../../lib/messages';
 // 개발 전용 디자인 미리보기(로그인 없이 실제 컴포넌트를 가짜 자료로). ?v=list | room | settings. 제품 빌드에서는 아무것도 그리지 않고 "/"로 돌려보낸다.
 const T = (day: number, h: number, m: number) => (day > 30 ? new Date(2026, 9, day, h, m) : new Date(2026, 10, day, h, m)).toISOString();
 const msg = (id: number, s: 'me' | 'ji', text: string, day: number, h: number, m: number): Msg =>
-  ({ id, room_id: 'r', sender_id: s, text, created_at: T(day, h, m), reply_to: null, image_path: null, mentions: [] }) as unknown as Msg;
+  ({ id, room_id: 'r', sender_id: s, text, created_at: T(day, h, m), reply_to: null, image_path: null, file_path: null, file_name: null, file_size: null, mentions: [] }) as unknown as Msg;
 const THREAD = [
   msg(1, 'ji', '내일 점심 어디서 먹을까?', 31, 18, 2),
   msg(2, 'me', '학식 어때?', 31, 18, 3),

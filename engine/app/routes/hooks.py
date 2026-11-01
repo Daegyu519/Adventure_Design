@@ -27,6 +27,7 @@ class MessageRecord(BaseModel):
     sender_id: UUID
     text: str = ""
     image_path: str | None = None
+    file_path: str | None = None
     reply_to: int | None = Field(None, **BIGINT)
     created_at: datetime
 

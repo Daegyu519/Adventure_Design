@@ -1,7 +1,9 @@
 import Ellipsis from 'lucide-react-native/icons/ellipsis';
-import { Image, Platform, Pressable, View } from 'react-native';
+import FileText from 'lucide-react-native/icons/file-text';
+import { Image, Linking, Platform, Pressable, View } from 'react-native';
 
 import { formatStamp, REACTION_LABELS, type Emoji, type Msg, type ReactionSummary } from '../lib/messages';
+import { formatSize } from '../lib/files';
 import { useSignedUrl } from '../lib/images';
 import { splitMentions } from '../lib/mentions';
 import { focusRing, useTheme } from '../lib/theme';
@@ -10,7 +12,7 @@ import { Avatar } from './Avatar';
 import { Button } from './Button';
 import { IconButton } from './IconButton';
 
-export const firstLine = (m: Pick<Msg, 'text' | 'image_path'>) => m.text.split('\n')[0] || (m.image_path ? '사진' : '');
+export const firstLine = (m: Pick<Msg, 'text' | 'image_path' | 'file_name'>) => m.text.split('\n')[0] || (m.image_path ? '사진' : m.file_name ? `파일: ${m.file_name}` : '');
 
 type Props = {
   message: Msg;
@@ -51,7 +53,10 @@ export function Bubble({ message, mine, senderName, tail = true, showTime = true
   const web = Platform.OS === 'web';
   const tabIndex = web ? (active ? 0 : -1) : undefined;
   const { url, failed: photoFailed, retry: retryPhoto } = useSignedUrl(message.image_path);
-  const body = message.image_path ? (message.text ? `사진, ${message.text}` : '사진') : message.text;
+  const fileName = message.file_path ? (message.file_name ?? '파일') : null;
+  const fileLabel = fileName ? `파일 ${fileName}, ${formatSize(message.file_size ?? 0)}` : '';
+  const { url: fileUrl, failed: fileFailed, retry: retryFile } = useSignedUrl(message.file_path, { bucket: 'chat-files', download: fileName ?? undefined });
+  const body = message.image_path ? (message.text ? `사진, ${message.text}` : '사진') : fileName ? (message.text ? `${fileLabel}, ${message.text}` : fileLabel) : message.text;
   const alt = mine ? '내가 보낸 사진' : `${speaker}님이 보낸 사진`;
   const parts = message.text && mentionNames.length ? splitMentions(message.text, mentionNames) : null;
   const stamp = formatStamp(message.created_at);
@@ -145,6 +150,27 @@ export function Bubble({ message, mine, senderName, tail = true, showTime = true
                 ) : null}
               </View>
             )
+          ) : null}
+          {fileName ? (
+            <Pressable
+              // onPress 안에서 동기로 열어야 iOS Safari가 팝업으로 막지 않는다: 서명 주소는 미리 받아 둔다
+              onPress={fileUrl ? () => void Linking.openURL(fileUrl) : fileFailed ? retryFile : undefined}
+              tabIndex={tabIndex}
+              accessibilityRole="link"
+              accessibilityLabel={fileFailed ? `${fileLabel}, 불러오지 못했어요. 누르면 다시 시도` : fileUrl ? fileLabel : `${fileLabel}, 불러오는 중`}
+              accessibilityState={{ busy: !fileUrl && !fileFailed }}
+              style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: space[1], width: PHOTO.w, maxWidth: '100%', minHeight: 44, padding: space[1], borderRadius: radius.bubble - 4, backgroundColor: colors.surface, opacity: !fileUrl && !fileFailed ? 0.6 : pressed ? 0.8 : 1, marginBottom: message.text ? space[1] : 0, ...focusRing(colors.primary) })}
+            >
+              <FileText size={28} color={colors.text} {...HIDDEN} />
+              <View style={{ flex: 1, flexShrink: 1 }} {...HIDDEN}>
+                <AppText variant="small" weight="600" numberOfLines={2} style={{ overflow: 'hidden' }}>
+                  {fileName}
+                </AppText>
+                <AppText variant="small" color="textMuted">
+                  {fileFailed ? '불러오지 못했어요 · 다시 시도' : formatSize(message.file_size ?? 0)}
+                </AppText>
+              </View>
+            </Pressable>
           ) : null}
           {message.text ? (
             <AppText selectable color={mine ? 'onPrimary' : 'onBubbleOther'}>

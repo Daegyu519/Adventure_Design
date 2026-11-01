@@ -80,7 +80,7 @@ test('대화 탭 빈 상태: 키가 없으면 한 줄 안내가 더 붙는다', 
 });
 
 test('목록: 제목 · 미리보기 · 안 읽은 수 배지, 누르면 방으로', async () => {
-  mockRooms = [room({ unread: 3, last: { text: '안녕', isImage: false, created_at: '2026-10-20T00:00:00+00:00' } }), room({ id: 'r2', title: '팀플', muted: true, last: { text: '', isImage: true, created_at: '2026-10-19T00:00:00+00:00' } })];
+  mockRooms = [room({ unread: 3, last: { text: '안녕', isImage: false, fileName: null, created_at: '2026-10-20T00:00:00+00:00' } }), room({ id: 'r2', title: '팀플', muted: true, last: { text: '', isImage: true, fileName: null, created_at: '2026-10-19T00:00:00+00:00' } })];
   const { texts, root, press } = await setup();
   expect(texts()).toContain('민수');
   expect(texts()).toContain('안녕');

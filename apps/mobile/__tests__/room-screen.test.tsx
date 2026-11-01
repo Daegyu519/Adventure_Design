@@ -9,6 +9,9 @@ jest.mock('lucide-react-native/icons/info', () => () => null);
 jest.mock('lucide-react-native/icons/send', () => () => null);
 jest.mock('lucide-react-native/icons/arrow-up', () => () => null);
 jest.mock('lucide-react-native/icons/plus', () => () => null);
+jest.mock('lucide-react-native/icons/image', () => () => null);
+jest.mock('lucide-react-native/icons/paperclip', () => () => null);
+jest.mock('lucide-react-native/icons/file-text', () => () => null);
 jest.mock('lucide-react-native/icons/chevron-left', () => () => null);
 jest.mock('lucide-react-native/icons/ellipsis', () => () => null);
 jest.mock('lucide-react-native/icons/x', () => () => null);
@@ -76,7 +79,7 @@ jest.mock('../lib/focus', () => ({ ...jest.requireActual('../lib/focus'), retryF
 const mockLogTone = jest.fn();
 jest.mock('../lib/toneEvents', () => ({ logToneEvent: (...a: unknown[]) => mockLogTone(...a) }));
 
-const m = (id: number, sender: string, text: string, ts = '2026-10-27 01:32:17.123456+00'): Msg => ({ id, room_id: 'r1', sender_id: sender, text, image_path: null, reply_to: null, mentions: [], created_at: ts });
+const m = (id: number, sender: string, text: string, ts = '2026-10-27 01:32:17.123456+00'): Msg => ({ id, room_id: 'r1', sender_id: sender, text, image_path: null, file_path: null, file_name: null, file_size: null, reply_to: null, mentions: [], created_at: ts });
 const textOf = (n: TestNode): string => (typeof n === 'string' ? n : n.children.map(textOf).join(''));
 
 async function setup() {

@@ -35,7 +35,7 @@ function mockBuilder() {
     }
     if (ins) {
       if (insertError) return { data: null, error: insertError, status: 400 };
-      const row = { id: db.length + 100, image_path: null, reply_to: null, mentions: [], created_at: '2026-10-27T01:00:00.000000+00:00', ...ins } as Msg;
+      const row = { id: db.length + 100, image_path: null, file_path: null, file_name: null, file_size: null, reply_to: null, mentions: [], created_at: '2026-10-27T01:00:00.000000+00:00', ...ins } as Msg;
       db.push(row);
       return { data: [row], error: null, status: 201 };
     }
@@ -51,7 +51,7 @@ let mockFetchCount = 0;
 // 채널은 realtime-js처럼 움직이는 공용 가짜(같은 이름이면 같은 객체, subscribe 뒤 on()은 던짐, removeChannel은 그 하나를 닫음).
 jest.mock('../supabase', () => ({ supabase: { ...jest.requireActual('../../test-utils/realtime').realtime, from: () => mockBuilder() } }));
 
-const m = (id: number, over: Partial<Msg> = {}): Msg => ({ id, room_id: 'r', sender_id: 'other', text: `m${id}`, image_path: null, reply_to: null, mentions: [], created_at: '2026-10-27T01:32:17.000000+00:00', ...over });
+const m = (id: number, over: Partial<Msg> = {}): Msg => ({ id, room_id: 'r', sender_id: 'other', text: `m${id}`, image_path: null, file_path: null, file_name: null, file_size: null, reply_to: null, mentions: [], created_at: '2026-10-27T01:32:17.000000+00:00', ...over });
 
 let api: ReturnType<typeof useRoomMessages>;
 let mockRoomId = 'r';

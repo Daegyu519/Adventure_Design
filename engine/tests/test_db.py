@@ -243,11 +243,14 @@ def test_sent_messages_context(world):
         m_reply = await w(seed.add_message(room, a, "답장", reply_to=q, at=NOW - timedelta(hours=4)))
         await w(seed.add_message(room, b, "", image_path=f"{room}/p.png", at=NOW - timedelta(hours=3)))
         m_img = await w(seed.add_message(room, a, "사진 뒤", at=NOW - timedelta(hours=2)))
+        await w(seed.add_message(room, b, "", file_path=f"{room}/f.pdf", at=NOW - timedelta(hours=1)))
+        m_file = await w(seed.add_message(room, a, "파일 뒤", at=NOW - timedelta(minutes=30)))
         got = {s.id: s.context for s in await repo.sent_messages(a, NOW - timedelta(days=1))}
         assert got[first] is None                                  # 앞선 말 없음
         assert got[m_prev] == "가" * 119 + "…" and len(got[m_prev]) == 120   # 남의 말, 120자 제한
         assert got[m_reply] == "가" * 119 + "…"                    # reply_to가 이긴다
         assert got[m_img] == "(사진)"
+        assert got[m_file] == "(파일)" and await repo.message_context(m_file) == "(파일)"   # 파일 이름은 읽지 않는다
         by_text = {s.text: s.context for s in await repo.sent_messages(a, NOW - timedelta(days=1))}
         assert by_text["내 말 둘"] == "끼어든 말"                    # 내 이전 말은 건너뛴다
         assert await repo.message_context(m_img) == "(사진)" and await repo.message_context(first) is None
