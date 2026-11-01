@@ -85,6 +85,8 @@ P-14 후속 점검에서 기존 generic Fast 입력의 CLS/SEP 누락을 확인�
 
 P-14 실험용 이진 분류기의 실제 학습 결과·재현·선택적 엔진 연결은 [실행·인계 문서](ml/P14-phase1.md)를 참고한다. 현재 모델은 모든 예비 평가에서 양성 검출에 실패해 실제 경고에 연결하지 않는다.
 
+P-14b: 로컬 Qwen3-30B 선생님 약지도(`ml/teacher.py`)·소프트 레이블 학습(`ml/train_soft.py`)·Gemma 앙상블 측정(`ml/ensemble_eval.py`) 결과는 [P-14b 결과](docs/handoff/P-14b-result.md), 채택 기준 미충족이라 연결하지 않았다.
+
 ```bash
 git clone <이 저장소> && cd <폴더>
 cp .env.example .env                              # 엔진·협업 값 (git에 넣지 않음)
