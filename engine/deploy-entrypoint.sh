@@ -5,7 +5,7 @@ set -eu
 for v in MIRROR_SECRET HOOK_SECRET SUPABASE_URL SUPABASE_DB_URL; do
   eval "val=\${$v:-}"
   if [ -z "$val" ]; then
-    echo "FATAL: $v is empty. Set it in the engine env file (see README 배포)." >&2
+    echo "FATAL: $v is empty. Set it in the engine env file (see docs/OPERATIONS.md 배포)." >&2
     exit 78
   fi
 done

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # 사용법: scripts/deploy-school [--env FILE]
-# 엔진(engine/, deploy/)을 학교 GPU 서버에 올리고 llm·engine·funnel을 켠다(README "배포").
+# 엔진(engine/, deploy/)을 GPU 서버에 올리고 llm·engine·funnel을 켠다(docs/OPERATIONS.md "배포").
 #   --env FILE:    엔진 환경 파일을 서버 engine.env(권한 600)로 복사한다. 값은 출력하지 않는다.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -41,6 +41,6 @@ if ! up engine; then
   exit 1
 fi
 c=0; up funnel || c=$?   # 3·4는 사람이 할 일(Tailscale 로그인·Funnel 켜기). 건강한 코드는 되돌리지 않는다.
-[ "$c" = 0 ] || echo "(funnel exit $c: see message above and README 배포; then rerun)" >&2
+[ "$c" = 0 ] || echo "(funnel exit $c: see message above and docs/OPERATIONS.md 배포; then rerun)" >&2
 up status
 exit "$c"
