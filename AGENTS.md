@@ -104,6 +104,8 @@ pilot 준비 상태: 서울 Supabase(SMTP는 Brevo — SMTP Login `…@smtp-brev
 
 ## 6. 구조도
 
+> 현재 배포 구성을 그린 자세한 그림(mermaid 9장)은 [`docs/architecture-diagrams.md`](docs/architecture-diagrams.md). 구성이 바뀌면 그 그림도 같이 고친다.
+
 ```mermaid
 flowchart LR
   subgraph APP["apps/mobile · Expo (Android 네이티브 + 웹, 아이폰은 웹 + 웹 푸시)"]
