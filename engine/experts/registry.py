@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import time
 from dataclasses import dataclass, field
@@ -15,6 +16,8 @@ from harness.router import NoResult, Router
 from .base import Expert, ExpertRequest, ExpertResult
 from .llm import SCHEMAS, LLMExpert
 from .classifier import ClassifierExpert, load_classifiers
+
+log = logging.getLogger(__name__)
 
 
 def _check(e: dict, chain: list[str], providers: dict) -> None:
@@ -43,6 +46,7 @@ class Registry:
     @classmethod
     def load(cls, path: Path, force_mock: bool) -> "Registry":
         router = Router.from_file(path, force_mock)
+        override_thresholds(router.config, os.environ)
         providers = router.config["providers"]
         experts: list[Expert] = []
         for e in router.config["experts"]:
@@ -63,6 +67,27 @@ class Registry:
 
     def weight(self, expert_id: str) -> float:
         return next((e.weight for e in self.experts if e.id == expert_id), 1.0)
+
+
+# 테스트로 힌트 기준을 낮출 때 배포 env로 models.yaml 값을 덮는다(P-21). 비어 있으면 models.yaml 그대로.
+THRESHOLD_ENV = {"HINT_GATE_THRESHOLD": ("paths", "realtime", "gate_threshold"),
+                 "HINT_ALERT_THRESHOLD": ("aggregate", "alert_threshold"),
+                 "HINT_MIN_CONFIDENCE": ("aggregate", "min_confidence")}
+
+
+def override_thresholds(cfg: dict, env) -> None:
+    for name, keys in THRESHOLD_ENV.items():
+        raw = (env.get(name) or "").strip()
+        if not raw:
+            continue
+        v = float(raw)
+        if not 0.0 <= v <= 1.0:   # nan도 여기서 걸린다
+            raise ValueError(f"{name}는 0~1 사이여야 한다")
+        d = cfg
+        for k in keys[:-1]:
+            d = d[k]
+        d[keys[-1]] = v
+        log.warning("hint threshold overridden by env: %s=%s", name, v)
 
 
 async def run_all(experts: list[Expert], req: ExpertRequest, deadline: float) -> list[ExpertResult]:
