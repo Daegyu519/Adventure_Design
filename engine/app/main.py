@@ -55,6 +55,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             if errors:
                 raise errors[0]
         finally:
+            for c in get_registry().classifiers:   # 공유 httpx 클라이언트를 닫는다
+                getattr(c.backend, "close", lambda: None)()
             if repo:
                 await repo.close()
                 app.state.repo = None
@@ -96,6 +98,7 @@ class HealthResponse(BaseModel):
     ok: bool
     models: dict[str, Literal["up", "down"]]
     providers: dict[str, Literal["up", "down"]]
+    classifiers: dict[str, Literal["up", "down"]]   # 판별기 id → 켜져 있고 서비스가 답하면 up(P-28)
     failures: dict[str, dict[str, int]]   # 공급자 → {실패·건너뜀 종류: 횟수}(프로세스 시작 뒤). 원문 없음
 
 
@@ -126,8 +129,14 @@ def startup_warnings(reg: Registry, env: Mapping[str, str]) -> None:
             log.warning("model unavailable at startup: %s", ref)
 
 
+def classifier_status(cfg: dict, reg: Registry) -> dict[str, str]:
+    live = {c.id: c for c in reg.classifiers}
+    return {e["id"]: "up" if (c := live.get(e["id"])) and getattr(c.backend, "healthy", lambda: True)() else "down"
+            for e in cfg.get("classifiers", []) if e.get("enabled")}
+
+
 @app.get("/health")
 def health(reg: Registry = Depends(get_registry)) -> HealthResponse:
     cfg = load_config()
     return HealthResponse(ok=True, models=model_status(cfg, os.environ), providers=provider_status(cfg, os.environ, reg.router.force_mock),
-                          failures=reg.router.failures)
+                          classifiers=classifier_status(cfg, reg), failures=reg.router.failures)

@@ -65,6 +65,9 @@ class Registry:
     def for_path(self, path: str, role: str) -> list[Expert]:
         return [e for e in self.experts if path in e.paths and e.role == role]
 
+    def classifiers_for(self, path: str) -> list[ClassifierExpert]:
+        return [c for c in self.classifiers if path in c.paths]
+
     def weight(self, expert_id: str) -> float:
         return next((e.weight for e in self.experts if e.id == expert_id), 1.0)
 

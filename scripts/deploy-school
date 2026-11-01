@@ -13,11 +13,11 @@ while [ $# -gt 0 ]; do
   esac
 done
 [ -z "$ENVF" ] || [ -f "$ENVF" ] || { echo "no such file: $ENVF" >&2; exit 2; }
-[ -z "$(git status --porcelain -- engine deploy)" ] || { echo "uncommitted changes under engine/ or deploy/; commit first" >&2; exit 1; }
+[ -z "$(git status --porcelain -- engine deploy ml)" ] || { echo "uncommitted changes under engine/, deploy/ or ml/; commit first" >&2; exit 1; }
 remote() { ssh -o BatchMode=yes -o ConnectTimeout=10 "$H" "$@"; }
 up() { remote 'bash -s -- '"$1" < deploy/school-gpu/up.sh; }
 
-git archive HEAD engine deploy | remote "set -e; rm -rf $B/app.new; mkdir -p $B/app.new; tar -x -C $B/app.new"
+git archive HEAD engine deploy ml | remote "set -e; rm -rf $B/app.new; mkdir -p $B/app.new; tar -x -C $B/app.new"
 # 가상환경 안의 스크립트는 절대 경로를 품으므로 자리를 바꾼 뒤에 sync한다. 실패하면 되돌린다(이전 venv는 다시 sync가 필요할 수 있음).
 remote "set -e; cd $B; rm -rf app.prev app.failed; [ -d app ] && mv app app.prev; mv app.new app
   cd app/engine && uv sync --locked --no-dev --python 3.11 || { cd $B; rm -rf app.failed; mv app app.failed; [ -d app.prev ] && mv app.prev app; echo 'uv sync failed; rolled back' >&2; exit 1; }"
@@ -27,7 +27,9 @@ if [ -n "$ENVF" ]; then
   remote "umask 077; cat > $B/engine.env.new && chmod 600 $B/engine.env.new && mv $B/engine.env.new $B/engine.env" < "$ENVF"
   echo "engine.env updated"
 fi
-up llm   # llm 실패는 엔진 코드와 무관하므로 되돌리지 않는다(set -e로 여기서 멈춘다)
+up llm
+up restart-clf   # 옛 코드(app.prev)로 떠 있는 tone-clf를 새 코드로 다시 띄운다(tone-clf는 선택이라 건너뛰어도 계속)
+# llm 실패는 엔진 코드와 무관하므로 되돌리지 않는다(set -e로 여기서 멈춘다)
 if ! up engine; then
   # 엔진이 안 뜨면 이전 app으로 되돌린다. 되돌린 코드의 venv는 자리가 바뀌었으므로 다시 sync한다.
   fail() { echo "ROLLBACK FAILED - engine may be down; run: ssh $H 'bash -s -- status' < deploy/school-gpu/up.sh" >&2; exit 1; }

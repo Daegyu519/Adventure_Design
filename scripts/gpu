@@ -1,16 +1,14 @@
 #!/usr/bin/env bash
 # 사용법: scripts/gpu up|down [--force]|status
-# 로컬 SEED 1.5B(tone_hcx)를 학교 GPU 서버에서 쓸 때만 켠다.
-#   up:     서버에 llama-server를 띄우고(가장 한가한 GPU 1장) 이 컴퓨터 127.0.0.1:11434로 ssh 터널을 연다.
+# 학교 GPU 서버의 로컬 모델(Gemma :11435, 선택 Qwen3-30B :11436, 선택 판별기 tone-clf :11481)을 쓸 때만 켠다. SEED(:11434)는 더는 안 띄운다(P-28).
+#   up:     서버에 모델 서버를 띄우고(각각 가장 한가한 GPU) 이 컴퓨터 127.0.0.1로 ssh 터널을 연다.
 #   down:   터널을 닫고 서버 프로세스를 끈다(공유 GPU 반납). 파일럿 엔진(tone-engine)이 떠 있으면 llama-server는 두고 터널만 닫는다(--force면 끈다).
 #   status: 서버·터널·GPU 상태.
-# 엔진은 USE_LOCAL_MODEL=1일 때 models.yaml의 local(base_url http://localhost:11434/v1)을 쓴다.
+# 엔진은 USE_LOCAL_MODEL=1일 때 models.yaml의 local_fast·local_detail·classifiers를 쓴다. Gemma 카드가 바빠지면: ssh tone-gpu 'bash -s -- relocate-fast' < deploy/school-gpu/up.sh
 # 접속은 ~/.ssh/config의 Host(기본 tone-gpu, GPU_SSH로 바꿈), 키 인증만. 서버 한 번 준비는 README "학교 GPU 서버".
 set -euo pipefail
-H="${GPU_SSH:-tone-gpu}"; PORT="${GPU_PORT:-11434}"
-case "$PORT" in ''|*[!0-9]*) echo "GPU_PORT must be a number" >&2; exit 2 ;; esac
+H="${GPU_SSH:-tone-gpu}"
 SOCK="${TMPDIR:-/tmp}/tone-gpu-${USER:-me}.sock"
-MODEL_ID=naver-hyperclovax/HyperCLOVAX-SEED-Text-Instruct-1.5B   # models.yaml tone_hcx의 local: 뒤 이름과 같아야 한다
 remote() { ssh -o BatchMode=yes -o ConnectTimeout=10 "$H" "$@"; }
 tunnel_up() { [ -S "$SOCK" ] && ssh -S "$SOCK" -O check "$H" 2>/dev/null; }
 
@@ -21,17 +19,18 @@ up)
   # 터널은 항상 새로 연다(11435 전달이 없는 옛 터널을 재사용하지 않는다). 남은 소켓 파일도 지운다.
   tunnel_up && ssh -S "$SOCK" -O exit "$H" 2>/dev/null || true
   rm -f "$SOCK"
-  ssh -f -N -M -S "$SOCK" -o BatchMode=yes -o ExitOnForwardFailure=yes -L "127.0.0.1:$PORT:127.0.0.1:11434" -L "127.0.0.1:11435:127.0.0.1:11435" -L "127.0.0.1:11436:127.0.0.1:11436" "$H"
+  ssh -f -N -M -S "$SOCK" -o BatchMode=yes -o ExitOnForwardFailure=yes -L "127.0.0.1:11435:127.0.0.1:11435" -L "127.0.0.1:11436:127.0.0.1:11436" -L "127.0.0.1:11481:127.0.0.1:11481" "$H"
   for _ in $(seq 60); do
-    if curl -sf "http://127.0.0.1:$PORT/health" >/dev/null && curl -sf "http://127.0.0.1:11435/health" >/dev/null; then
+    if curl -sf "http://127.0.0.1:11435/health" >/dev/null; then
       # 11436(Qwen3-30B 상세)은 선택: 맞는 GPU가 없으면 안 뜬다. 막지 않고 경고만.
       curl -sf "http://127.0.0.1:11436/health" >/dev/null && d="and :11436 (Qwen3-30B)" || { d="(:11436 Qwen3-30B not up, optional: no free GPU or still loading)"; echo "warning: $d" >&2; }
-      echo "ready: http://127.0.0.1:$PORT/v1 (SEED) and http://127.0.0.1:11435/v1 (Gemma) $d (engine: USE_LOCAL_MODEL=1)"; exit 0
+      # 11481(학습 판별기 tone-clf, P-28)도 선택: 없으면 엔진이 clf 항을 뺀다.
+      curl -sf "http://127.0.0.1:11481/health" >/dev/null && d="$d and :11481 (clf)" || echo "warning: :11481 tone-clf not up (optional: model/ml missing, no GPU, or loading)" >&2
+      echo "ready: http://127.0.0.1:11435/v1 (Gemma) $d (engine: USE_LOCAL_MODEL=1)"; exit 0
     fi
     sleep 1
   done
   nr=""
-  curl -sf "http://127.0.0.1:$PORT/health" >/dev/null || nr="$nr :$PORT(tone-llm, SEED)"
   curl -sf "http://127.0.0.1:11435/health" >/dev/null || nr="$nr :11435(tone-llm-fast, Gemma)"
   echo "not ready after 60s:$nr. scripts/gpu status, server logs /root/tone-chat-llm/tone-llm.log, tone-llm-fast.log" >&2; exit 1 ;;
 down)
@@ -39,12 +38,13 @@ down)
   if [ "${2:-}" != --force ] && remote "tmux has-session -t tone-engine 2>/dev/null"; then
     echo "down: tunnel closed; tone-llm kept running because the pilot engine (tone-engine) uses it. Use 'down --force' to kill it anyway."
   else
-    remote "tmux kill-session -t tone-llm 2>/dev/null; tmux kill-session -t tone-llm-fast 2>/dev/null; tmux kill-session -t tone-llm-detail 2>/dev/null; true"
+    remote "tmux kill-session -t tone-llm 2>/dev/null; tmux kill-session -t tone-llm-fast 2>/dev/null; tmux kill-session -t tone-llm-detail 2>/dev/null; tmux kill-session -t tone-clf 2>/dev/null; true"
     echo "down: tunnel closed, GPU released"
   fi ;;
 status)
-  remote "for t in tone-llm tone-llm-fast tone-llm-detail; do tmux has-session -t \$t 2>/dev/null && echo \"\$t: running\" || echo \"\$t: stopped\"; done; nvidia-smi --query-gpu=index,memory.used,utilization.gpu --format=csv,noheader"
-  if tunnel_up; then echo "tunnel: open (127.0.0.1:$PORT)"; else echo "tunnel: closed"; fi
-  curl -sf "http://127.0.0.1:$PORT/health" >/dev/null && echo "local :$PORT: ok" || echo "local :$PORT: not answering" ;;
+  remote "for t in tone-llm tone-llm-fast tone-llm-detail tone-clf; do tmux has-session -t \$t 2>/dev/null && echo \"\$t: running\" || echo \"\$t: stopped\"; done; nvidia-smi --query-gpu=index,memory.used,utilization.gpu --format=csv,noheader"
+  if tunnel_up; then echo "tunnel: open (127.0.0.1)"; else echo "tunnel: closed"; fi
+  curl -sf "http://127.0.0.1:11435/health" >/dev/null && echo "gemma :11435: ok" || echo "gemma :11435: not answering"
+  curl -sf "http://127.0.0.1:11481/health" >/dev/null && echo "clf :11481: ok" || echo "clf :11481: not answering" ;;
 *) echo "usage: $0 up|down [--force]|status" >&2; exit 2 ;;
 esac

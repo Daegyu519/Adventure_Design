@@ -2,12 +2,14 @@
 거친다. 레이어·전문가는 가린 문장만 받는다. 대응표는 이 함수의 `Masker` 메모리에만 있고 밖으로 내보내지 않는다."""
 from __future__ import annotations
 
+import asyncio
 import re
 import time
 from dataclasses import dataclass
 from typing import Literal
 
 from experts.base import ExpertRequest, ExpertResult
+from experts.classifier import run_classifiers
 from experts.registry import Registry, run_all
 from harness.pii import TOKEN, Masker
 from harness.schemas import Conversation, DetailReport, FeedbackResult, GateResult, Hint, RewriteOption, Turn, Verdict
@@ -28,6 +30,7 @@ class RealtimeOutcome:
     hint: Hint | None
     results: list[ExpertResult]
     outcome: Literal["gated", "abstain", "alert", "none"]
+    clf: float | None = None   # 판별기 cold_score(숫자만). 못 왔으면 None
 
 
 async def realtime(reg: Registry, draft: str, convo: Conversation, store: ProfileStore, user_id: str,
@@ -43,13 +46,14 @@ async def realtime(reg: Registry, draft: str, convo: Conversation, store: Profil
 
     experts = reg.for_path("realtime", "context") + reg.for_path("realtime", "tone")
     req = ExpertRequest.from_convo("realtime", draft, convo, g.signals)
-    results = await run_all(experts, req, t0 + path["expert_deadline_ms"] / 1000)
+    end = t0 + path["expert_deadline_ms"] / 1000
+    results, clf = await asyncio.gather(run_all(experts, req, end), run_classifiers(reg.classifiers_for("realtime"), req, end))
 
     ctx = next((r.output for r in results if r.role == "context"), None)
     tones = [(r.output, reg.weight(r.expert_id)) for r in results if r.role == "tone"]
-    v = aggregate(draft, g, ctx, tones, store, convo, agg)
+    v = aggregate(draft, g, ctx, tones, store, convo, agg, clf)
     hint = render_hint(v)
-    return RealtimeOutcome(g, v, hint, results, "abstain" if v.abstain else "alert" if v.alert else "none")
+    return RealtimeOutcome(g, v, hint, results, "abstain" if v.abstain else "alert" if v.alert else "none", clf)
 
 
 def mask_feedback(complaint: str, about: str, names: list[str]) -> tuple[str, str]:
@@ -77,6 +81,7 @@ class DetailOutcome:
     mismatch: str | None
     results: list[ExpertResult]
     outcome: Literal["ok", "no_result"]
+    clf: float | None = None
 
 
 async def detail(reg: Registry, draft: str, convo: Conversation, store: ProfileStore, user_id: str, names: list[str],
@@ -91,13 +96,14 @@ async def detail(reg: Registry, draft: str, convo: Conversation, store: ProfileS
     g = gate.score(draft, convo, store, user_id, 0.0, agg["global_min_obs"])
 
     req = ExpertRequest.from_convo(path, draft, convo, g.signals)
-    results = await run_all(reg.for_path(path, "context") + reg.for_path(path, "tone"), req, end)
+    results, clf = await asyncio.gather(run_all(reg.for_path(path, "context") + reg.for_path(path, "tone"), req, end),
+                                        run_classifiers(reg.classifiers_for(path), req, end))
     tone_results = [r for r in results if r.role == "tone"]
     if not tone_results:
-        return DetailOutcome(g, None, None, None, None, results, "no_result")
+        return DetailOutcome(g, None, None, None, None, results, "no_result", clf)
     ctx = next((r.output for r in results if r.role == "context"), None)
     tones = [(r.output, reg.weight(r.expert_id)) for r in tone_results]
-    v = aggregate(draft, g, ctx, tones, store, convo, agg)
+    v = aggregate(draft, g, ctx, tones, store, convo, agg, clf)
     readings = merged(tones)
 
     # 심판은 의견이 갈린 기권만 푼다. 자신 없는 기권(confidence < min_confidence)은 그대로 둔다.
@@ -125,7 +131,7 @@ async def detail(reg: Registry, draft: str, convo: Conversation, store: ProfileS
             checker = next(e for e in reg.for_path(path, "tone") if e.id == first.expert_id)
             passed = await rewrite.check(checker, req, written[0].output.options[:2], first.output.negative, end)
             options = [o for i, c in passed if (o := _restored(m, i, c, raw))]
-    return DetailOutcome(g, v, readings, render_detail(v, readings, options), mismatch, results, "ok")
+    return DetailOutcome(g, v, readings, render_detail(v, readings, options), mismatch, results, "ok", clf)
 
 
 def _restored(m: Masker, i: int, c: RewriteOption, raw: str) -> RewriteOption | None:
