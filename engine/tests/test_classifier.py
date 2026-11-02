@@ -67,7 +67,7 @@ def test_failures_empty_deadline_and_overlapping_timeout():
 def test_default_gemma_registry_unchanged():
     reg = Registry.load(Path(__file__).parents[1] / "config/models.yaml", force_mock=True)
     assert reg.classifiers == []
-    assert [e.id for e in reg.for_path("realtime", "tone")] == ["tone_fast"]
+    assert [e.id for e in reg.for_path("realtime", "tone")] == ["tone_label"]
 
 
 def test_simultaneous_requests_do_not_queue_native_work():

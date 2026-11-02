@@ -42,7 +42,7 @@ DB 웹훅은 SQL 마이그레이션이 아니라 Supabase 대시보드에서 만
 
 - SEED 1.5B(`tone-llm`, 포트 11434)는 어느 전문가도 안 써서 더는 띄우지 않는다(P-28). 예전에 떠 있으면 `status`·`gpu-off`가 계속 다룬다. `models.yaml`의 `local` 공급자는 안 쓰는 채로 남겨 뒀다.
 - `tone-llm-detail`(포트 11436, `-c 8192 -np 4`): Qwen3-30B-A3B-Instruct-2507 UD-IQ3_XXS(`qwen3-30b-a3b-2507-iq3xxs.gguf`, Apache-2.0), 상세·거울 말투 전문가 `tone_hcx`(선택, P-24). 여유 메모리 14000MiB 이상·사용률 50% 이하인 GPU가 없으면 건너뛴다(엔진은 그대로 돈다).
-- `tone-llm-fast`(포트 11435, `--swa-full`): Gemma3-4B(`gemma-3-4b-it-q4_k_m.gguf`), 실시간 말투 전문가 `tone_fast`(짧은 출력, P-12). 서버가 없으면 실시간 힌트는 기권한다(NVIDIA 폴백 없음).
+- `tone-llm-fast`(포트 11435, `--swa-full`): Gemma3-4B(`gemma-3-4b-it-q4_k_m.gguf`). P-33부터 실시간에 쓰지 않는다(되돌릴 때를 위해 띄워 둠). 실시간 말투는 `tone-llm-detail`(Qwen, 11436)의 `tone_label`이라 **Qwen 서버가 없으면 실시간 힌트는 기권**한다(NVIDIA 폴백 없음). Qwen 카드가 바빠 1.35초를 넘기면 실시간이 기권한다.
 
 - `tone-clf`(포트 11481, P-28): KcELECTRA 판별기(`ml/classifier_shim.py`, TorchScript, `127.0.0.1`만). 모델은 `/root/tone-chat-llm/clf/kcelectra-p14b/`, 코드는 `scripts/deploy-school`이 올리는 `/root/tone-chat-deploy/app/ml`, python은 `/root/p14-work/source/ml/.venv-demo/bin/python`. 여유 1500MiB 이상인 가장 한가한 GPU(없으면 cpu, 경고). 엔진은 `USE_LOCAL_MODEL=1`일 때만 `http://localhost:11481/score`를 150ms 제한으로 부르고, 못 오면 집계에서 `clf` 항만 뺀다. 요청 문장은 로그에 남지 않는다.
 - `tone-hcx-8b`(포트 11491, P-29): HyperCLOVA X SEED Omni 8B(`bakeoff/clova-omni8b.gguf`, Q4_K_M, 약 7GB) — 상세·거울 말투 전문가 `tone_hcx8`(가중치 0.5). NAVER 공식 llama.cpp 개조판(`bakeoff/hcx-llama.cpp/build/bin/llama-server`, `--jinja -np 4 -c 8192`)으로만 열린다(일반 llama.cpp는 이 모델을 못 연다). 여유 7000MiB 이상·사용률 50% 이하 카드에만, 없으면 건너뜀. 개조판을 다시 빌드할 때는 외부 코드라 사람이 직접 실행한다.

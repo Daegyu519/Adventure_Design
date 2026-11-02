@@ -28,6 +28,9 @@ def score(draft: str, convo: Conversation, store: ProfileStore, user_id: str, th
     if s["short"]:
         prior += 0.15
         signals.append("짧은 답")
+    if s["profanity"]:
+        prior += 0.35
+        signals.append("비속어")
     if s["blame"]:
         prior += 0.2
         signals.append("따지는 말투")

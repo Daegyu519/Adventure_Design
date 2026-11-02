@@ -50,7 +50,7 @@ def legacy_rt_config(path: Path = DEFAULT_MODELS_PATH) -> dict:
     for e in cfg["experts"]:
         if e["id"] in {"ctx_fast", "tone_ds"}:
             e["paths"] = ["realtime", *e["paths"]]
-        if e["id"] == "tone_fast":
+        if e["id"] == "tone_label":
             e["paths"] = []
     cfg["paths"]["realtime"]["gate_threshold"] = 0.3
     return cfg
