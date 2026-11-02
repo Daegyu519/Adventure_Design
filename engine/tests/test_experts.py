@@ -51,19 +51,19 @@ def test_add_remove_expert_by_config_only(tmp_path):
     cfg = yaml.safe_load(DEFAULT_MODELS_PATH.read_text(encoding="utf-8"))
     cfg["experts"].append({"id": "tone_x", "role": "tone", "model": "nvidia:poolside/laguna-xs-2.1",
                            "prompt": "tone", "paths": ["realtime"], "mock": "tone_alt"})
-    assert _ids(Registry.load(_write(tmp_path, cfg), force_mock=True), "realtime", "tone") == ["tone_fast", "tone_x"]
-    cfg["experts"] = [e for e in cfg["experts"] if e["id"] != "tone_fast"]
+    assert _ids(Registry.load(_write(tmp_path, cfg), force_mock=True), "realtime", "tone") == ["tone_label", "tone_x"]
+    cfg["experts"] = [e for e in cfg["experts"] if e["id"] != "tone_label"]
     assert _ids(Registry.load(_write(tmp_path, cfg), force_mock=True), "realtime", "tone") == ["tone_x"]
 
 
 def test_production_realtime_experts_and_gate():
-    """운영 설정: 실시간 말투 = tone_fast 하나, context 없음, 게이트 0.1(P-12)."""
+    """운영 설정: 실시간 말투 = tone_label(Qwen 한 읽힘) 하나, context 없음, 게이트 0(P-33: 모든 문장을 모델·판별기가 본다)."""
     cfg = yaml.safe_load(DEFAULT_MODELS_PATH.read_text(encoding="utf-8"))
     rt = lambda role: [e["id"] for e in cfg["experts"] if e["role"] == role and "realtime" in e["paths"]]  # noqa: E731
-    assert rt("tone") == ["tone_fast"] and rt("context") == []
-    assert cfg["paths"]["realtime"]["gate_threshold"] == 0.1
-    tone_fast = next(e for e in cfg["experts"] if e["id"] == "tone_fast")
-    assert tone_fast["model"].startswith("local_fast:") and not tone_fast.get("optional")
+    assert rt("tone") == ["tone_label"] and rt("context") == []
+    assert cfg["paths"]["realtime"]["gate_threshold"] == 0.0
+    label = next(e for e in cfg["experts"] if e["id"] == "tone_label")
+    assert label["model"].startswith("local_detail:") and label["prompt"] == "tone_label" and not label.get("optional")
 
 
 def test_production_detail_local_is_qwen30b():
@@ -90,7 +90,7 @@ def test_production_detail_hcx8():
 
 def test_paths_in_mock_mode():
     reg = make_registry()
-    assert _ids(reg, "realtime", "tone") == ["tone_fast"]
+    assert _ids(reg, "realtime", "tone") == ["tone_label"]
     assert _ids(reg, "realtime", "context") == []
     assert _ids(reg, "detail", "tone") == ["tone_ds", "tone_kimi"]   # tone_hcx(local_detail)는 USE_LOCAL_MODEL 없으면 빠짐
     assert _ids(reg, "mirror", "context") == ["ctx_deep"]
@@ -104,13 +104,13 @@ def test_optional_local_when_available(monkeypatch):
     for path in ("detail", "mirror"):
         assert "tone_hcx" in _ids(live, path, "tone")
         assert "tone_hcx" in _ids(make_registry(), path, "tone")   # force_mock: 사슬 끝 mock:auto(P-24)
-    assert _ids(live, "realtime", "tone") == ["tone_fast"]
+    assert _ids(live, "realtime", "tone") == ["tone_label"]
     assert all(providers.available(n, {}, os.environ) for n in ("local", "local_fast", "local_detail"))
     monkeypatch.delenv("USE_LOCAL_MODEL")
     off = Registry.load(DEFAULT_MODELS_PATH, force_mock=False)
     assert all("tone_hcx" not in _ids(off, p, "tone") for p in ("detail", "mirror"))
     assert not any(providers.available(n, {}, os.environ) for n in ("local", "local_fast", "local_detail"))
-    assert _ids(off, "realtime", "tone") == ["tone_fast"]   # optional 아님: 남는다(사슬 끝에서 기권)
+    assert _ids(off, "realtime", "tone") == ["tone_label"]   # optional 아님: 남는다(사슬 끝에서 기권)
 
 
 def test_available_local_providers_follow_use_local_model():
@@ -449,3 +449,18 @@ def test_pattern_min_obs_env_override(monkeypatch):
         monkeypatch.setenv("PATTERN_MIN_OBS", bad)
         with pytest.raises(ValueError):
             Registry.load(DEFAULT_MODELS_PATH, force_mock=True)
+
+
+def test_tone_label_output_parses():
+    # P-33: 한 읽힘 출력 {l, s, c} → 부정이면 그 읽힘에 s, 아니면 그 읽힘에 1-s·부정 셋에 s를 고르게. 틀린 모양은 폴백(규칙 3)
+    import pytest
+    from harness.schemas import NEGATIVE, ToneReading
+    t = ToneReading.model_validate({"l": "화나게", "s": 0.9, "c": 0.8})
+    assert max(t.readings, key=t.readings.get) == "화나게" and sum(t.readings[k] for k in NEGATIVE) == pytest.approx(0.9)
+    assert t.confidence == 0.8
+    w = ToneReading.model_validate({"l": "따뜻하게", "s": 0.3, "c": 0.7})
+    assert w.readings["따뜻하게"] == pytest.approx(0.7) and sum(w.readings[k] for k in NEGATIVE) == pytest.approx(0.3)
+    for bad in ({"l": "슬프게", "s": 0.5, "c": 0.5}, {"l": "화나게", "s": 1.5, "c": 0.5}, {"l": "화나게", "s": True, "c": 0.5},
+                {"l": "화나게", "s": 0.5}):
+        with pytest.raises(ValueError):
+            ToneReading.model_validate(bad)

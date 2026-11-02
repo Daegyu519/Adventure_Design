@@ -192,3 +192,16 @@ def test_gate_blame_and_consonant_cues():
     for t in ("ㅋㅋ", "다 됐어!", "좋잖아"):
         sig = gate.score(t, CONVO, ProfileStore(), "me", 0.0, 5).signals
         assert "따지는 말투" not in sig and "자음만 쓴 답" not in sig, t
+
+
+def test_profanity_cue_reads_angry():
+    # P-33: 비속어(초성·띄어쓰기 포함)는 사전점수를 올리고 실시간 제목을 화나게로. 비슷한 낱말(시발점·시바견·새끼손가락)은 아니다
+    for t in ("씨발 나도 몰라", "ㅅㅂ 진짜", "ㅈㄴ 귀찮게 하네", "꺼져"):
+        g = gate.score(t, CONVO, ProfileStore(), "me", 0.0, 5)
+        assert "비속어" in g.signals and g.prior >= 0.35, t
+    for t in ("시발점이 어디야", "시바견 귀여워", "새끼손가락 다쳤어", "미친 맛있다"):
+        assert "비속어" not in gate.score(t, CONVO, ProfileStore(), "me", 0.0, 5).signals, t
+    neg = ToneReading(readings={"차갑게": 0.7, "화나게": 0.1, "무난하게": 0.2}, confidence=0.8)
+    g = GateResult(prior=0.6, signals=["따지는 말투", "비속어"], passed=True)
+    v = A.aggregate("ㅅㅂ 왜 이제 말해", g, None, [(neg, 1.0)], ProfileStore(), CONVO, CFG, cues=True)
+    assert v.top_reading == "화나게" and v.signals[0] == "비속어"

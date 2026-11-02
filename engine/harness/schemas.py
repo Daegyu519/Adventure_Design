@@ -8,10 +8,10 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 READINGS = ("차갑게", "성의없게", "화나게", "무난하게", "따뜻하게")
 NEGATIVE = ("차갑게", "성의없게", "화나게")
-# 패턴 태그: gate 신호 9개 + feedback 프롬프트 태그
+# 패턴 태그: gate 신호 10개 + feedback 프롬프트 태그
 TRIGGERS: frozenset[str] = frozenset({
     "이유 없는 거절", "마침표로 끝남", "짧은 답", "감정 표현에 짧은 답", "상대 말에 비해 짧은 답",
-    "평소보다 짧음", "존댓말이 갑자기 빠짐", "따지는 말투", "자음만 쓴 답",
+    "평소보다 짧음", "존댓말이 갑자기 빠짐", "따지는 말투", "자음만 쓴 답", "비속어",
     "늦은 답에 사과 없음", "반말 전환", "농담에 정색",
 })
 
@@ -76,6 +76,15 @@ class ToneReading(BaseModel):
             if not (isinstance(r, list) and len(r) == len(READINGS) and all(map(num, r)) and sum(r) > 0 and num(c)):
                 raise ValueError("짧은 말투 출력 {r:[5개 0~1], c:0~1} 형식이 아님")
             return {"readings": dict(zip(READINGS, r)), "confidence": c}
+        # 실시간 한 읽힘 출력 {"l": 읽힘, "s": 부정 강도, "c": 확신}(prompts/tone_label.md, P-33). 작은 모델은 비율보다 하나 고르기를 잘한다.
+        # 부정 읽힘이면 그 읽힘에 s, 아니면 그 읽힘에 1-s를 두고 s를 부정 셋에 고르게 나눈다(부정 합 = s)
+        if isinstance(d, dict) and "readings" not in d and "l" in d:
+            num = lambda x: isinstance(x, (int, float)) and not isinstance(x, bool) and math.isfinite(x) and 0 <= x <= 1  # noqa: E731
+            lab, s, c = d["l"], d.get("s"), d.get("c")
+            if not (lab in READINGS and num(s) and num(c)):
+                raise ValueError("한 읽힘 출력 {l:읽힘, s:0~1, c:0~1} 형식이 아님")
+            r = {lab: s, "무난하게": 1 - s} if lab in NEGATIVE else {lab: 1 - s, **{k: s / len(NEGATIVE) for k in NEGATIVE}}
+            return {"readings": r, "confidence": c}
         return d
 
     @field_validator("readings")

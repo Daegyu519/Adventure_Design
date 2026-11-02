@@ -6,7 +6,7 @@ import asyncio
 import inspect
 import logging
 import time
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 
 import asyncpg
 import pytest
@@ -118,12 +118,13 @@ def test_same_report_twice_is_one_job(client, login, fake, queue):
 def test_already_reported_or_capped_acks_without_enqueue(client, login, fake, queue, registry, spy):
     """이미 남긴 신고, 또는 이번 주 상한에 걸린 (보낸 사람, 관계): 같은 202를 주고 큐에 넣지 않는다(어느 쪽인지 안 알림)."""
     (minsu, jieun, haneul), room, mid = group(fake)
-    report(fake, registry, room, jieun, mid)            # 키 기억 밖에서 이미 남긴 신고(예: 재시작 뒤)
+    now = datetime.now(timezone.utc)                    # 라우트는 벽시계로 주간 상한을 본다: 신고도 같은 시계로
+    report(fake, registry, room, jieun, mid, now=now)   # 키 기억 밖에서 이미 남긴 신고(예: 재시작 뒤)
     login(jieun)
     r = post(client, room, mid)
     assert (r.status_code, r.json()) == (202, {"ack": guard.ACK}) and queue.jobs == []
     for _ in range(job.WEEKLY_CAP - 1):
-        report(fake, registry, room, haneul, fake.add_message(room, minsu, "ㅇㅇ"))
+        report(fake, registry, room, haneul, fake.add_message(room, minsu, "ㅇㅇ"), now=now)
     calls = len(feedback_calls(spy))
     r = post(client, room, fake.add_message(room, minsu, "ㅇㅇ"))
     assert (r.status_code, r.json()) == (202, {"ack": guard.ACK}) and queue.jobs == []
@@ -384,12 +385,12 @@ def test_bad_pattern_error_has_no_value(world, caplog):
 
 
 def test_known_triggers_all_storable():
-    """gate의 신호 이름 9개가 모두 TRIGGERS에 있다(어휘가 gate와 어긋나지 않음)."""
+    """gate의 신호 이름 10개가 모두 TRIGGERS에 있다(어휘가 gate와 어긋나지 않음)."""
     src = ast.parse(inspect.getsource(gate.score))
     names = {c.value for call in ast.walk(src) if isinstance(call, ast.Call)
              and ast.unparse(call.func) == "signals.append"
              for c in ast.walk(call.args[0]) if isinstance(c, ast.Constant) and isinstance(c.value, str)}
-    assert len(names) == 9 and names <= TRIGGERS
+    assert len(names) == 10 and names <= TRIGGERS
 
 
 def test_week_start_kst():

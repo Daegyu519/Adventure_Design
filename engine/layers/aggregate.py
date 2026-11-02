@@ -46,9 +46,10 @@ def top_reading(readings: dict[str, float], alert: bool) -> str:
     return max(NEGATIVE if alert else READINGS, key=readings.__getitem__)
 
 
-# 실시간 4B 모델은 부정 읽힘 셋을 거의 못 가른다(P-32: 합성 12문장 중 3개, 화나게 0개). 실시간 알림은 겉 신호로 고른다(앞이 우선)
-CUE_READING = {"따지는 말투": "화나게", "자음만 쓴 답": "성의없게", "감정 표현에 짧은 답": "성의없게",
-               "상대 말에 비해 짧은 답": "성의없게", "이유 없는 거절": "차갑게", "마침표로 끝남": "차갑게"}
+# 실시간 모델은 부정 셋 가르기가 아직 약하다(P-33 한 읽힘 Qwen 16문장 10개, 화나게 6개 중 3개). 분명한 겉 신호가 있으면 그것이 먼저(앞이 우선).
+# 이유 없는 거절·마침표는 차갑게가 모델 기본값이라 모델에 맡긴다(P-32에서는 넣었다)
+CUE_READING = {"비속어": "화나게", "따지는 말투": "화나게", "자음만 쓴 답": "성의없게", "감정 표현에 짧은 답": "성의없게",
+               "상대 말에 비해 짧은 답": "성의없게"}
 
 
 def pick_reading(readings: dict[str, float], alert: bool, signals: list[str], pair: dict, matched: list[str],

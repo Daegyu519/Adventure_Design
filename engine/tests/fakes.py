@@ -217,7 +217,8 @@ class FakeRepo:
             return False
         self.feedback_log.append({"id": next(self._ids), "room_id": fb.room_id, "reporter_id": fb.reporter_id,
                                   "message_id": fb.message_id, "usable": fb.usable,
-                                  "pattern_count": len(fb.patterns) if fb.usable else 0, "created_at": _now()})
+                                  # 신고 시각 = 작업의 now(반영은 남긴 즉시라 active_from과 같다). 벽시계를 쓰면 날짜에 따라 주간 상한 테스트가 깨진다
+                                  "pattern_count": len(fb.patterns) if fb.usable else 0, "created_at": fb.active_from})
         if not fb.usable:
             return True
         for p in sorted(fb.patterns, key=lambda p: p.trigger):

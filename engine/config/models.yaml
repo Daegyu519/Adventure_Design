@@ -48,8 +48,10 @@ providers:
 # 전문가. 추가·제거는 여기서만 한다. mock은 force_mock(테스트·평가)가 쓸 mock_rules 이름(없으면 prompt 이름).
 # optional은 첫 모델 공급자를 쓸 수 없으면 빠진다. HyperCLOVA X는 생성(rewrite)에 쓰지 않는다(라이선스).
 experts:
-  # 실시간 말투: 짧은 답(prompts/tone_fast.md)으로 1.35초 안에 드는 로컬 Gemma3-4B. 대조 세트 정밀도 1.0·재현율 0.38, p95 0.87~1.0초(P-12)
-  - {id: tone_fast, role: tone,     model: local_fast:gemma-3-4b-it, prompt: tone_fast, paths: [realtime], weight: 1.0, mock: tone}
+  # 실시간 말투: 한 읽힘 출력(prompts/tone_label.md)의 로컬 Qwen3-30B-A3B. 합성 16문장 10개(화나게 3/6), 평균 0.66초·최대 1.25초(P-33).
+  # Gemma3-4B 비율 출력(tone_fast)은 부정 셋을 못 갈라(12문장 3개, 화나게 0개) 실시간에서 뺐다. 둘을 같이 쓰면 의견 차(max_disagreement)로 기권이 는다
+  - {id: tone_label, role: tone,    model: local_detail:qwen3-30b-a3b, prompt: tone_label, paths: [realtime], weight: 1.0, mock: tone}
+  - {id: tone_fast, role: tone,     model: local_fast:gemma-3-4b-it, prompt: tone_fast, paths: [], weight: 1.0, mock: tone}
   - {id: ctx_fast,  role: context,  model: nvidia:poolside/laguna-xs-2.1, prompt: context,  paths: []}   # 실시간 1.2초에 못 와서 뺌(P-12)
   - {id: ctx_deep,  role: context,  model: nvidia:nvidia/nemotron-3.5-bolt-e4b,              prompt: context,  paths: [detail, mirror]}
   - {id: tone_ds,   role: tone,     model: nvidia:poolside/laguna-xs-2.1, prompt: tone,     paths: [detail, mirror], weight: 1.0}
@@ -72,7 +74,7 @@ fallback:   # 실제 문장이 지나가므로 gemini 금지
 classifiers:
   - {id: clf_cold, model_id: kcelectra-p14b, backend: http, url: "http://127.0.0.1:11481/score", timeout_ms: 150, paths: [realtime, detail], enabled: true, optional: true}
 paths:
-  realtime: {deadline_ms: 1500, expert_deadline_ms: 1350, gate_threshold: 0.1}   # 0.3이면 pilot 요청이 전부 게이트에서 멈췄다(P-12)
+  realtime: {deadline_ms: 1500, expert_deadline_ms: 1350, gate_threshold: 0.0}   # 0: 모든 문장을 모델·판별기가 본다(P-33, 겉 신호 없는 욕·화가 게이트에서 빠졌다). 0.3이면 pilot 요청이 전부 멈췄다(P-12)
   detail:   {deadline_ms: 8000}
   mirror:   {deadline_ms: 8000}
   async:    {deadline_ms: 60000}

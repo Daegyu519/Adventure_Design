@@ -69,7 +69,7 @@ flowchart LR
 | 앱 | Expo 58 · React Native 0.88 · TypeScript · expo-router (iOS · Android · 웹 PWA) |
 | 백엔드 | Supabase (Auth · Postgres + RLS · Realtime · Storage) |
 | AI 엔진 | Python 3.11 · FastAPI · pydantic v2 · httpx/asyncio |
-| 모델 | 실시간: Gemma 3 4B + KcELECTRA 판별기 · 상세: Qwen3-30B-A3B · HyperCLOVA X SEED Omni 8B · NVIDIA API 모델 (로컬 모델은 llama.cpp) |
+| 모델 | 실시간: Qwen3-30B-A3B(한 읽힘) + KcELECTRA 판별기 · 상세: Qwen3-30B-A3B · HyperCLOVA X SEED Omni 8B · NVIDIA API 모델 (로컬 모델은 llama.cpp) |
 | 배포·호스팅 | EAS Hosting (웹) · 자체 GPU 서버 (엔진·모델) · Tailscale (공개 HTTPS) |
 
 더 자세한 그림(실시간 힌트·상세 보기·개인정보 경계): [`docs/architecture-diagrams.md`](docs/architecture-diagrams.md)

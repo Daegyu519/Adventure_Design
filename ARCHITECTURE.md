@@ -129,7 +129,7 @@ sequenceDiagram
   Engine->>DB: 최근 대화 8개, 보낸 사람 패턴, 기준선
   Engine->>Engine: pii.mask (초안 · 최근 대화, 참여자 이름 포함)
   Engine->>Engine: L0 거르기 (위험 낮으면 hint=null로 끝)
-  Engine->>Experts: 실시간 말투 전문가 `tone_fast`(로컬 Gemma3-4B, 짧은 출력) 호출 (1.35초, 맥락 전문가는 실시간에 없음)
+  Engine->>Experts: 실시간 말투 전문가 `tone_label`(로컬 Qwen3-30B-A3B, 한 읽힘 출력) + 판별기 호출 (1.35초, 게이트 0이라 모든 문장, 맥락 전문가는 실시간에 없음)
   Experts-->>Engine: JSON 결과 (늦은 것은 버림)
   Engine->>Engine: 집계 → 문구 검사
   Engine-->>App: seq, hint 또는 null
@@ -328,7 +328,8 @@ providers:
   local_fast: {base_url: http://localhost:11435/v1, api_key_env: LOCAL_API_KEY, rpm: 600, allow_no_key: true}   # 실시간 Gemma3-4B(P-12). 이름이 local로 시작하면 USE_LOCAL_MODEL=1일 때만
   mock:   {}
 experts:
-  - {id: tone_fast, role: tone,     model: local_fast:gemma-3-4b-it,               prompt: tone_fast, paths: [realtime], weight: 1.0, mock: tone}   # 실시간 유일한 전문가, 출력 {"r":[5개],"c":확신}
+  - {id: tone_label, role: tone,    model: local_detail:qwen3-30b-a3b,             prompt: tone_label, paths: [realtime], weight: 1.0, mock: tone}   # 실시간 유일한 말투 전문가(P-33), 출력 {"l":읽힘,"s":부정 강도,"c":확신}
+  - {id: tone_fast, role: tone,     model: local_fast:gemma-3-4b-it,               prompt: tone_fast, paths: [], weight: 1.0, mock: tone}   # 옛 실시간(P-12) Gemma, 출력 {"r":[5개],"c":확신}. 부정 셋을 못 갈라 뺐다
   - {id: ctx_fast,  role: context,  model: nvidia:deepseek-ai/deepseek-v4.1-flash, prompt: context,  paths: []}   # 실시간에서 뺌(1.2초에 못 옴)
   - {id: ctx_deep,  role: context,  model: nvidia:moonshotai/kimi-k3,              prompt: context,  paths: [detail, mirror]}
   - {id: tone_ds,   role: tone,     model: nvidia:deepseek-ai/deepseek-v4.1-flash, prompt: tone,     paths: [detail, mirror], weight: 1.0}
@@ -392,7 +393,7 @@ risk = sigmoid( w0 + w1·prior + w2·Σk(αk·negk)/Σk(αk) + w3·violation + w
 
 ### 6-5. 문구 규칙
 - 제목 템플릿: "차갑게 / 성의 없게 / 화난 것처럼 느껴질 수도 있어요".
-- 제목 읽힘(알림일 때): 켜진 하소연 패턴의 느낌(가장 센 것) → 실시간만 겉 신호(따지는 말투→화나게, 자음만 쓴 답·감정 표현/상대 말에 비해 짧은 답→성의없게, 이유 없는 거절·마침표로 끝남→차갑게) → 모델 부정 셋 최대. 실시간 4B 모델은 부정 셋을 거의 못 가른다(P-32).
+- 제목 읽힘(알림일 때): 켜진 하소연 패턴의 느낌(가장 센 것) → 실시간만 분명한 겉 신호(비속어·따지는 말투→화나게, 자음만 쓴 답·감정 표현/상대 말에 비해 짧은 답→성의없게) → 모델 부정 셋 최대(P-32·P-33). 비속어는 초성·띄어쓰기 변형도 잡고, 비슷한 낱말(시발점·시바견·새끼손가락)은 뺀다.
 - 이유 문구는 신호별 고정 문장에서 고른다. 제목을 정한 신호가 있으면 그 신호의 문장.
 - 금지어: 확실히, 분명히, 반드시, 상대가 말하길, 피드백을 남겼, 싫어했어요 등. 걸리면 내보내지 않는다.
 - 상세 각주: "비슷한 대화에서 모인 반응을 바탕으로 한 조언이라 틀릴 수도 있어요. 누가 어떤 반응을 남겼는지는 알 수 없어요."
