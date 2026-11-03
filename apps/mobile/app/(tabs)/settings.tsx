@@ -163,7 +163,7 @@ export default function Settings() {
           </View>
           {!hintOn && (
             <AppText variant="small" color="textMuted">
-              힌트를 끄면 입력 중인 문장을 AI에 보내지 않아요.
+              힌트를 끄면 보내기를 눌러도 문장을 AI에 보내지 않아요.
             </AppText>
           )}
           {!connected && (

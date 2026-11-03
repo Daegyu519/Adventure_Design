@@ -9,6 +9,7 @@ import { Composer, type InputHandle } from '../../../components/Composer';
 import { MessageActions } from '../../../components/MessageActions';
 import { Toast } from '../../../components/Toast';
 import { DetailSheet } from '../../../components/DetailSheet';
+import { Sheet } from '../../../components/Sheet';
 import { VentSheet } from '../../../components/VentSheet';
 import { canVent } from '../../../lib/vent';
 import { Button } from '../../../components/Button';
@@ -25,9 +26,10 @@ import { fetchRoom, markRead, roomTitle, type Member } from '../../../lib/rooms'
 import { useMembers } from '../../../lib/useMembers';
 import { useTyping } from '../../../lib/useTyping';
 import { useReactions } from '../../../lib/useReactions';
-import { useRoomMessages, type SendError } from '../../../lib/useRoomMessages';
+import { useRoomMessages, type SendError, type SendInput } from '../../../lib/useRoomMessages';
 import { useSession } from '../../../lib/session';
-import { useToneHint } from '../../../lib/useToneHint';
+import { reviewBeforeSend } from '../../../lib/sendReview';
+import type { HintRes } from '../../../lib/engine';
 import { logToneEvent } from '../../../lib/toneEvents';
 import { supabase } from '../../../lib/supabase';
 import { useTheme } from '../../../lib/theme';
@@ -66,6 +68,13 @@ function RoomBody({ id, me }: { id: string; me: string }) {
   const markAttempts = useRef(0);
   const markTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sending = useRef(false);
+  const [sendBusy, setSendBusy] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const reviewCtrl = useRef<AbortController | null>(null);
+  const reviewSeq = useRef(0);
+  const pendingSend = useRef<SendInput | null>(null);
+  const warnedDraft = useRef<string | null>(null);
+  const [sendWarning, setSendWarning] = useState<HintRes | null>(null);
   const failedRef = useRef(false);
   const [draft, setDraft] = useState('');
   const [sendError, setSendError] = useState<string | null>(null);
@@ -142,19 +151,37 @@ function RoomBody({ id, me }: { id: string; me: string }) {
   const [selection, setSelection] = useState<{ start: number; end: number } | undefined>(undefined); // 멘션을 넣은 직후 커서 위치
   const query = group ? activeMentionQuery(draft, cursor) : null;
   const candidates = useMemo(() => (query === null ? null : mentionCandidates(info?.members ?? [], me, query)), [query, info, me]);
-  const { hint: toneHint, input: toneInput, dismiss: toneDismiss, sent: toneSent } = useToneHint(id, replyTarget?.id ?? null, profile?.tone_hint_on !== false);
   const changeDraft = useCallback((t: string) => {
+    if (pendingSend.current) return;
     setDraft(t);
     setSelection(undefined);
     typing.onDraftChange(t);
-    toneInput(t); // 멘션 고르기도 같은 길로 들어온다
-  }, [typing, toneInput]);
+  }, [typing]);
   // 시트를 닫으면 포커스는 입력창으로(힌트 막대의 버튼은 글이 바뀌면 사라질 수 있어 body로 떨어지지 않게). 시트가 돌려주는 포커스보다 나중에.
   const reducedMotion = useReducedMotion();
   const closeDetail = useCallback(() => {
+    reviewCtrl.current?.abort();
+    reviewCtrl.current = null;
+    setChecking(false);
     setDetailText(null);
+    setSendWarning(null);
+    pendingSend.current = null;
+    sending.current = false;
+    setSendBusy(false);
     retryFocus(() => (unmounted.current ? null : inputRef.current), { delay: reducedMotion ? 0 : 30 });
   }, [reducedMotion]);
+  // 스택의 다른 화면으로 이동하면 방이 마운트된 채 남을 수 있다. 그때도 전송 대기는 취소한다.
+  useEffect(() => {
+    if ((focused && appActive) || !pendingSend.current) return;
+    reviewCtrl.current?.abort();
+    reviewCtrl.current = null;
+    pendingSend.current = null;
+    sending.current = false;
+    setSendBusy(false);
+    setChecking(false);
+    setSendWarning(null);
+    setDetailText(null);
+  }, [focused, appActive]);
   const title = info ? roomTitle(info.room, info.members, me) : '대화방';
 
   // 읽음: 앞에 보이고 포커스가 있을 때만, 방에서 가장 새 메시지의 서버 시각으로(앞으로만).
@@ -185,6 +212,8 @@ function RoomBody({ id, me }: { id: string; me: string }) {
     unmounted.current = false;
     return () => {
       unmounted.current = true;
+      reviewCtrl.current?.abort();
+      pendingSend.current = null;
       if (markTimer.current) clearTimeout(markTimer.current);
     };
   }, []);
@@ -234,26 +263,68 @@ function RoomBody({ id, me }: { id: string; me: string }) {
     seen.current = top.id;
   }, [messages, me, names, say]);
 
-  const onSend = useCallback(async () => {
-    const text = draft.trim();
-    if (!text || sending.current) return; // 보내는 중에는 다시 보내지 않는다(되돌린 글이 이중 전송되지 않게)
-    sending.current = true;
-    setSendError(null);
-    setDraft(''); // 먼저 비운다. 실패하면 되돌린다.
-    typing.stop();
-    toneSent(); // 힌트가 떠 있어도 보내기는 즉시. await 없음
-    const mentions = group ? extractMentions(text, info?.members ?? [], me) : [];
+  const transmit = useCallback(async (message: SendInput, withHint = false) => {
+    // 확인 버튼 연타도 한 번만 전송: pending은 await 전에 소비한다.
+    pendingSend.current = null;
+    setSendWarning(null);
+    setDetailText(null);
+    setDraft('');
+    const text = message.text ?? '';
     try {
-      await send({ text, ...(replyTarget ? { reply_to: replyTarget.id } : {}), ...(mentions.length ? { mentions } : {}) });
-      setReplyTarget(null);
+      await send(message);
+      if (unmounted.current) return;
+      setReplyTarget((cur) => cur?.id === message.reply_to ? null : cur);
+      if (withHint) logToneEvent({ room_id: id, kind: 'sent_with_hint' });
+      else if (warnedDraft.current !== null && text !== warnedDraft.current) logToneEvent({ room_id: id, kind: 'sent_after_fix' });
+      warnedDraft.current = null;
+      say('보냈어요');
     } catch (e) {
+      if (unmounted.current) return;
       const err = e as SendError;
       setDraft((cur) => (cur ? `${text}\n${cur}` : text));
       setSendError(isUnreachable(err.status) || err.status === undefined ? NETWORK_MESSAGE : dbErrorMessage(err, '보내지 못했어요. 다시 보내 주세요.'));
     } finally {
       sending.current = false;
+      if (!unmounted.current) setSendBusy(false);
     }
-  }, [draft, send, replyTarget, typing, toneSent, group, info, me]);
+  }, [send, id, say]);
+
+  const confirmSend = useCallback(() => {
+    const message = pendingSend.current;
+    if (!message) return;
+    void transmit(message, true);
+    retryFocus(() => (unmounted.current ? null : inputRef.current), { delay: reducedMotion ? 0 : 30 });
+  }, [transmit, reducedMotion]);
+
+  const onSend = useCallback(async () => {
+    const text = draft.trim();
+    if (!text || sending.current) return;
+    sending.current = true;
+    setSendBusy(true);
+    setSendError(null);
+    typing.stop();
+    const mentions = group ? extractMentions(text, info?.members ?? [], me) : [];
+    const message: SendInput = { text, ...(replyTarget ? { reply_to: replyTarget.id } : {}), ...(mentions.length ? { mentions } : {}) };
+    pendingSend.current = message;
+    if (profile?.tone_hint_on !== false && text.length <= 500) {
+      const ctrl = new AbortController();
+      reviewCtrl.current = ctrl;
+      setChecking(true);
+      say('전송 확인 중');
+      const result = await reviewBeforeSend({ room_id: id, text, seq: ++reviewSeq.current, ...(replyTarget ? { reply_to: replyTarget.id } : {}) }, ctrl.signal);
+      if (unmounted.current || ctrl.signal.aborted) return;
+      reviewCtrl.current = null;
+      setChecking(false);
+      if (result?.hint) {
+        warnedDraft.current = text;
+        setSendWarning(result);
+        logToneEvent({ room_id: id, kind: 'hint_shown', signals: { trace_id: result.trace_id } });
+        say(result.hint.title);
+        return;
+      }
+    }
+    await transmit(message);
+  }, [draft, group, info, me, replyTarget, profile?.tone_hint_on, typing, say, id, transmit]);
 
   const photoBusy = useRef(false);
   const [photoSending, setPhotoSending] = useState(false);
@@ -487,6 +558,8 @@ function RoomBody({ id, me }: { id: string; me: string }) {
           photoBusy={photoSending}
           onPickFile={() => void pickFile()}
           fileBusy={fileSending}
+          sendBusy={sendBusy}
+          inputLocked={checking || sendWarning !== null}
           typingLabel={typing.label}
           mentionCandidates={candidates}
           onSelectionChange={(c) => {
@@ -496,9 +569,6 @@ function RoomBody({ id, me }: { id: string; me: string }) {
           selection={selection}
           onBlur={typing.stop}
           say={say}
-          hint={toneHint}
-          onDismissHint={toneDismiss}
-          onOpenHintDetail={() => draft.trim() !== '' && setDetailText(draft.trim())}
           onSelectMention={(name) => {
             const r = insertMention(draft, cursor, name);
             changeDraft(r.text);
@@ -509,10 +579,16 @@ function RoomBody({ id, me }: { id: string; me: string }) {
           inputRef={inputRef}
           replyTo={replyTarget ? { id: replyTarget.id, name: replyTarget.sender_id === me ? '나' : (names.get(replyTarget.sender_id) ?? '상대'), text: firstLine(replyTarget) } : null}
           onCancelReply={() => {
+            if (pendingSend.current) closeDetail();
             setReplyTarget(null);
             say('답장 취소됨');
           }}
         />
+        {checking && (
+          <AppText variant="small" color="textMuted" style={{ paddingHorizontal: space[3], paddingBottom: space[1] }}>
+            전송 확인 중…
+          </AppText>
+        )}
         {sendError && (
           <AppText accessibilityRole="alert" variant="small" color="danger" style={{ paddingHorizontal: space[3], paddingBottom: space[1] }}>
             {sendError}
@@ -520,6 +596,14 @@ function RoomBody({ id, me }: { id: string; me: string }) {
         )}
       </KeyboardAvoidingView>
       <SheetSaySlot.Provider value={sheetSay}>
+      <Sheet visible={sendWarning?.hint != null && detailText === null} title={sendWarning?.hint?.title} onClose={closeDetail}>
+        <AppText>{sendWarning?.hint?.detail}</AppText>
+        <Button label="수정하기" onPress={closeDetail} />
+        <Button label="그대로 보내기" kind="secondary" onPress={confirmSend} />
+        <Button label="살펴보기" kind="ghost" onPress={() => {
+          if (pendingSend.current?.text) setDetailText(pendingSend.current.text);
+        }} />
+      </Sheet>
       <MessageActions
         senderName={menuFor ? (menuFor.sender_id === me ? '나' : names.get(menuFor.sender_id)) : undefined}
         visible={menuFor !== null}
@@ -528,6 +612,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
         myReaction={(reactionRows.find((r) => r.message_id === menuFor?.id && r.user_id === me)?.emoji as Emoji | undefined) ?? null}
         onClose={() => setMenuFor(null)}
         onReply={() => {
+          if (pendingSend.current) closeDetail();
           if (menuFor) {
             setReplyTarget(menuFor);
             say(`${names.get(menuFor.sender_id) ?? '상대'}에게 답장`);
@@ -564,22 +649,20 @@ function RoomBody({ id, me }: { id: string; me: string }) {
         visible={detailText !== null}
         roomId={id}
         text={detailText ?? ''}
-        hintTitle={toneHint?.title ?? null}
+        hintTitle={sendWarning?.hint?.title ?? null}
         replyTo={replyTarget?.id ?? null}
         onClose={closeDetail}
         onApply={({ text, choice, topReading, traceId }) => {
+          closeDetail();
           changeDraft(text);
           setCursor(text.length); // 낡은 커서로 멘션 후보가 뜨지 않게 끝으로
           // 입력창 글만 바꾼다(보내지 않는다). 힌트도 새 글로 다시 확인
           if (choice) logToneEvent({ room_id: id, kind: 'option_chosen', choice, top_reading: topReading, signals: { trace_id: traceId } }); // 글은 기록하지 않는다
-          closeDetail();
           say('입력창에 적용했어요');
         }}
         onSendAsIs={({ topReading, traceId }) => {
           logToneEvent({ room_id: id, kind: 'option_chosen', choice: 'original', top_reading: topReading, ...(traceId ? { signals: { trace_id: traceId } } : {}) });
-          closeDetail();
-          say('보냈어요');
-          void onSend(); // 평소 보내기 그대로(sent_with_hint는 toneSent가 기록)
+          confirmSend();
         }}
       />
       </SheetSaySlot.Provider>

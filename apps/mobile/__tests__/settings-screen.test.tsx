@@ -40,7 +40,7 @@ jest.mock('../lib/push', () => ({
 let mockIos = 'not-ios';
 jest.mock('../lib/iosWeb', () => ({ currentIosWebState: () => mockIos }));
 
-const NOTE = '힌트를 끄면 입력 중인 문장을 AI에 보내지 않아요.';
+const NOTE = '힌트를 끄면 보내기를 눌러도 문장을 AI에 보내지 않아요.';
 
 async function setup() {
   const root = createRoot();

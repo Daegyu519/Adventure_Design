@@ -2,11 +2,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { act } from 'react';
 import { createRoot } from 'test-renderer';
 
-import { useConsented } from '../lib/consent';
+import { CONSENT_VERSION, useConsented } from '../lib/consent';
 
 // useConsented의 메모리 상태는 모듈에 하나라서, 이 파일은 테스트 하나만 둔다(상태가 다음 테스트로 새지 않게).
 test('useConsented: 읽는 동안 null, 저장소에 동의가 있으면 그 값(true)으로 바뀐다', async () => {
-  await AsyncStorage.setItem('consent', '1');
+  await AsyncStorage.setItem('consent', String(CONSENT_VERSION));
   let seen: boolean | null | undefined;
   const Probe = () => {
     seen = useConsented();
