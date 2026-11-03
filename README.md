@@ -2,7 +2,7 @@
 
 <img src="apps/mobile/assets/images/icon.png" alt="톤챗 아이콘" width="96" />
 
-# 톤챗 (tone-chat)
+# 톤챗 (tone-chat) 메롱
 
 **보내기 전에, 이 문장이 차갑게 읽힐지 나에게만 조용히 알려 주는 1:1·그룹 채팅 앱**
 
