@@ -39,9 +39,11 @@ type Props = {
   onDismissHint?(): void;
   onOpenHintDetail?(): void; // T-22가 넘긴다
   fileBusy?: boolean; // 파일을 올리는 중: 파일 버튼이 aria-busy
+  sendBusy?: boolean;
+  inputLocked?: boolean;
   photoBusy?: boolean; // 사진을 올리는 중: 사진 버튼이 aria-busy(진짜 disabled 아님)
 };
-export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, inputRef, onPickImage, onPickFile, typingLabel, mentionCandidates, onSelectMention, onSelectionChange, selection, onBlur, photoBusy, fileBusy, say, hint, onDismissHint, onOpenHintDetail }: Props) {
+export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, inputRef, onPickImage, onPickFile, typingLabel, mentionCandidates, onSelectMention, onSelectionChange, selection, onBlur, photoBusy, fileBusy, sendBusy = false, inputLocked = false, say, hint, onDismissHint, onOpenHintDetail }: Props) {
   const { colors, radius, space, font } = useTheme();
   const own = useRef<InputHandle>(null);
   const ref = inputRef ?? own;
@@ -135,6 +137,7 @@ export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, 
           ref={ref}
           accessibilityLabel={replyTo ? `메시지 입력, ${replyTo.name}에게 답장 중` : '메시지 입력'}
           multiline
+          editable={!inputLocked}
           maxLength={2000}
           value={value}
           onChangeText={onChangeText}
@@ -201,7 +204,7 @@ export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, 
             ...focusRing(colors.primary),
           }}
         />
-        <IconButton icon={ArrowUp} label="보내기" disabled={value.trim() === ''} onPress={onSend} circle={{ bg: 'primary', fg: 'onPrimary' }} />
+        <IconButton icon={ArrowUp} label="보내기" disabled={sendBusy || value.trim() === ''} busy={sendBusy} onPress={onSend} circle={{ bg: 'primary', fg: 'onPrimary' }} />
       </View>
     </View>
   );

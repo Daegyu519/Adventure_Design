@@ -35,7 +35,7 @@ test('consent screen: 체크하면 시작하기가 켜지고, 누르면 동의�
   expect(byRole('button').props.accessibilityState.disabled).toBe(false);
   expect(byRole('button').props.accessibilityState.busy).toBe(false);
   await press('button');
-  expect(await AsyncStorage.getItem('consent')).toBe('1');
+  expect(await AsyncStorage.getItem('consent')).toBe('2');
   expect(byRole('button').props.accessibilityState.busy).toBe(true); // 저장하는 동안. 웹의 aria-busy는 브라우저에서 확인
 });
 

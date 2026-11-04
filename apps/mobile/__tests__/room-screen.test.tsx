@@ -22,7 +22,7 @@ const mockRouter = { push: jest.fn(), back: jest.fn(), replace: jest.fn(), canGo
 let mockFocused = true;
 let mockParams: Record<string, string> = { id: 'r1' };
 jest.mock('expo-router', () => ({ useRouter: () => mockRouter, useLocalSearchParams: () => mockParams, useIsFocused: () => mockFocused }));
-jest.mock('../lib/session', () => ({ useSession: () => ({ userId: 'me' }) }));
+jest.mock('../lib/session', () => ({ useSession: () => ({ userId: 'me', profile: { tone_hint_on: mockHintEnabled } }) }));
 const mockFrom = jest.fn();
 jest.mock('../lib/supabase', () => ({ supabase: { from: (...a: unknown[]) => mockFrom(...a) } }));
 
@@ -66,9 +66,11 @@ jest.mock('../lib/useMembers', () => ({
   useMembers: (_id: string, initial: { user_id: string; last_read_at: string | null }[] = []) => ({ members: initial.map((x) => ({ ...x, last_read_at: x.user_id in mockMembersLastRead ? mockMembersLastRead[x.user_id] : x.last_read_at })), error: false, reload: jest.fn() }),
 }));
 
+const mockHintRequest = jest.fn();
+let mockHintEnabled = true;
 const mockFeedback = jest.fn();
 const mockDetail = jest.fn();
-jest.mock('../lib/engine', () => ({ ...jest.requireActual('../lib/engine'), engine: { isMock: true, feedback: (...a: unknown[]) => mockFeedback(...a), detail: (...a: unknown[]) => mockDetail(...a) } }));
+jest.mock('../lib/engine', () => ({ ...jest.requireActual('../lib/engine'), engine: { isMock: true, hint: (...a: unknown[]) => mockHintRequest(...a), feedback: (...a: unknown[]) => mockFeedback(...a), detail: (...a: unknown[]) => mockDetail(...a) } }));
 // 힌트는 화면 밖(useToneHint)에서 만들어진다. 여기서는 떠 있는 힌트와 그 호출만 본다(T-22).
 let mockHint: { title: string; detail: string } | null = null;
 const mockToneInput = jest.fn();
@@ -101,6 +103,8 @@ beforeEach(() => {
   mockFeedback.mockReset();
   mockDetail.mockReset();
   mockHint = null;
+  mockHintEnabled = true;
+  mockHintRequest.mockReset().mockImplementation((b: { seq: number }) => Promise.resolve({ seq: b.seq, hint: mockHint, trace_id: 'hint-trace' }));
   mockToneInput.mockReset();
   mockToneSent.mockReset();
   mockLogTone.mockReset();
@@ -130,7 +134,7 @@ test('그룹이면 남의 말풍선 위에 이름, 제목은 방 제목', async 
   expect(texts()).toContain('안녕');
 });
 
-test('보내기: 다듬은 글로 send, 입력창은 먼저 비워진다. 엔진 호출 없음', async () => {
+test('보내기: 다듬은 글을 분석하고 경고 없으면 즉시 send, 입력창을 비운다', async () => {
   mockSend.mockResolvedValue(m(3, 'me', 'hi'));
   const { type, press, input } = await setup();
   await type('  hi  ');
@@ -144,6 +148,141 @@ test('빈 글은 보내지 않는다', async () => {
   await type('   ');
   await press('보내기');
   expect(mockSend).not.toHaveBeenCalled();
+});
+
+test('타이핑 중에는 분석하지 않고, 경고는 전송을 보류한다. 수정하기는 원문을 보존한다', async () => {
+  mockHint = { title: '차갑게 느껴질 수도 있어요', detail: '이유 없이 짧게 답했어요' };
+  const s = await setup();
+  await s.type('안 돼.');
+  expect(mockHintRequest).not.toHaveBeenCalled();
+  await s.press('보내기');
+  expect(mockSend).not.toHaveBeenCalled();
+  expect(s.texts()).toContain(mockHint.title);
+  await s.press('수정하기');
+  expect(s.input().props.value).toBe('안 돼.');
+  await s.type('지금은 어려워요');
+  expect(s.input().props.value).toBe('지금은 어려워요');
+  expect(mockSend).not.toHaveBeenCalled();
+});
+
+test('그대로 보내기는 분석을 반복하지 않고 원문을 한 번만 전송한다', async () => {
+  mockHint = { title: '차갑게 느껴질 수도 있어요', detail: 'd' };
+  const s = await setup();
+  await s.type('안 돼.');
+  await s.press('보내기');
+  const button = s.root.container.queryAll((n) => n.props.accessibilityLabel === '그대로 보내기')[0];
+  await act(async () => {
+    button.props.onClick({ stopPropagation() {}, nativeEvent: {} });
+    button.props.onClick({ stopPropagation() {}, nativeEvent: {} });
+  });
+  expect(mockSend).toHaveBeenCalledTimes(1);
+  expect(mockSend).toHaveBeenCalledWith({ text: '안 돼.' });
+  expect(mockHintRequest).toHaveBeenCalledTimes(1);
+});
+
+test('시간 초과는 1500ms에 한 번 전송하고 늦게 온 경고는 무시한다', async () => {
+  jest.useFakeTimers();
+  let done!: (r: unknown) => void;
+  mockHintRequest.mockImplementation(() => new Promise((r) => { done = r; }));
+  const s = await setup();
+  await s.type('안녕');
+  await s.press('보내기');
+  expect(s.texts()).toContain('전송 확인 중');
+  await s.press('보내기');
+  expect(mockHintRequest).toHaveBeenCalledTimes(1);
+  await act(async () => { await jest.advanceTimersByTimeAsync(1499); });
+  expect(mockSend).not.toHaveBeenCalled();
+  await act(async () => { await jest.advanceTimersByTimeAsync(1); });
+  expect(mockSend).toHaveBeenCalledTimes(1);
+  await act(async () => done({ seq: 1, hint: { title: '늦은 경고', detail: '' }, trace_id: 'late' }));
+  expect(s.texts()).not.toContain('늦은 경고');
+  expect(mockSend).toHaveBeenCalledTimes(1);
+  await act(async () => s.root.unmount());
+  jest.useRealTimers();
+});
+
+test('방을 떠나면 대기 중 요청을 취소하고 전송하지 않는다', async () => {
+  let done!: (r: unknown) => void;
+  mockHintRequest.mockImplementation(() => new Promise((r) => { done = r; }));
+  const s = await setup();
+  await s.type('안녕');
+  await s.press('보내기');
+  await act(async () => s.root.unmount());
+  expect(mockHintRequest.mock.calls[0][1].signal.aborted).toBe(true);
+  await act(async () => done({ seq: 1, hint: null, trace_id: 'late' }));
+  expect(mockSend).not.toHaveBeenCalled();
+});
+
+test('엔진 오류에도 전송하고, 힌트 설정을 끄면 분석하지 않는다', async () => {
+  mockHintRequest.mockRejectedValue(new Error('offline'));
+  const a = await setup();
+  await a.type('안녕');
+  await a.press('보내기');
+  expect(mockSend).toHaveBeenCalledTimes(1);
+  mockHintRequest.mockClear();
+  mockHintEnabled = false;
+  const b = await setup();
+  await b.type('바로 보냄');
+  await b.press('보내기');
+  expect(mockHintRequest).not.toHaveBeenCalled();
+  expect(mockSend).toHaveBeenCalledTimes(2);
+});
+
+test('경고 후 고쳐서 전송에 성공하면 리포트 수정 통계를 기록한다', async () => {
+  mockHint = { title: '차갑게 느껴질 수도 있어요', detail: 'd' };
+  const s = await setup();
+  await s.type('안 돼.');
+  await s.press('보내기');
+  await s.press('수정하기');
+  mockHint = null;
+  await s.type('지금은 어려워요');
+  await s.press('보내기');
+  expect(mockLogTone).toHaveBeenCalledWith({ room_id: 'r1', kind: 'sent_after_fix' });
+});
+
+test('스택에서 방 포커스가 사라져도 초안을 보존하고 대기를 취소한다', async () => {
+  mockHintRequest.mockReturnValue(new Promise(() => {}));
+  const s = await setup();
+  await s.type('안녕');
+  await s.press('보내기');
+  mockFocused = false;
+  await act(async () => s.root.render(<Room />));
+  expect(mockHintRequest.mock.calls[0][1].signal.aborted).toBe(true);
+  expect(mockSend).not.toHaveBeenCalled();
+  expect(s.input().props.value).toBe('안녕');
+  expect(s.input().props.editable).toBe(true);
+  await act(async () => s.root.unmount());
+});
+
+test('백그라운드로 가면 분석을 취소하고 전송하지 않는다', async () => {
+  let handler: (s: string) => void = () => {};
+  const spy = jest.spyOn(AppState, 'addEventListener').mockImplementation(((_t: string, h: (s: string) => void) => ((handler = h), { remove() {} })) as never);
+  try {
+    mockHintRequest.mockReturnValue(new Promise(() => {}));
+    const s = await setup();
+    await s.type('안녕');
+    await s.press('보내기');
+    await act(async () => handler('background'));
+    expect(mockHintRequest.mock.calls[0][1].signal.aborted).toBe(true);
+    expect(mockSend).not.toHaveBeenCalled();
+    expect(s.input().props.value).toBe('안녕');
+    await act(async () => s.root.unmount());
+  } finally { spy.mockRestore(); }
+});
+
+test('분석 중 답장을 취소하면 기존 답장 전송도 취소하고 다시 보낼 수 있다', async () => {
+  mockHintRequest.mockReturnValueOnce(new Promise(() => {}));
+  const s = await setup();
+  await s.press('메시지 메뉴');
+  await s.press('답장');
+  await s.type('안녕');
+  await s.press('보내기');
+  expect(mockHintRequest.mock.calls[0][0].reply_to).toBeDefined();
+  await s.press('답장 취소');
+  expect(mockHintRequest.mock.calls[0][1].signal.aborted).toBe(true);
+  expect(mockSend).not.toHaveBeenCalled();
+  await s.press('보내기');
+  expect(mockSend).toHaveBeenCalledWith({ text: '안녕' });
 });
 
 test('보내기 실패: 글을 되돌리고 DB 코드는 한국어 문구로(서버 글은 안 보임)', async () => {
@@ -979,6 +1118,7 @@ async function openDetail() {
   mockDetail.mockResolvedValue(DETAIL_RES);
   const s = await setup();
   await s.type('  안 돼요.  ');
+  await s.press('보내기');
   await s.press('살펴보기');
   return s;
 }
@@ -993,7 +1133,7 @@ test('살펴보기: 입력창에 적용 → 입력창 글이 바뀌고 힌트를
   const { root, input } = await openDetail();
   await click(applyBtn(root));
   expect(input().props.value).toBe('지금은 어려워요.');
-  expect(mockToneInput).toHaveBeenLastCalledWith('지금은 어려워요.');
+  expect(mockToneInput).not.toHaveBeenCalled();
   expect(mockLogTone).toHaveBeenCalledWith({ room_id: 'r1', kind: 'option_chosen', choice: 'A', top_reading: '차갑게', signals: { trace_id: DETAIL_RES.trace_id } });
   expect(mockSend).not.toHaveBeenCalled();
   expect(buttons(root, '그대로 보낼게요')).toHaveLength(0);
@@ -1005,7 +1145,7 @@ test('살펴보기: 그대로 보낼게요 → original 기록 + 지금 글을 �
   await click(buttons(root, '그대로 보낼게요')[0]);
   expect(mockLogTone).toHaveBeenCalledWith({ room_id: 'r1', kind: 'option_chosen', choice: 'original', top_reading: '차갑게', signals: { trace_id: DETAIL_RES.trace_id } });
   expect(mockSend).toHaveBeenCalledWith({ text: '안 돼요.' });
-  expect(mockToneSent).toHaveBeenCalled();
+  expect(mockHintRequest).toHaveBeenCalledTimes(1);
   expect(buttons(root, '그대로 보낼게요')).toHaveLength(0);
 });
 
@@ -1014,10 +1154,11 @@ test('살펴보기: 모르는 label이면 적용만 하고 option_chosen은 기�
   mockDetail.mockResolvedValue({ ...DETAIL_RES, options: [{ label: '다른 문장', text: '새 글', keep: [], change: [] }] });
   const { root, input, type, press } = await setup();
   await type('안 돼요.');
+  await press('보내기');
   await press('살펴보기');
   await click(applyBtn(root));
   expect(input().props.value).toBe('새 글');
-  expect(mockLogTone).not.toHaveBeenCalled();
+  expect(mockLogTone.mock.calls.filter(([e]) => e.kind === 'option_chosen')).toHaveLength(0);
 });
 
 test('살펴보기: 적용·그대로 보내기 뒤에는 입력창에 포커스를 되돌린다(Modal 복원이 끝날 때까지 재시도)', async () => {
@@ -1025,6 +1166,7 @@ test('살펴보기: 적용·그대로 보내기 뒤에는 입력창에 포커스
   await click(applyBtn(a.root));
   expect(mockFocusUntil).toHaveBeenCalledTimes(1);
   mockFocusUntil.mockReset();
+  await a.press('보내기');
   await a.press('살펴보기');
   await click(buttons(a.root, '그대로 보낼게요')[0]);
   expect(mockFocusUntil).toHaveBeenCalledTimes(1);
@@ -1037,6 +1179,7 @@ test('살펴보기: 적용하면 커서가 새 글 끝으로 간다(낡은 커�
   const { root, type, input, press } = await setup();
   await type('@민');
   await act(async () => input().props.onSelectionChange({ nativeEvent: { selection: { start: 2, end: 2 } } }));
+  await press('보내기');
   await press('살펴보기');
   await click(applyBtn(root));
   expect(input().props.value).toBe('@민수에게 말할게요.');
@@ -1047,7 +1190,7 @@ test('살펴보기: 공백뿐인 글이면 시트를 열지 않고 요청도 하
   mockHint = { title: 't', detail: 'd' };
   const { root, type, press } = await setup();
   await type('   ');
-  await press('살펴보기');
+  await press('보내기');
   expect(mockDetail).not.toHaveBeenCalled();
   expect(buttons(root, '그대로 보낼게요')).toHaveLength(0);
 });
