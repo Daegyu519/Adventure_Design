@@ -19,7 +19,7 @@
 
 ## 2. 지금 상태
 
-P-34(2026-11-03): 작업 브랜치 `p34-send-review`에 전송 시점 최대 1.5초 확인 구현 완료. 기존 `/v1/hint`·Sheet·Button 재사용, 모델·DB 변경 없음. 앱 751건·tsc·lint·웹 export 및 독립 리뷰 통과. Windows에 uv/Python이 없어 전체 scripts/check 미실행, main land·운영 배포 안 함. 자세한 동작은 ARCHITECTURE §3 P-34.
+P-34(2026-11-04): 전송 시점 최대 1.5초 확인 구현 완료, 사용자 요청으로 main에 land. 기존 `/v1/hint`·Sheet·Button 재사용, 모델·DB 변경 없음. Windows asyncio socketpair 호환을 테스트 환경에 보완했고 독립 리뷰 통과. Python 3.12에서 scripts/check 통과: 엔진 586 passed/28 skipped(실제 PostgreSQL 없음 27·FakeRepo 잠금 1), DB(PGlite) 26, 앱 751·tsc·lint·대비 OK. 웹 export 통과. 운영 배포·실기기 확인은 별도. 자세한 동작은 ARCHITECTURE §3 P-34.
 
 `docs/tasks.md` 기준으로 직접 센 값이다(`-live` 행과 선택은 따로).
 
@@ -58,13 +58,13 @@ P-14 후속 감사(2026-11-01): 기존 모델·ZIP 해시 및 Windows CPU 독립
 
 | 작업 | 누가 | 상태 |
 |---|---|---|
-| P-34 | Codex | 구현·앱 검사·독립 리뷰 완료, 전체 검사 가능한 환경에서 land 대기 (`p34-send-review`) |
+| (없음) | | |
 
 보류(paused): 없음.
 
 ## 4. 다음 순서 — 누가 무엇을
 
-P-34: 전체 검사 가능한 환경에서 `p34-send-review`를 확인·land한 뒤 웹/Android 실기기에서 전송 확인 시트와 왕복 1.5초 만료 동작을 확인한다. 기존 테스트 기준은 아래 이력과 구분한다.
+P-34 병합 후 웹/Android를 배포하고 실기기에서 전송 확인 시트와 왕복 1.5초 만료 동작을 확인한다. 실제 PostgreSQL 환경에서 건너뛴 계약 테스트 27건도 확인한다. 기존 테스트 기준은 아래 이력과 구분한다.
 
 배포는 끝났다(웹 `https://tone-chat.expo.app`, Android APK, 엔진은 GPU 서버 상시, 서울 pilot DB). **가장 큰 문제는 말투 힌트가 거의 안 뜨는 것**이다: 실시간 게이트가 엄격해 문장이 모델까지 가지 못하고, 실시간 모델(SEED 1.5B)이 차가운 문장을 거의 구분하지 못한다(pilot 힌트 요청 44건 모두 게이트에서 멈춤, 대조 세트에서 SEED 단독 정밀도·재현율 0). 그래서 다음 일은 엔진 성능이다.
 
