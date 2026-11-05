@@ -2,6 +2,8 @@
 
 # OOPS!
 
+<p align="center"><img src="docs/images/oops-app-icon.png" alt="OOPS! 앱 아이콘" width="180" /></p>
+
 **보내려는 말이 차갑게 읽힐 수 있을 때, 보내기 전에 나에게만 조용히 알려 주는 채팅 앱**
 
 CNU 2026-2 어드벤처디자인 프로젝트 · 파일럿 운영
