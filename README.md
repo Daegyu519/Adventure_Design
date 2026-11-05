@@ -12,7 +12,7 @@ CNU 2026-2 어드벤처디자인 프로젝트 · 파일럿 운영
 
 ## 서비스
 
-- 웹 앱: [oops?](https://tone-chat.expo.app) — iPhone에서는 Safari에서 열고 **공유 → 홈 화면에 추가**해 앱처럼 사용할 수 있습니다.
+- 웹 앱: [OOPS! 웹 앱](https://tone-chat.expo.app) — iPhone에서는 Safari에서 열고 **공유 → 홈 화면에 추가**해 앱처럼 사용할 수 있습니다.
 - Android: [파일럿 APK](https://expo.dev/artifacts/eas/cofnccVScpUy2N8FrEJHcQUdos3MNIQRJqRTp6nsFhc.apk) (Android 지원은 우선순위가 낮아 새 빌드는 보장하지 않습니다.)
 - 이메일로 받은 로그인 코드로 접속합니다.
 
