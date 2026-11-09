@@ -50,7 +50,7 @@
 
 완료 기준: 인터뷰 요약, 동일 시나리오 경쟁 비교표, 타깃·핵심 문제·차별화 가설 및 계속/수정/보류 결정이 남는다. 차별화는 검증 전까지 가설로 표시한다.
 
-자료(2026-11-10): [인터뷰 질문지](research/R-01-interview-guide.md) · [경쟁 비교 시나리오·기록 표](research/R-01-comparison-scenarios.md)
+자료(2026-11-10): [인터뷰 질문지](research/R-01-interview-guide.md) · [경쟁 비교 시나리오·기록 표](research/R-01-comparison-scenarios.md) · [Codex 예상답안과 경쟁 제품 조사](research/R-01-codex-expected-answers.md)
 
 ## 2. R-02 — 판정과 근거를 어떻게 평가할지 정의
 
