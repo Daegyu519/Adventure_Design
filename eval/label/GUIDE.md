@@ -12,6 +12,8 @@
 
 ## 진행 순서
 
+**링크 방식(2026-11-10, 권장):** 라벨 양식을 claude.ai 페이지로 올려 두었다(소유자 계정의 아티팩트, Share 메뉴로 조원에게 공유). 제출하면 페이지 저장소의 `labels/<라벨러 id>`에 저장되고, 저장 권한이 없는 사람(링크로 연 외부 사용자 등)에게는 제출 코드(JSON)가 떠서 메시지로 받는다. 라벨러끼리는 서로의 제출을 볼 수 없다. 문장 순서는 `export --seed 16`으로 만든 `eval/label/out/key.json`과 맞으므로, 합치기 전까지 다른 seed로 다시 export하지 않는다. 모인 제출은 `{labeler, labels}` 형식이라 아래 3번 `merge`에 그대로 넣는다.
+
 1. **양식 만들기** (한 사람이 한 번):
    ```bash
    uv run --project engine python eval/label/label.py export --seed 16
