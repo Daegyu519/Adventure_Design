@@ -16,14 +16,19 @@
    ```bash
    uv run --project engine python eval/label/label.py export --seed 16
    ```
-   `eval/label/out/form.html`과 `key.json`이 생긴다. **`key.json`은 라벨이 끝날 때까지 아무에게도 보여 주지 않는다.**
-2. **각자 라벨** (상의 금지): `form.html`을 브라우저로 열고 60개(30쌍)를 끝까지 고른 뒤 "저장"을 누른다. `labels_<이름>.json`이 내려받아진다. 약 20~30분.
-3. **합치기** (두 사람 파일이 모이면):
-   ```bash
-   uv run --project engine python eval/label/label.py merge labels_A.json labels_B.json
-   ```
-   일치율, Cohen's kappa, 불일치 목록이 나온다.
-4. **불일치 상의**: 불일치마다 둘이 메모를 보고 이야기해 정하고, 정한 행을 `eval/contrast_set_t16.jsonl`에 직접 추가한다. **합의 전 일치율과 kappa를 먼저 기록**한다(합의 후 숫자는 의미가 없다).
+   `eval/label/out/form.html`과 `key.json`이 생긴다. **`key.json`은 라벨이 끝날 때까지 아무에게도 보여 주지 않는다.** 양식은 한 번만 만들어 모두에게 **같은 `form.html`**을 보낸다(다시 만들면 순서가 바뀌어 합칠 수 없다).
+2. **각자 라벨** (상의 금지): `form.html`을 브라우저로 열고 60개(30쌍)를 끝까지 고른 뒤 "저장"을 누른다. 이름 칸은 사람마다 다르게(겹치면 합치기가 멈춘다). `labels_<이름>.json`이 내려받아진다. 약 20~30분.
+3. **합치기**:
+   - **3명 이상(권장, 5명):** 다수결로 정한다. 상의할 필요가 없다.
+     ```bash
+     uv run --project engine python eval/label/label.py merge labels_*.json
+     ```
+     Fleiss kappa(여러 명 일치도), 두 사람씩 kappa 평균, 만장일치 수, **거의 갈림(5명 중 3:2)**·동표 목록, 사람별 경고 비율·다수결과 일치율이 나온다. 합의본은 `eval/contrast_set_t16.jsonl`, 자세한 보고서는 `eval/contrast_set_t16.report.json`. 동표(짝수 명이 반반)는 합의본에서 빠진다.
+   - **2명:** `merge labels_A.json labels_B.json` → 일치율, Cohen's kappa, 불일치 목록. 불일치는 둘이 메모를 보고 상의해 정하고 `eval/contrast_set_t16.jsonl`에 직접 추가한다. **합의 전 일치율과 kappa를 먼저 기록**한다(합의 후 숫자는 의미가 없다).
+4. **결과 읽기**:
+   - kappa는 대략 0.6 이상이면 꽤 일치, 0.4 아래면 사람끼리도 많이 갈린다. **사람끼리의 일치도가 모델에 기대할 수 있는 천장이다.**
+   - 거의 갈린 사례는 "판단 어려움" 후보다. 모델이 여기서 단정하면 안 된다(R-02).
+   - 한 사람의 다수결 일치율이 유독 낮거나 경고 비율이 크게 다르면, 지침을 다르게 이해했는지 확인한다(그 사람을 빼지 말고 이유를 기록).
 
 ## 양식에서 고르는 법
 
@@ -72,7 +77,7 @@
 합치기가 끝나면 `docs/tasks.md`의 T-16 완료 기준 끝에 한 줄로 남긴다.
 
 ```
-확인: 라벨러 2명(A, B), 60개, 합의 전 일치율 0.xx·kappa 0.xx, 불일치 N개 상의 후 합의, eval/contrast_set_t16.jsonl
+확인: 라벨러 5명(조원), 60개, Fleiss kappa 0.xx·두 사람씩 평균 0.xx, 만장일치 N·거의 갈림 N·동표 N, 다수결 합의본 eval/contrast_set_t16.jsonl
 ```
 
 불일치 사례 중 판단이 갈린 이유가 흥미로운 것은 3~5개 골라 R-02 실패 유형으로 넘긴다.
