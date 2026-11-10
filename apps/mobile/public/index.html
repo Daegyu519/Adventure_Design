@@ -17,6 +17,10 @@
     <meta name="theme-color" content="#FFFDF8" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#0B0B0D" media="(prefers-color-scheme: dark)" />
     <style id="expo-reset">
+      /* 자바스크립트가 뜨기 전 빈 화면이 흰색으로 번쩍이지 않게, OOPS 시작 화면과 같은 어두운 바탕(tokens.dark.background) */
+      html {
+        background: #0B0B0D;
+      }
       html,
       body {
         height: 100%;
