@@ -21,7 +21,7 @@
 
 P-34(2026-11-04): 전송 시점 최대 1.5초 확인 구현 완료, 사용자 요청으로 main에 land. 기존 `/v1/hint`·Sheet·Button 재사용, 모델·DB 변경 없음. Windows asyncio socketpair 호환을 테스트 환경에 보완했고 독립 리뷰 통과. Python 3.12에서 scripts/check 통과: 엔진 586 passed/28 skipped(실제 PostgreSQL 없음 27·FakeRepo 잠금 1), DB(PGlite) 26, 앱 751·tsc·lint·대비 OK. 웹 export 통과. 운영 배포·실기기 확인은 별도. 자세한 동작은 ARCHITECTURE §3 P-34.
 
-P-35(2026-11-10): OOPS 리디자인 + 앱 이름 OOPS!(사용자 요청, `OOPS_웹앱_프로토타입.html` 기준). 토큰·글로우·컴포넌트·시작 화면을 시안 모양으로, 기능·문구·접근성은 그대로. scripts/check 통과(엔진 pytest·DB 26·앱 752·tsc·lint·대비). 웹 재배포는 아래 기록 참고. 라이트 모드는 시안에 없어 파생한 값이라 확인 대기.
+P-35(2026-11-10): OOPS 리디자인 + 앱 이름 OOPS!(사용자 요청, `OOPS_웹앱_프로토타입.html` 기준). 토큰·글로우·컴포넌트·시작 화면을 시안 모양으로, 기능·문구·접근성은 그대로. scripts/check 통과(엔진 pytest·DB 26·앱 752·tsc·lint·대비). 2026-11-10 웹 재배포(`expo export -p web` → `eas deploy --prod`, https://tone-chat.expo.app, 새 디자인·이름 확인). Android APK는 아직 이전 빌드(새 이름·아이콘은 EAS 재빌드 필요). 라이트 모드는 시안에 없어 파생한 값이라 확인 대기.
 
 `docs/tasks.md` 기준으로 직접 센 값이다(`-live` 행과 선택은 따로).
 
