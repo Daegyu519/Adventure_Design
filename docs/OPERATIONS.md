@@ -1,4 +1,4 @@
-# 톤챗 운영 가이드 (내부)
+# OOPS! 운영 가이드 (내부)
 
 > 팀 내부 운영 문서 — 공개 자료에는 README와 docs/architecture-diagrams.md만 쓴다.
 
