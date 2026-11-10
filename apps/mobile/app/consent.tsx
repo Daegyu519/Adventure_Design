@@ -12,7 +12,7 @@ import { focusRing, useTheme } from '../lib/theme';
 // 문구는 바꾸지 않는다(바꾸면 lib/consent.ts의 CONSENT_VERSION을 올려 다시 동의받는다).
 const PARTICIPATION = '이 앱은 수업 프로젝트의 1주 파일럿이에요. 언제든 그만둘 수 있고, 그만두고 싶으면 진행하는 팀에 알려 주세요.';
 const AI_ITEMS = [
-  '보내기 전에 입력 중인 문장과 이 방의 최근 대화 8개를 말투 확인 AI가 읽어요. 이름·전화번호·이메일 같은 정보는 가린 뒤 보내요.',
+  '보내기를 누르면 문장과 이 방의 최근 대화 8개를 말투 확인 AI가 읽어요. 이름·전화번호·이메일 같은 정보는 가린 뒤 보내요. 최대 1.5초 확인하고, 경고가 있으면 수정하거나 그대로 보낼 수 있어요.',
   '사진은 AI에 보내지 않아요.',
   '털어놓은 글은 저장하지 않아요. 누가 남겼는지 상대에게 알려 주지 않아요.',
   '거울 카드에 내가 보낸 문장이 나올 수 있어요. 나에게만 보여요.',
@@ -26,7 +26,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   const { space } = useTheme();
   return (
     <View style={{ gap: space[1] }}>
-      <AppText accessibilityRole="header" aria-level={2} weight="600">
+      <AppText accessibilityRole="header" aria-level={2} weight="700">
         {title}
       </AppText>
       {children}
@@ -35,7 +35,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 }
 
 export default function Consent() {
-  const { colors, space } = useTheme();
+  const { colors, space, radius } = useTheme();
   const [agreed, setAgreed] = useState(false);
   const [saving, setSaving] = useState(false);
   const ios = currentIosWebState();
@@ -49,7 +49,7 @@ export default function Consent() {
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
       <ScrollView contentContainerStyle={{ padding: space[3], paddingBottom: space[6] }}>
         <View style={{ width: '100%', maxWidth: 560, alignSelf: 'center', gap: space[5] }}>
-          <AppText accessibilityRole="header" aria-level={1} variant="title">
+          <AppText accessibilityRole="header" aria-level={1} variant="large" style={{ marginTop: space[3] }}>
             시작하기 전에
           </AppText>
 
@@ -58,7 +58,7 @@ export default function Consent() {
           </Section>
 
           <Section title="AI가 보는 것">
-            <View role="list" style={{ gap: space[1] }}>
+            <View role="list" style={{ gap: space[1] + 2, padding: space[2] + 2, borderRadius: radius.card, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface }}>
               {AI_ITEMS.map((t) => (
                 <View key={t} role="listitem" style={{ flexDirection: 'row', gap: space[2] }}>
                   <AppText color="textMuted" aria-hidden>
@@ -105,7 +105,7 @@ export default function Consent() {
                 height: 24,
                 borderRadius: 6,
                 borderWidth: 2,
-                borderColor: agreed ? colors.primary : colors.textMuted,
+                borderColor: agreed ? colors.primary : colors.borderStrong,
                 backgroundColor: agreed ? colors.primary : 'transparent',
                 alignItems: 'center',
                 justifyContent: 'center',

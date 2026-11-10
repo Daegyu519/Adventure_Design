@@ -1,6 +1,7 @@
 """T-16 블라인드 라벨 도구.
   export: 후보(candidates_t16.jsonl) -> 섞인 라벨 양식(form.html)과 정답 대응표(key.json)
   merge : 두 사람 라벨(json) + key -> 일치율·Cohen's kappa·불일치 목록, 합의본 jsonl
+          세 사람 이상 -> 다수결 합의본, Fleiss kappa, 만장일치·거의 갈림(3:2)·동표, 사람별 경고 비율(보고서 json)
 후보는 AI가 초안만 썼다. 어느 면이 의도였는지는 양식에 나오지 않고, 최종 라벨은 사람이 정한다."""
 from __future__ import annotations
 
@@ -87,6 +88,71 @@ def merge(key: Path, f1: Path, f2: Path, out: Path) -> dict:
     return res
 
 
+def fleiss_kappa(counts: list[tuple[int, int]]) -> float | None:
+    """counts: 문장마다 (예 표, 아니오 표). 모든 문장의 라벨러 수가 같아야 한다(2명 이상)."""
+    if not counts:
+        return None
+    n = sum(counts[0])
+    if n < 2 or any(sum(c) != n for c in counts):
+        return None
+    big_n = len(counts)
+    p_bar = sum((y * y + f * f - n) / (n * (n - 1)) for y, f in counts) / big_n
+    p_yes = sum(y for y, _ in counts) / (big_n * n)
+    pe = p_yes ** 2 + (1 - p_yes) ** 2
+    return (p_bar - pe) / (1 - pe) if pe < 1 else (1.0 if p_bar == 1 else 0.0)
+
+
+def merge_many(key: Path, files: list[Path], out: Path) -> dict:
+    """라벨러 3명 이상: 다수결로 합의본을 쓰고, 일치도·합의 강도·사람별 경향을 낸다.
+    합의본은 2명 merge와 같은 형식이라 run_eval --set에 그대로 넣는다. 표가 같으면(짝수 라벨러) 합의본에서 빼고 tie로 남긴다."""
+    key_d = json.loads(Path(key).read_text(encoding="utf-8"))
+    ls = [json.loads(Path(f).read_text(encoding="utf-8")) for f in files]
+    names = [l["labeler"] for l in ls]
+    if len(set(names)) != len(names):
+        raise SystemExit(f"라벨러 이름이 겹친다: {names}")
+    k = len(ls)
+    items, rows, weak, ties = [], [], [], []
+    for i, meta in key_d.items():
+        votes = [l["labels"][i]["cold"] for l in ls if i in l["labels"]]
+        if len(votes) < 3:
+            continue   # 3명 미만이 고른 문장은 다수결을 믿기 어렵다
+        y, n = sum(votes), len(votes) - sum(votes)
+        items.append((i, y, n))
+        if y == n:
+            ties.append(i)
+            continue
+        if min(y, n) / (y + n) >= 0.4:   # 5명 중 3:2 처럼 거의 갈림
+            weak.append(i)
+        rows.append({"pair": meta["pair"], "side": meta["side"], "relation": meta["relation"],
+                     "them": meta["them"], "draft": meta["draft"], "alert": y > n})
+    rows.sort(key=lambda r: (r["pair"], r["side"]))
+    Path(out).write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), encoding="utf-8")
+
+    full = [(y, n) for i, y, n in items if y + n == k]   # Fleiss kappa는 모두가 고른 문장만
+    maj = {i: y > n for i, y, n in items if y != n}
+    per = {}
+    for l in ls:
+        mine = {i: v["cold"] for i, v in l["labels"].items() if i in maj}
+        per[l["labeler"]] = {"n": len(mine), "alert_rate": round(sum(mine.values()) / len(mine), 3) if mine else None,
+                             "agree_with_majority": round(sum(mine[i] == maj[i] for i in mine) / len(mine), 3) if mine else None}
+    fk = fleiss_kappa(full)
+    pk = [kappa([a["labels"][i]["cold"] for i in common], [b["labels"][i]["cold"] for i in common])
+          for x, a in enumerate(ls) for b in ls[x + 1:]
+          if (common := [i for i in key_d if i in a["labels"] and i in b["labels"]])]
+    res = {"labelers": k, "n": len(items), "consensus": len(rows), "fleiss_kappa": round(fk, 3) if fk is not None else None,
+           "mean_pairwise_kappa": round(sum(pk) / len(pk), 3) if pk else None,
+           "unanimous": sum(1 for _, y, n in items if min(y, n) == 0), "weak": weak, "ties": ties, "per_labeler": per}
+    report = Path(out).with_suffix(".report.json")
+    report.write_text(json.dumps(res | {"weak_items": [key_d[i] for i in weak], "tie_items": [key_d[i] for i in ties]},
+                                 ensure_ascii=False, indent=1), encoding="utf-8")
+    print(f"라벨러 {k}명, 3명 이상이 고른 {res['n']}개, 만장일치 {res['unanimous']}, 거의 갈림 {len(weak)}, 동표 {len(ties)}")
+    print(f"Fleiss kappa {res['fleiss_kappa']} (모두가 고른 {len(full)}개), 두 사람씩 kappa 평균 {res['mean_pairwise_kappa']}")
+    for who, p in per.items():
+        print(f"  {who}: 경고 비율 {p['alert_rate']}, 다수결과 일치 {p['agree_with_majority']}")
+    print(f"합의본 {len(rows)}행 -> {out}, 보고서 -> {report}")
+    return res
+
+
 def main(argv: list[str]) -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -96,13 +162,19 @@ def main(argv: list[str]) -> None:
     e.add_argument("--seed", type=int)
     m = sub.add_parser("merge")
     m.add_argument("--key", type=Path, default=HERE / "out" / "key.json")
-    m.add_argument("labels", type=Path, nargs=2)
+    m.add_argument("labels", type=Path, nargs="+", help="라벨 파일 2개(합의 전 일치율) 또는 3개 이상(다수결)")
     m.add_argument("--out", type=Path, default=HERE.parent / "contrast_set_t16.jsonl")
     a = ap.parse_args(argv)
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")   # Windows 콘솔(cp949)에서 한국어 출력이 깨지지 않게
     if a.cmd == "export":
         export(a.candidates, a.out, a.seed)
-    else:
+    elif len(a.labels) == 2:
         merge(a.key, *a.labels, a.out)
+    elif len(a.labels) >= 3:
+        merge_many(a.key, a.labels, a.out)
+    else:
+        ap.error("라벨 파일은 2개 이상")
 
 
 if __name__ == "__main__":

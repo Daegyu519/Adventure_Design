@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Platform, useColorScheme, type ViewStyle } from 'react-native';
+import { Platform, useColorScheme, type TextStyle, type ViewStyle } from 'react-native';
 
 import tokens from './tokens.json';
 
@@ -61,7 +61,20 @@ export function useTheme() {
   const colors: Colors = scheme === 'dark' ? tokens.dark : tokens.light;
   // iOS 묶음 목록: 라이트는 회색 바탕 + 흰 칸, 다크는 검은 바탕 + 어두운 회색 칸. 탭 바는 iOS 막대색(불투명).
   const grouped = scheme === 'dark' ? { screen: colors.background, cell: colors.surface } : { screen: colors.surface, cell: colors.background };
-  return { colors, scheme, radius: tokens.radius, space: tokens.space, font: FONT, grouped, bar: colors.bar };
+  return { colors, scheme, radius: tokens.radius, space: tokens.space, font: FONT, grouped, bar: colors.bar, fx: fxFor(colors, scheme) };
+}
+
+// OOPS 글로우("bloom"): 종이색 면 아래로 따뜻하게 번지는 그림자와 같은 계열의 그라디언트. 색은 토큰에서만, 투명도는 16진 두 자리(#RRGGBBAA)로 붙인다.
+// 라이트는 번짐 대신 옅은 중립 그림자만(어두운 면 위에 따뜻한 번짐이 얼룩져 보인다). RN 0.88 boxShadow·backgroundImage 문자열은 네이티브·웹이 같다.
+export function fxFor(c: Colors, scheme: 'light' | 'dark') {
+  const dark = scheme === 'dark';
+  return {
+    bloom: dark ? `4px 6px 0 ${c.glowLight}8C, 9px 12px 14px ${c.glowSoft}73, 16px 20px 30px ${c.glowDeep}59` : `0 8px 24px ${c.text}33`, // 힌트 카드·결과 알림
+    soft: dark ? `3px 5px 12px ${c.glowSoft}73` : `0 3px 10px ${c.text}26`, // 주 버튼·보내기·배지·켜진 스위치
+    chip: dark ? `2px 3px 0 ${c.glowLight}73, 5px 7px 12px ${c.glowDeep}59` : `0 2px 8px ${c.text}26`, // 종류 알약
+    bar: (dir: 'to right' | 'to bottom' = 'to right') => (dark ? `linear-gradient(${dir}, ${c.primary} 0%, ${c.glowLight} 55%, ${c.glowSoft} 100%)` : `linear-gradient(${dir}, ${c.glowSoft} 0%, ${c.accent} 100%)`),
+    glowText: (dark ? { textShadowColor: `${c.glowSoft}73`, textShadowOffset: { width: 3, height: 4 }, textShadowRadius: 14 } : {}) as TextStyle, // 큰 숫자 번짐
+  };
 }
 
 // 웹 키보드 포커스 링(MASTER 8장: primary 2px). 브라우저가 키보드 포커스에만 그리는 기본 링의 색·굵기만 바꾼다.

@@ -8,12 +8,12 @@ import { focusRing, useTheme } from '../lib/theme';
 import { AppText } from './AppText';
 import { Button } from './Button';
 
-// 아래에서 올라오는 시트. 배경(colors.text + opacity 0.4)을 누르면 닫힘, Android 뒤로·웹 Esc도 onRequestClose로 닫힌다.
+// 아래에서 올라오는 시트(OOPS: 위 모서리 26, 손잡이). 가림막(다크는 검정 계열, 라이트는 글자색 0.4)을 누르면 닫힘, Android 뒤로·웹 Esc도 onRequestClose로 닫힌다.
 // 웹의 Modal은 포커스를 안에 가두고 닫을 때 원래 자리로 돌려준다.
 // 시트 안 안내는 시트 자기 영역으로: children을 함수로 주면 시트의 say를 받는다(aria-modal 밖인 화면 영역은 웹에서 가려진다).
 type Say = (t: string) => void;
 export function Sheet({ visible, onClose, title, children, initialFocus }: { visible: boolean; onClose(): void; title?: string; children: ReactNode | ((say: Say) => ReactNode); initialFocus?: string }) {
-  const { colors, radius, space } = useTheme();
+  const { colors, radius, space, scheme } = useTheme();
   const reduced = useReducedMotion();
   const { say, region } = useAnnounce();
   const slotRef = useContext(SheetSaySlot);
@@ -48,7 +48,7 @@ export function Sheet({ visible, onClose, title, children, initialFocus }: { vis
           accessibilityElementsHidden
           importantForAccessibility="no-hide-descendants"
           aria-hidden
-          style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, backgroundColor: colors.text, opacity: 0.4, ...focusRing(colors.primary) }}
+          style={{ position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, backgroundColor: scheme === 'dark' ? colors.background : colors.text, opacity: scheme === 'dark' ? 0.72 : 0.4, ...focusRing(colors.primary) }}
         />
         <Animated.View
           role="dialog"
@@ -61,13 +61,18 @@ export function Sheet({ visible, onClose, title, children, initialFocus }: { vis
             backgroundColor: colors.background,
             borderTopLeftRadius: radius.sheet,
             borderTopRightRadius: radius.sheet,
-            padding: space[3],
+            borderTopWidth: 1,
+            borderTopColor: colors.border,
+            paddingHorizontal: space[3] + 2,
+            paddingTop: space[1],
+            paddingBottom: space[3],
             gap: space[2],
           }}
         >
+          <View aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{ alignSelf: 'center', width: 38, height: 5, borderRadius: 3, backgroundColor: colors.borderStrong, marginTop: space[0] }} />
           {region}
           {title ? (
-            <AppText accessibilityRole="header" weight="600">
+            <AppText accessibilityRole="header" weight="700" style={{ fontSize: 18 }}>
               {title}
             </AppText>
           ) : null}

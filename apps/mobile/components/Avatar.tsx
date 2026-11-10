@@ -11,7 +11,7 @@ export function Avatar({ name, size = 38 }: { name: string; size?: number }) {
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
       aria-hidden
-      style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: colors.bubbleOther, alignItems: 'center', justifyContent: 'center' }}
+      style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: colors.fillDim, alignItems: 'center', justifyContent: 'center' }}
     >
       <AppText weight="700" style={{ fontSize: size * 0.4, lineHeight: size * 0.5 }}>
         {Array.from(name.trim())[0] ?? '?'}

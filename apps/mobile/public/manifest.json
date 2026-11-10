@@ -1,11 +1,11 @@
 {
-  "name": "톤챗",
-  "short_name": "톤챗",
+  "name": "OOPS!",
+  "short_name": "OOPS!",
   "lang": "ko",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#FFFFFF",
-  "theme_color": "#FFFFFF",
+  "background_color": "#0B0B0D",
+  "theme_color": "#0B0B0D",
   "icons": [
     {
       "src": "/icon-192.png",

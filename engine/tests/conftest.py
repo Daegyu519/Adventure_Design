@@ -1,6 +1,7 @@
 import asyncio
 import dataclasses
 import socket
+import threading
 
 import asyncpg
 import httpx
@@ -20,19 +21,37 @@ from tests.spy import SpyProvider, make_legacy_rt_registry, make_registry
 @pytest.fixture(autouse=True)
 def no_network(monkeypatch):
     """테스트는 mock 공급자만 쓴다. 실제 연결·DNS를 시도하면 바로 실패한다(OSError가 아니라 폴백으로 묻히지 않음).
-    예외는 임시 Postgres의 유닉스 소켓 하나다(TCP는 끈 채로 띄운다)."""
+    예외는 임시 Postgres의 유닉스 소켓과 Windows asyncio의 내부 socketpair다.
+    socketpair 예외는 생성 중인 스레드 안에서만 허용한다(일반 TCP는 계속 금지)."""
     def deny(*_a, **_k):
         raise RuntimeError("테스트에서 네트워크 금지")
 
     real_connect = socket.socket.connect
+    real_connect_ex = socket.socket.connect_ex
+    real_socketpair = socket.socketpair
+    internal = threading.local()
+
+    def socketpair(*args, **kwargs):
+        previous = getattr(internal, "socketpair", False)
+        internal.socketpair = True
+        try:
+            return real_socketpair(*args, **kwargs)
+        finally:
+            internal.socketpair = previous
 
     def connect(sock, address):
-        if sock.family == socket.AF_UNIX:
+        if sock.family == getattr(socket, "AF_UNIX", None) or getattr(internal, "socketpair", False):
             return real_connect(sock, address)
         deny()
 
+    def connect_ex(sock, address):
+        if getattr(internal, "socketpair", False):
+            return real_connect_ex(sock, address)
+        deny()
+
     monkeypatch.setattr(socket.socket, "connect", connect)
-    monkeypatch.setattr(socket.socket, "connect_ex", deny)
+    monkeypatch.setattr(socket.socket, "connect_ex", connect_ex)
+    monkeypatch.setattr(socket, "socketpair", socketpair)
     monkeypatch.setattr(socket, "getaddrinfo", deny)
     monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", deny)
     monkeypatch.setattr(httpx.HTTPTransport, "handle_request", deny)

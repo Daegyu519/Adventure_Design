@@ -36,25 +36,25 @@ export function FocusBox({ children, label, say }: { children: ReactNode; label?
 }
 
 export function CardShell({ card, children }: { card: Card; children: ReactNode }) {
-  const { colors, radius, space } = useTheme();
+  const { colors, radius, space, fx } = useTheme();
   return (
-    <View style={{ gap: space[2], padding: space[3], borderRadius: radius.card, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface }}>
-      <View style={{ alignSelf: 'flex-start', paddingVertical: 2, paddingHorizontal: space[2], borderRadius: radius.chip, backgroundColor: colors.mirror }}>
-        <AppText accessibilityRole="header" aria-level={2} variant="small" weight="600" color="onMirror">
+    <View style={{ gap: space[2], padding: space[3] + 4, borderRadius: radius.card + 2, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface }}>
+      <View style={{ alignSelf: 'flex-start', paddingVertical: 4, paddingHorizontal: space[2] - 4, borderRadius: radius.chip, backgroundColor: colors.hintBg, boxShadow: fx.chip }}>
+        <AppText accessibilityRole="header" aria-level={2} variant="small" weight="700" style={{ color: colors.hintText, fontSize: 12, lineHeight: 18 }}>
           {KIND[card.kind]}
         </AppText>
       </View>
       <AppText variant="small" color="textMuted">{`${card.persona} · ${card.relation} · ${card.situation}`}</AppText>
       {card.context && CONTEXT_LABEL[card.kind] ? (
-        <View accessible accessibilityLabel={`${CONTEXT_LABEL[card.kind]}: ${card.context}`} style={{ gap: 2, paddingLeft: space[2], borderLeftWidth: 2, borderLeftColor: colors.border }}>
-          <AppText variant="small" weight="600" color="textMuted">
+        <View accessible accessibilityLabel={`${CONTEXT_LABEL[card.kind]}: ${card.context}`} style={{ gap: 2, paddingLeft: space[2], borderLeftWidth: 2, borderLeftColor: colors.accent }}>
+          <AppText variant="small" weight="600" color="accent">
             {CONTEXT_LABEL[card.kind]}
           </AppText>
           <AppText variant="small" color="textMuted">{`“${card.context}”`}</AppText>
         </View>
       ) : null}
-      <View style={{ alignSelf: 'flex-start', maxWidth: '88%', paddingVertical: space[1], paddingHorizontal: space[2], borderRadius: radius.bubble, backgroundColor: colors.bubbleOther }}>
-        <AppText selectable color="onBubbleOther">
+      <View style={{ alignSelf: 'stretch' }}>
+        <AppText selectable weight="700" style={{ fontSize: 19, lineHeight: 28 }}>
           {card.message}
         </AppText>
       </View>

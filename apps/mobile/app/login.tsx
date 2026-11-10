@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
+import { Image, KeyboardAvoidingView, Platform, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { AppText } from '../components/AppText';
@@ -74,7 +74,8 @@ export default function Login() {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: space[3], paddingBottom: space[6] }}>
           <View style={{ width: '100%', maxWidth: 560, alignSelf: 'center', gap: space[5] }}>
-            <AppText accessibilityRole="header" aria-level={1} variant="title">
+            <Image source={require('../assets/images/oops-mark.png')} alt="" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{ width: 64, height: 64, borderRadius: 16, marginTop: space[5] }} />
+            <AppText accessibilityRole="header" aria-level={1} variant="large">
               로그인
             </AppText>
 

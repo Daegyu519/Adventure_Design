@@ -132,12 +132,13 @@ function Settings() {
 }
 
 function Toggle({ label }: { label: string }) {
-  const { colors, space } = useTheme();
+  const { colors, space, scheme } = useTheme();
+  const thumb = scheme === 'dark' ? colors.primary : colors.background;
   const [on, setOn] = useState(true);
   return (
     <View style={{ minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: space[3] }}>
       <AppText>{label}</AppText>
-      <Switch accessibilityLabel={label} value={on} onValueChange={setOn} trackColor={{ false: colors.textMuted, true: colors.primary }} thumbColor={colors.background} {...{ activeThumbColor: colors.background }} />
+      <Switch accessibilityLabel={label} value={on} onValueChange={setOn} trackColor={{ false: scheme === 'dark' ? colors.borderStrong : colors.textMuted, true: colors.accent }} thumbColor={thumb} {...{ activeThumbColor: thumb }} />
     </View>
   );
 }

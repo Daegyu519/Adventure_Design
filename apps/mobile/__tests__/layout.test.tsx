@@ -61,8 +61,8 @@ async function mount() {
     root.container
       .queryAll((n) => typeof n.props.testID === 'string' && n.props.testID.startsWith('screen:'))
       .map((n) => String(n.props.testID).slice('screen:'.length));
-  // 읽는 동안에는 화면 대신 바탕색만 칠한 빈 화면을 그린다(스플래시가 걷힌 뒤 흰 프레임이 번쩍이지 않게).
-  const blank = () => root.container.queryAll((n) => n.props.style?.flex === 1 && n.props.style?.backgroundColor === tokens.light.background);
+  // 읽는 동안에는 화면 대신 OOPS 시작 화면(BrandSplash)을 그린다(스플래시가 걷힌 뒤 흰 프레임이 번쩍이지 않게).
+  const blank = () => root.container.queryAll((n) => n.props.accessibilityLabel === 'OOPS! 불러오는 중');
   return { root, screens, blank };
 }
 

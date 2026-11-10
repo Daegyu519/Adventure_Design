@@ -8,7 +8,7 @@ export const TOAST_MS = 6000; // 읽을 시간. 그래도 놓칠 수 있어 누�
 
 // 보이는 안내일 뿐이다: 읽어 주기는 호출자가 useAnnounce().say로 한다(여기서 live region을 또 쓰면 두 번 읽힌다). 포커스를 가져가지 않는다.
 export function Toast({ message, onHide }: { message: string | null; onHide(): void }) {
-  const { colors, radius, space } = useTheme();
+  const { colors, radius, space, fx } = useTheme();
   useEffect(() => {
     if (!message) return;
     const id = setTimeout(onHide, TOAST_MS);
@@ -30,12 +30,13 @@ export function Toast({ message, onHide }: { message: string | null; onHide(): v
         minHeight: 44,
         justifyContent: 'center',
         padding: space[2],
-        borderRadius: radius.input,
-        backgroundColor: colors.text,
+        borderRadius: radius.input - 2,
+        backgroundColor: colors.primary,
+        boxShadow: fx.soft,
         ...focusRing(colors.primary),
       }}
     >
-      <AppText variant="small" style={{ color: colors.background }}>
+      <AppText variant="small" weight="700" style={{ color: colors.onPrimary, textAlign: 'center' }}>
         {message}
       </AppText>
     </Pressable>

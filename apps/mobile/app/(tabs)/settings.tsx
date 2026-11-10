@@ -32,7 +32,8 @@ const THEME_PREFS: readonly ThemePref[] = ['system', 'light', 'dark'];
 const THEME_LABELS: Record<ThemePref, string> = { system: '시스템', light: '밝게', dark: '어둡게' };
 
 export default function Settings() {
-  const { colors, space, grouped } = useTheme();
+  const { colors, space, grouped, scheme } = useTheme();
+  const thumb = scheme === 'dark' ? colors.primary : colors.background; // OOPS: 켜면 따뜻한 색 트랙 + 밝은 동그라미
   const { pref, setPref } = useThemePref();
   const { userId, email, profile, refreshProfile } = useSession();
 
@@ -156,14 +157,14 @@ export default function Settings() {
               onValueChange={setHint}
               disabled={!connected} // 저장하는 동안 disabled로 바꾸면 포커스를 잃는다. 겹친 호출은 setHint가 막는다
               hitSlop={space[1]}
-              trackColor={{ false: colors.textMuted, true: colors.primary }}
-              thumbColor={colors.background}
-              {...{ activeThumbColor: colors.background } /* react-native-web 전용: 켜진 쪽 동그라미 색(네이티브는 thumbColor 하나로 둘 다) */}
+              trackColor={{ false: scheme === 'dark' ? colors.borderStrong : colors.textMuted, true: colors.accent }}
+              thumbColor={thumb}
+              {...{ activeThumbColor: thumb } /* react-native-web 전용: 켜진 쪽 동그라미 색(네이티브는 thumbColor 하나로 둘 다) */}
             />
           </View>
           {!hintOn && (
             <AppText variant="small" color="textMuted">
-              힌트를 끄면 입력 중인 문장을 AI에 보내지 않아요.
+              힌트를 끄면 보내기를 눌러도 문장을 AI에 보내지 않아요.
             </AppText>
           )}
           {!connected && (
@@ -200,9 +201,9 @@ export default function Settings() {
               onValueChange={setPush}
               disabled={pushDisabled} // 처리 중에는 disabled로 바꾸지 않는다(포커스 유지). 겹친 호출은 setPush가 막는다
               hitSlop={space[1]}
-              trackColor={{ false: colors.textMuted, true: colors.primary }}
-              thumbColor={colors.background}
-              {...{ activeThumbColor: colors.background }}
+              trackColor={{ false: scheme === 'dark' ? colors.borderStrong : colors.textMuted, true: colors.accent }}
+              thumbColor={thumb}
+              {...{ activeThumbColor: thumb }}
             />
           </View>
           {pushBusy && (
