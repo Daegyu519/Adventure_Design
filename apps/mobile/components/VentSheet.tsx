@@ -55,8 +55,8 @@ function VentForm(p: { say(t: string): void; roomId: string; message: Msg; onClo
       <AppText nativeID="vent-help" variant="small" color="textMuted">
         {HELP}
       </AppText>
-      <View nativeID="vent-quote" style={{ backgroundColor: colors.surface, borderRadius: radius.input, padding: space[2] }}>
-        <AppText variant="small" numberOfLines={2}>
+      <View nativeID="vent-quote" style={{ backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.card - 2, padding: space[2] }}>
+        <AppText numberOfLines={2}>
           {firstLine(p.message)}
         </AppText>
       </View>
@@ -78,7 +78,7 @@ function VentForm(p: { say(t: string): void; roomId: string; message: Msg; onClo
         autoCorrect={false}
         autoComplete="off"
         importantForAutofill="no"
-        style={{ minHeight: 96, textAlignVertical: 'top', padding: space[2], borderWidth: 1, borderColor: error ? colors.danger : colors.textMuted, borderRadius: radius.input, backgroundColor: colors.surface, color: colors.text, fontFamily: font.family, fontSize: font.body, ...focusRing(colors.primary) }}
+        style={{ minHeight: 96, textAlignVertical: 'top', padding: space[2], borderColor: error ? colors.danger : colors.borderStrong, borderWidth: 1.5, borderRadius: radius.input, backgroundColor: colors.surface, color: colors.text, fontFamily: font.family, fontSize: font.body, ...focusRing(colors.primary) }}
       />
       <AppText variant="small" color={n > VENT_MAX ? 'danger' : 'textMuted'} accessibilityLabel={`${n}자, 최대 ${VENT_MAX}자`}>
         {n}/{VENT_MAX}

@@ -30,9 +30,9 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#1C1C1E",
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "backgroundColor": "#0B0B0D",
+          "image": "./assets/images/oops-wordmark.png",
+          "imageWidth": 240
         }
       ],
       "expo-font",

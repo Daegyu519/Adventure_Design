@@ -12,17 +12,17 @@ type Props = {
   accessibilityLabel?: string;
 };
 
-// MASTER 5장: 알약(999), 16/600, 높이 48(최소 44). 눌림은 투명도로만 보여 줘서 레이아웃이 안 움직인다.
+// MASTER 5장(OOPS): 모서리 16, 15/700, 높이 52(최소 44). 주 버튼은 종이색 면 + 글로우. 눌림은 투명도로만 보여 줘서 레이아웃이 안 움직인다.
 export function Button({ label, onPress, kind = 'primary', disabled = false, loading = false, accessibilityLabel }: Props) {
-  const { colors, radius, space } = useTheme();
+  const { colors, radius, space, fx } = useTheme();
   const inactive = disabled || loading;
   // 처리 중에는 disabled를 걸지 않는다: 진짜 disabled 요소는 포커스를 잃어 키보드 사용자가 body로 튕긴다(WCAG 2.4.3).
   // 대신 aria-disabled + onPress 무시. 화면 읽기 프로그램에는 이름에 "처리 중"을 붙여 알린다(aria-busy만으로는 거의 안 읽는다).
   const name = accessibilityLabel ?? label;
   const looks: Record<NonNullable<Props['kind']>, { bg: string; fg: keyof Colors; border: string }> = {
     primary: { bg: colors.primary, fg: 'onPrimary', border: colors.primary },
-    secondary: { bg: colors.surface, fg: 'text', border: colors.border },
-    ghost: { bg: 'transparent', fg: 'primary', border: 'transparent' },
+    secondary: { bg: 'transparent', fg: 'text', border: colors.borderStrong },
+    ghost: { bg: 'transparent', fg: 'accent', border: 'transparent' },
     danger: { bg: 'transparent', fg: 'danger', border: 'transparent' }, // iOS 묶음 목록의 빨간 글자 줄(로그아웃)
   };
   const look = looks[kind];
@@ -37,12 +37,13 @@ export function Button({ label, onPress, kind = 'primary', disabled = false, loa
       aria-disabled={inactive}
       aria-busy={loading} // react-native-web은 accessibilityState를 aria-*로 옮기지 않는다
       style={({ pressed }) => ({
-        minHeight: 44,
+        minHeight: kind === 'ghost' || kind === 'danger' ? 44 : 52,
         minWidth: 44,
         paddingVertical: space[2],
         paddingHorizontal: space[5],
-        borderRadius: radius.chip,
-        borderWidth: 1,
+        borderRadius: radius.button,
+        borderWidth: kind === 'secondary' ? 1.5 : 1,
+        ...(kind === 'primary' && !inactive ? { boxShadow: fx.soft } : null),
         backgroundColor: look.bg,
         borderColor: look.border,
         alignItems: 'center',
@@ -53,7 +54,7 @@ export function Button({ label, onPress, kind = 'primary', disabled = false, loa
     >
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: space[1] }}>
         {loading && <ActivityIndicator color={colors[look.fg]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" aria-hidden />}
-        <AppText color={look.fg} weight="600">
+        <AppText color={look.fg} weight="700" style={{ fontSize: 15 }}>
           {label}
         </AppText>
       </View>

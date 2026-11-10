@@ -3,8 +3,7 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
-import { View } from 'react-native';
-
+import { BrandSplash } from '../components/BrandSplash';
 import { useConsented } from '../lib/consent';
 import { gate } from '../lib/gate';
 import { usePushTaps } from '../lib/push';
@@ -61,8 +60,8 @@ function Gated() {
     if (ready) SplashScreen.hide();
   }, [ready]);
 
-  // 읽는 동안에는 바탕색만 칠한 빈 화면을 둔다. 스플래시가 걷힌 뒤(로그인 직후 프로필을 읽는 동안)에 흰 프레임이 번쩍이지 않게.
-  if (!ready) return <View style={{ flex: 1, backgroundColor: colors.background }} />;
+  // 읽는 동안에는 OOPS 시작 화면을 둔다. 스플래시가 걷힌 뒤(로그인 직후 프로필을 읽는 동안)에 흰 프레임이 번쩍이지 않게.
+  if (!ready) return <BrandSplash />;
   return (
     <>
       <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />

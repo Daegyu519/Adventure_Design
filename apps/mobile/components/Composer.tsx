@@ -3,7 +3,7 @@ import ImageIcon from 'lucide-react-native/icons/image';
 import Paperclip from 'lucide-react-native/icons/paperclip';
 import X from 'lucide-react-native/icons/x';
 import { useEffect, useRef, useState, type ComponentRef, type RefObject } from 'react';
-import { Platform, StyleSheet, TextInput, View } from 'react-native';
+import { Platform, TextInput, View } from 'react-native';
 
 import { shouldSubmitOnKey } from '../lib/composer';
 import { retryFocus } from '../lib/focus';
@@ -97,7 +97,7 @@ export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, 
     ref.current?.focus(); // 목록이 사라져도 포커스가 body로 떨어지지 않게
   };
   return (
-    <View style={{ borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, backgroundColor: colors.surface }}>
+    <View style={{ backgroundColor: colors.background }}>
       {typingLabel ? (
         <AppText variant="small" color="textMuted" style={{ paddingHorizontal: space[3], paddingTop: space[0] }}>
           {typingLabel}
@@ -116,7 +116,7 @@ export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, 
       ) : null}
       {picking ? <MentionPicker candidates={shown} active={safeActive} onSelect={choose} /> : null}
       {replyTo && (
-        <View style={{ flexDirection: 'row', alignItems: 'center', paddingLeft: space[3], paddingRight: space[1] }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginHorizontal: space[2] - 2, marginBottom: space[1], paddingLeft: space[2] - 2, paddingRight: space[0], borderRadius: radius.card - 6, backgroundColor: colors.surface }}>
           <AppText variant="small" color="textMuted" numberOfLines={1} style={{ flex: 1 }}>
             {`${replyTo.name}에게 답장 · ${replyTo.text}`}
           </AppText>
@@ -131,8 +131,8 @@ export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, 
         </View>
       )}
       <View style={{ flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: space[0], paddingVertical: space[0] }}>
-        {onPickImage ? <IconButton icon={ImageIcon} label="사진 보내기" onPress={onPickImage} busy={photoBusy} disabled={photoBusy} circle={{ bg: 'border', fg: 'textMuted' }} /> : null}
-        {onPickFile ? <IconButton icon={Paperclip} label="파일 보내기" onPress={onPickFile} busy={fileBusy} disabled={fileBusy} circle={{ bg: 'border', fg: 'textMuted' }} /> : null}
+        {onPickImage ? <IconButton icon={ImageIcon} label="사진 보내기" onPress={onPickImage} busy={photoBusy} disabled={photoBusy} circle={{ bg: 'bubbleOther', fg: 'textMuted' }} /> : null}
+        {onPickFile ? <IconButton icon={Paperclip} label="파일 보내기" onPress={onPickFile} busy={fileBusy} disabled={fileBusy} circle={{ bg: 'bubbleOther', fg: 'textMuted' }} /> : null}
         <TextInput
           ref={ref}
           accessibilityLabel={replyTo ? `메시지 입력, ${replyTo.name}에게 답장 중` : '메시지 입력'}
@@ -189,22 +189,22 @@ export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, 
           }
           style={{
             flex: 1,
-            minHeight: 44, // 누르는 영역 44 이상: 바깥 margin이 아니라 입력칸 안 여백으로 높인다
+            minHeight: 46, // 누르는 영역 44 이상: 바깥 margin이 아니라 입력칸 안 여백으로 높인다
             maxHeight: 140,
-            paddingHorizontal: 14,
-            paddingTop: 11,
-            paddingBottom: 11,
-            borderWidth: 1,
-            borderColor: colors.border,
-            borderRadius: radius.input,
-            backgroundColor: colors.background,
+            paddingHorizontal: 16,
+            paddingTop: 12,
+            paddingBottom: 12,
+            borderWidth: 1.5,
+            borderColor: colors.borderStrong,
+            borderRadius: radius.composer,
+            backgroundColor: colors.surface,
             color: colors.text,
             fontFamily: font.family,
             fontSize: font.body,
             ...focusRing(colors.primary),
           }}
         />
-        <IconButton icon={ArrowUp} label="보내기" disabled={sendBusy || value.trim() === ''} busy={sendBusy} onPress={onSend} circle={{ bg: 'primary', fg: 'onPrimary' }} />
+        <IconButton icon={ArrowUp} label="보내기" disabled={sendBusy || value.trim() === ''} busy={sendBusy} onPress={onSend} circle={{ bg: 'primary', fg: 'onPrimary', glow: true }} />
       </View>
     </View>
   );

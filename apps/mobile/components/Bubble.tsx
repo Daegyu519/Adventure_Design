@@ -94,7 +94,7 @@ export function Bubble({ message, mine, senderName, tail = true, showTime = true
             accessibilityRole="button"
             accessibilityLabel={`답장 대상 ${quotedName ?? '상대'}: ${firstLine(quoted)}`}
             accessibilityHint="누르면 원문으로 이동"
-            style={{ minHeight: 44, justifyContent: 'center', marginBottom: space[0], paddingLeft: space[1], borderLeftWidth: 2, borderLeftColor: colors.primary, ...focusRing(colors.primary) }}
+            style={{ minHeight: 44, justifyContent: 'center', marginBottom: space[0], paddingLeft: space[1], borderLeftWidth: 2, borderLeftColor: colors.accent, ...focusRing(colors.primary) }}
           >
             <AppText variant="small" color="textMuted" weight="600" numberOfLines={1}>
               {quotedName ?? '상대'}
@@ -104,7 +104,7 @@ export function Bubble({ message, mine, senderName, tail = true, showTime = true
             </AppText>
           </Pressable>
         ) : (
-          <View style={{ marginBottom: space[0], paddingLeft: space[1], borderLeftWidth: 2, borderLeftColor: colors.primary, alignItems: edge }}>
+          <View style={{ marginBottom: space[0], paddingLeft: space[1], borderLeftWidth: 2, borderLeftColor: colors.accent, alignItems: edge }}>
             <AppText variant="small" color="textMuted" weight="600">
               원래 메시지
             </AppText>
@@ -127,8 +127,8 @@ export function Bubble({ message, mine, senderName, tail = true, showTime = true
           onAccessibilityAction={(e) => e.nativeEvent.actionName === 'menu' && onMore()}
           style={({ pressed }) => ({
             flexShrink: 1,
-            paddingVertical: space[1],
-            paddingHorizontal: 13,
+            paddingVertical: 11,
+            paddingHorizontal: 15,
             ...corners,
             backgroundColor: mine ? colors.primary : colors.bubbleOther,
             opacity: pressed ? 0.85 : 1, // 누르는 순간 바로 눌림 표시
@@ -173,7 +173,7 @@ export function Bubble({ message, mine, senderName, tail = true, showTime = true
             </Pressable>
           ) : null}
           {message.text ? (
-            <AppText selectable color={mine ? 'onPrimary' : 'onBubbleOther'}>
+            <AppText selectable color={mine ? 'onPrimary' : 'onBubbleOther'} style={{ fontSize: 15 }}>
               {(parts ?? [{ text: message.text, mention: false }]).map((p, i) =>
                 p.mention ? (
                   <AppText key={i} weight="700" color={mine ? 'onPrimary' : 'primary'} style={mine ? { textDecorationLine: 'underline' } : undefined}>

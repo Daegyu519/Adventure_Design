@@ -129,12 +129,12 @@ function DetailBody({ roomId, text, replyTo, hintTitle, say, onApply, onSendAsIs
     <>
       <ScrollView style={{ maxHeight: height * 0.6 }} contentContainerStyle={{ gap: space[2] }}>
         <View ref={textRef} nativeID="detail-text" tabIndex={-1} style={{ gap: space[0] }}>
-          <AppText accessibilityRole="header" aria-level={3} weight="600">
+          <AppText accessibilityRole="header" aria-level={3} weight="700" style={{ fontSize: 22, lineHeight: 30 }}>
             {title}
           </AppText>
           {label('보낼 문장')}
-          <View style={{ backgroundColor: colors.surface, borderRadius: radius.input, padding: space[2] }}>
-            <AppText selectable>{text}</AppText>
+          <View style={{ backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.card - 2, paddingVertical: space[2], paddingHorizontal: space[2] + 2 }}>
+            <AppText selectable style={{ fontSize: 17 }}>{text}</AppText>
           </View>
         </View>
         <View style={{ gap: space[1] }}>
@@ -145,8 +145,8 @@ function DetailBody({ roomId, text, replyTo, hintTitle, say, onApply, onSendAsIs
         {waiting}
         {failed}
         {mismatch ? (
-          <View style={{ backgroundColor: colors.hintBg, borderRadius: radius.chip, padding: space[2] }}>
-            <AppText variant="small" style={{ color: colors.hintText }}>
+          <View style={{ backgroundColor: colors.hintBg, borderRadius: 14, paddingVertical: space[1] + 2, paddingHorizontal: space[2] - 2 }}>
+            <AppText variant="small" weight="600" style={{ color: colors.hintText }}>
               {mismatch}
             </AppText>
           </View>
@@ -155,14 +155,14 @@ function DetailBody({ roomId, text, replyTo, hintTitle, say, onApply, onSendAsIs
           <View style={{ gap: space[1] }}>
             {label('이렇게 바꿔 볼 수도 있어요')}
             {options.map((o, i) => (
-              <View key={`${o.label}-${i}`} role="group" aria-label={o.label} style={{ gap: space[0], padding: space[2], borderRadius: radius.input, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface }}>
-                <AppText variant="small" color="textMuted">
+              <View key={`${o.label}-${i}`} role="group" aria-label={o.label} style={{ gap: space[1], paddingVertical: space[2], paddingHorizontal: space[2] + 2, borderRadius: radius.card - 2, backgroundColor: colors.surface }}>
+                <AppText variant="small" color="accent">
                   {o.label}
                 </AppText>
                 <DiffText original={text} revised={o.text} />
                 {o.keep.length > 0 && <AppText variant="small" color="textMuted">{`지킨 것: ${o.keep.join(', ')}`}</AppText>}
                 {o.change.length > 0 && <AppText variant="small" color="textMuted">{`바꾼 것: ${o.change.join(', ')}`}</AppText>}
-                <Button label="입력창에 적용" onPress={() => cur && onApply({ text: o.text, choice: choiceOf(o.label), topReading: cur.top_reading, traceId: cur.trace_id })} accessibilityLabel={`입력창에 적용: ${o.label}`} />
+                <Button kind={i === 0 ? 'secondary' : 'primary'} label="입력창에 적용" onPress={() => cur && onApply({ text: o.text, choice: choiceOf(o.label), topReading: cur.top_reading, traceId: cur.trace_id })} accessibilityLabel={`입력창에 적용: ${o.label}`} />
               </View>
             ))}
           </View>

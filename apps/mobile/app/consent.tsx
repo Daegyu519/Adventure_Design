@@ -26,7 +26,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   const { space } = useTheme();
   return (
     <View style={{ gap: space[1] }}>
-      <AppText accessibilityRole="header" aria-level={2} weight="600">
+      <AppText accessibilityRole="header" aria-level={2} weight="700">
         {title}
       </AppText>
       {children}
@@ -35,7 +35,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 }
 
 export default function Consent() {
-  const { colors, space } = useTheme();
+  const { colors, space, radius } = useTheme();
   const [agreed, setAgreed] = useState(false);
   const [saving, setSaving] = useState(false);
   const ios = currentIosWebState();
@@ -49,7 +49,7 @@ export default function Consent() {
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.background }}>
       <ScrollView contentContainerStyle={{ padding: space[3], paddingBottom: space[6] }}>
         <View style={{ width: '100%', maxWidth: 560, alignSelf: 'center', gap: space[5] }}>
-          <AppText accessibilityRole="header" aria-level={1} variant="title">
+          <AppText accessibilityRole="header" aria-level={1} variant="large" style={{ marginTop: space[3] }}>
             시작하기 전에
           </AppText>
 
@@ -58,7 +58,7 @@ export default function Consent() {
           </Section>
 
           <Section title="AI가 보는 것">
-            <View role="list" style={{ gap: space[1] }}>
+            <View role="list" style={{ gap: space[1] + 2, padding: space[2] + 2, borderRadius: radius.card, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface }}>
               {AI_ITEMS.map((t) => (
                 <View key={t} role="listitem" style={{ flexDirection: 'row', gap: space[2] }}>
                   <AppText color="textMuted" aria-hidden>
@@ -105,7 +105,7 @@ export default function Consent() {
                 height: 24,
                 borderRadius: 6,
                 borderWidth: 2,
-                borderColor: agreed ? colors.primary : colors.textMuted,
+                borderColor: agreed ? colors.primary : colors.borderStrong,
                 backgroundColor: agreed ? colors.primary : 'transparent',
                 alignItems: 'center',
                 justifyContent: 'center',

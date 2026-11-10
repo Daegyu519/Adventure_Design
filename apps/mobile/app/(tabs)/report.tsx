@@ -13,14 +13,14 @@ const BAR_MAX_PX = 120;
 const BAR_VALUE_ROOM = 24; // 막대 위 값 글자(13 × 1.5)와 간격이 들어갈 높이
 
 function Tile({ label, value }: { label: string; value: string }) {
-  const { colors, radius, space } = useTheme();
+  const { colors, radius, space, fx } = useTheme();
   return (
     <View
       accessible
       accessibilityLabel={`${label} ${value}`}
       style={{ flex: 1, minWidth: 0, gap: space[0], padding: space[2], borderRadius: radius.card, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface }}
     >
-      <AppText variant="title" weight="600">
+      <AppText weight="700" style={[{ fontSize: 28, lineHeight: 34, letterSpacing: -0.5 }, fx.glowText]}>
         {value}
       </AppText>
       <AppText variant="small" color="textMuted">
@@ -30,9 +30,9 @@ function Tile({ label, value }: { label: string; value: string }) {
   );
 }
 
-// MASTER 5장: 이번 주는 primary, 지난 주들은 textMuted, 위 모서리 4px, 값은 글자색 토큰. 등급·순위·빨강/초록 없음.
+// MASTER 5장(OOPS): 이번 주는 종이색 그라디언트 + 글로우, 지난 주들은 fillDim, 위 모서리 10px, 값은 글자색 토큰. 등급·순위·빨강/초록 없음.
 function WeekBars({ weeks, thisWeek }: { weeks: StatsRes['hints_by_week']; thisWeek: string }) {
-  const { colors, space } = useTheme();
+  const { colors, space, fx } = useTheme();
   const heights = barHeights(weeks.map((w) => w.count), BAR_MAX_PX);
   return (
     <View style={{ flexDirection: 'row' }}>
@@ -46,12 +46,12 @@ function WeekBars({ weeks, thisWeek }: { weeks: StatsRes['hints_by_week']; thisW
             accessibilityLabel={`${now ? '이번' : `${weekSpoken(w.week)}`} 주 힌트 ${w.count}번`}
             style={{ flex: 1 }}
           >
-            <View style={{ height: BAR_MAX_PX + BAR_VALUE_ROOM, alignItems: 'center', justifyContent: 'flex-end', gap: space[0], borderBottomWidth: 1, borderBottomColor: colors.border }}>
+            <View style={{ height: BAR_MAX_PX + BAR_VALUE_ROOM, alignItems: 'center', justifyContent: 'flex-end', gap: space[0] }}>
               <AppText variant="small" color={now ? 'text' : 'textMuted'} weight={now ? '600' : '400'}>
                 {String(w.count)}
               </AppText>
               {/* 값 0이면 높이 0이라 글자만 남는다. */}
-              <View style={{ width: 28, height: heights[i], backgroundColor: now ? colors.primary : colors.textMuted, borderTopLeftRadius: 4, borderTopRightRadius: 4 }} />
+              <View style={{ width: 32, height: heights[i], borderTopLeftRadius: 10, borderTopRightRadius: 10, borderBottomLeftRadius: 4, borderBottomRightRadius: 4, ...(now ? { backgroundImage: fx.bar('to bottom'), boxShadow: `4px 6px 14px ${colors.glowSoft}66` } : { backgroundColor: colors.fillDim }) }} />
             </View>
             <AppText variant="small" color="textMuted" style={{ textAlign: 'center', paddingTop: space[0] }}>
               {now ? '이번 주' : weekLabel(w.week)}

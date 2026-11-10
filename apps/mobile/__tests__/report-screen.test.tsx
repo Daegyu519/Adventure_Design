@@ -43,9 +43,13 @@ const textOf = (n: TestNode): string => (typeof n === 'string' ? n : n.children.
 const labels = (root: { container: TestInstance }) =>
   root.container.queryAll((n) => typeof n.props.accessibilityLabel === 'string').map((n) => n.props.accessibilityLabel as string);
 const bars = (root: { container: TestInstance }) => root.container.queryAll((n) => n.props.accessibilityRole === 'image');
-// 막대 칸 안에서 위 모서리가 4px로 둥근 상자가 막대 자체다.
-const barBox = (col: TestInstance) => col.queryAll((n) => StyleSheet.flatten(n.props.style)?.borderTopLeftRadius === 4)[0];
-const barColor = (col: TestInstance) => StyleSheet.flatten(barBox(col).props.style).backgroundColor;
+// 막대 칸 안에서 위 모서리가 10px로 둥근 상자가 막대 자체다.
+const barBox = (col: TestInstance) => col.queryAll((n) => StyleSheet.flatten(n.props.style)?.borderTopLeftRadius === 10)[0];
+// 이번 주는 종이색 그라디언트(backgroundImage), 지난 주는 fillDim 단색
+const barColor = (col: TestInstance) => {
+  const s = StyleSheet.flatten(barBox(col).props.style);
+  return s.backgroundImage ? 'gradient' : s.backgroundColor;
+};
 
 // 풀어 줄 때까지 멈춰 있는 응답(요청이 겹칠 때 도착 순서를 우리가 정한다).
 function deferred<T>() {
@@ -96,11 +100,11 @@ test('report: 막대는 최근 5주만, 막대마다 주와 개수를 읽어 주
   expect(textOf(root.container)).toContain('이번 주'); // 눈에 보이는 주 이름도 "이번 주"
 });
 
-test('report: 이번 주 막대는 primary, 지난 주 막대는 textMuted(색만으로 뜻을 전하지 않고 값 글자가 같이 있다)', async () => {
+test('report: 이번 주 막대는 그라디언트, 지난 주 막대는 fillDim(색만으로 뜻을 전하지 않고 값 글자가 같이 있다)', async () => {
   stats.mockResolvedValue(FIXTURE);
   const root = await setup();
   const colors = bars(root).map(barColor);
-  expect(colors).toEqual([tokens.light.textMuted, tokens.light.textMuted, tokens.light.textMuted, tokens.light.textMuted, tokens.light.primary]);
+  expect(colors).toEqual([tokens.light.fillDim, tokens.light.fillDim, tokens.light.fillDim, tokens.light.fillDim, 'gradient']);
   expect(textOf(bars(root)[4])).toContain('6'); // 막대 위 값
 });
 
