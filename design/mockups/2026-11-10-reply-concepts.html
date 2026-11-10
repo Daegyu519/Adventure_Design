@@ -1,0 +1,248 @@
+<title>답장 도움 콘셉트 비교</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Layout: page header + scenario switch, then three phone frames side by side (one column on phones), interview prompts last.
+   Colors follow design-system/tone-chat/MASTER.md (mono palette, hint amber, mirror lavender). */
+:root {
+  --page: #f2f2f7;
+  --screen: #ffffff;
+  --surface: #f2f2f7;
+  --primary: #1c1c1e;
+  --on-primary: #ffffff;
+  --bubble-other: #e9e9eb;
+  --text: #000000;
+  --muted: #6c6c70;
+  --border: #d1d1d6;
+  --hint-bg: #fff7ed;
+  --hint-text: #9a3412;
+  --mirror: #7c3aed;
+  --on-mirror: #ffffff;
+  --frame: #1c1c1e;
+  --font: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --page: #000000; --screen: #000000; --surface: #1c1c1e; --primary: #f2f2f7; --on-primary: #1c1c1e;
+    --bubble-other: #262628; --text: #ffffff; --muted: #98989f; --border: #38383a;
+    --hint-bg: #2a1e12; --hint-text: #fee7cf; --mirror: #a78bfa; --on-mirror: #1e1b2e; --frame: #3a3a3c;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --page: #000000; --screen: #000000; --surface: #1c1c1e; --primary: #f2f2f7; --on-primary: #1c1c1e;
+  --bubble-other: #262628; --text: #ffffff; --muted: #98989f; --border: #38383a;
+  --hint-bg: #2a1e12; --hint-text: #fee7cf; --mirror: #a78bfa; --on-mirror: #1e1b2e; --frame: #3a3a3c;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--page); color: var(--text); font-family: var(--font); font-size: 15px; line-height: 1.5; }
+.wrap { max-width: 1120px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 28px 56px; display: grid; gap: 24px; }
+header { display: grid; gap: 8px; max-width: 680px; }
+h1 { font-size: 1.6rem; line-height: 1.25; margin: 0; letter-spacing: -0.01em; text-wrap: balance; }
+h2 { font-size: 1.05rem; margin: 0; }
+p { margin: 0; }
+.muted { color: var(--muted); }
+.tag { display: inline-block; font-size: 0.75rem; letter-spacing: 0.04em; border: 1px solid var(--border); border-radius: 999px; padding: 1px 10px; color: var(--muted); justify-self: start; }
+.switch { display: flex; gap: 6px; flex-wrap: wrap; background: var(--surface); padding: 4px; border-radius: 12px; justify-self: start; }
+.switch button { font: inherit; font-weight: 600; border: none; background: transparent; color: var(--muted); padding: 8px 14px; border-radius: 9px; cursor: pointer; }
+.switch button[aria-pressed=true] { background: var(--screen); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+.switch button:focus-visible, .opt:focus-visible { outline: 2px solid var(--mirror); outline-offset: 2px; }
+.ctx { font-size: 0.95rem; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 20px; align-items: start; }
+.concept { display: grid; gap: 10px; min-width: 0; }
+.concept-head { display: grid; gap: 2px; }
+.letter { font-size: 0.8rem; font-weight: 700; letter-spacing: 0.06em; color: var(--muted); }
+.concept-head h2 { font-size: 1.1rem; }
+.phone { border: 8px solid var(--frame); border-radius: 30px; background: var(--screen); overflow: hidden; display: grid; grid-template-rows: auto 1fr auto; min-height: 560px; }
+.topbar { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--border); font-weight: 600; }
+.topbar .back { color: var(--muted); font-weight: 400; }
+.chat { padding: 12px; display: flex; flex-direction: column; gap: 6px; }
+.b { max-width: 82%; padding: 7px 11px; border-radius: 17px; overflow-wrap: anywhere; }
+.b.other { align-self: flex-start; background: var(--bubble-other); }
+.b.me { align-self: flex-end; background: var(--primary); color: var(--on-primary); }
+.b.draft { align-self: flex-end; background: transparent; border: 1.5px dashed var(--muted); color: var(--text); }
+.time { align-self: center; font-size: 0.72rem; color: var(--muted); background: var(--surface); padding: 1px 10px; border-radius: 999px; }
+.dock { border-top: 1px solid var(--border); padding: 10px 12px 14px; display: grid; gap: 8px; background: var(--screen); }
+.input { border: 1px solid var(--border); border-radius: 18px; padding: 7px 12px; display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+.input span:first-child { overflow-wrap: anywhere; }
+.send { font-size: 0.8rem; font-weight: 700; background: var(--primary); color: var(--on-primary); border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
+.hint { background: var(--hint-bg); color: var(--hint-text); border-radius: 12px; padding: 10px 12px; display: grid; gap: 6px; font-size: 0.9rem; }
+.hint strong { font-weight: 700; }
+.row { display: flex; gap: 6px; flex-wrap: wrap; }
+.pill { font-size: 0.82rem; font-weight: 600; border-radius: 999px; padding: 4px 11px; border: 1px solid currentColor; }
+.pill.solid { background: var(--hint-text); color: var(--hint-bg); border-color: var(--hint-text); }
+.sheet { background: var(--surface); border-radius: 14px; padding: 12px; display: grid; gap: 10px; font-size: 0.88rem; }
+.sheet h3 { font-size: 0.78rem; margin: 0; color: var(--muted); letter-spacing: 0.04em; font-weight: 600; }
+.expect { display: grid; gap: 4px; }
+.expect li { margin-left: 1.1em; }
+ul { margin: 0; padding: 0; }
+.opt { text-align: left; font: inherit; border: 1px solid var(--border); background: var(--screen); color: var(--text); border-radius: 12px; padding: 9px 10px; display: grid; gap: 4px; cursor: pointer; }
+.opt[aria-pressed=true] { border-color: var(--mirror); box-shadow: 0 0 0 1px var(--mirror); }
+.opt .say { font-weight: 600; }
+.opt .react { font-size: 0.82rem; color: var(--muted); }
+.opt .react b { color: var(--mirror); font-weight: 600; }
+.checks { display: grid; gap: 6px; }
+.check { display: grid; grid-template-columns: 22px 1fr; gap: 6px; align-items: start; }
+.mark { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 0.75rem; font-weight: 700; }
+.mark.ok { background: var(--surface); color: var(--muted); border: 1px solid var(--border); }
+.mark.fix { background: var(--hint-text); color: var(--hint-bg); }
+.empty { color: var(--muted); font-size: 0.88rem; text-align: center; padding: 6px 0; }
+.qs { background: var(--screen); border: 1px solid var(--border); border-radius: 14px; padding: 18px; display: grid; gap: 10px; max-width: 760px; }
+.qs ol { margin: 0; padding-left: 1.3em; display: grid; gap: 6px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<main class="wrap">
+  <header>
+    <span class="tag">인터뷰용 시안 · 실제로 동작하지 않음</span>
+    <h1>답장 고민될 때, 어떤 도움이 실제로 쓸모 있을까</h1>
+    <p class="muted">같은 상황을 세 가지 방식으로 도와줘요. 상황을 바꿔 가며 보고, 실제로 쓸 것 같은 걸 골라 주세요.</p>
+  </header>
+
+  <div class="switch" role="group" aria-label="상황 고르기">
+    <button type="button" id="s-team" aria-pressed="true">팀플 조원에게</button>
+    <button type="button" id="s-prof" aria-pressed="false">교수님께</button>
+  </div>
+  <p class="ctx" id="ctx"></p>
+
+  <section class="grid" aria-label="세 가지 방식">
+    <article class="concept">
+      <div class="concept-head"><span class="letter">A</span><h2>말투 알림</h2><p class="muted">보내기를 누르면, 오해받을 수 있을 때만 한 줄로 알려 줘요.</p></div>
+      <div class="phone" id="phone-a"></div>
+    </article>
+    <article class="concept">
+      <div class="concept-head"><span class="letter">B</span><h2>답장 고민 도우미</h2><p class="muted">상대가 뭘 기대하는지 짚고, 답장 후보마다 상대가 어떻게 받아들일지 보여 줘요.</p></div>
+      <div class="phone" id="phone-b"></div>
+    </article>
+    <article class="concept">
+      <div class="concept-head"><span class="letter">C</span><h2>격식 체크</h2><p class="muted">교수님·선배처럼 예의가 필요한 상대에게 보낼 때, 빠뜨리거나 틀린 걸 확인해 줘요.</p></div>
+      <div class="phone" id="phone-c"></div>
+    </article>
+  </section>
+
+  <section class="qs">
+    <h2>인터뷰에서 물어볼 것</h2>
+    <ol>
+      <li>두 상황 각각에서, 셋 중 <strong>실제로 쓸 것 같은 건</strong> 뭐야? 하나도 없어도 괜찮아.</li>
+      <li>그걸 고른 이유는? 나머지는 왜 별로야?</li>
+      <li>최근에 고민했던 답장(앞에서 얘기한 것)에 대입하면, 어떤 게 도움이 됐을 것 같아?</li>
+      <li>B를 쓰느니 그냥 ChatGPT에 물어보는 게 낫다 / 아니다, 어느 쪽이야? 왜?</li>
+      <li>이런 게 뜨면 귀찮을 것 같은 순간은?</li>
+    </ol>
+  </section>
+</main>
+
+<script>
+const S = {
+  team: {
+    ctx: "같은 조 동기(반말 사이). 발표는 금요일, 자료 통합은 수요일 밤에 하기로 했어요.",
+    room: "조별과제 · 지수",
+    chat: [["time", "오후 9:12"], ["other", "나 이번 주 진짜 바빠서 내 파트 발표 전날까지 해도 돼? 미안ㅠ"]],
+    draft: "그럼 나머지가 다 기다려야 되는데",
+    a: { line: "탓하는 것처럼 읽힐 수도 있어요.", detail: "사과한 상대에게 이유 없이 부담만 말하면 서운할 수 있어요." },
+    b: {
+      expect: ["허락해 줄지, 안 되면 어떻게 할지", "미안하다고 했으니 너무 몰아붙이지 않기"],
+      goal: "내 목표: 수요일 통합 일정 지키기",
+      opts: [
+        ["그럼 수요일 밤까지는 줄 수 있어? 그날 통합해야 해서", "일정은 지키면서 이유를 말해서, 받아들일 가능성이 높아요"],
+        ["이번엔 수요일까지 필요해ㅠ 어려운 부분 있으면 나눠서 할까?", "아쉬워할 수 있지만, 도와주려는 게 보여서 서운함은 덜할 수 있어요"],
+        ["그럼 나머지가 다 기다려야 되는데", "내 초안이에요. 사과했는데 탓을 들었다고 느낄 수 있어요"]
+      ]
+    },
+    c: null
+  },
+  prof: {
+    ctx: "전공 수업 교수님. 과제 마감은 내일 자정이고, 아파서 제출이 늦어질 것 같아요.",
+    room: "김○○ 교수님",
+    chat: [["time", "어제 오후 2:03"], ["other", "과제는 11일 자정까지 LMS로 제출하세요."]],
+    draft: "교수님 과제 하루만 늦게 내도 되나요ㅠㅠ",
+    a: { line: "가볍게 읽힐 수도 있어요.", detail: "교수님께는 이모티콘과 짧은 요청이 예의 없게 보일 수 있어요." },
+    b: {
+      expect: ["누가 보낸 건지 (수업·이름)", "왜 늦는지, 언제까지 낼 수 있는지"],
+      goal: "내 목표: 하루 연장 허락받기",
+      opts: [
+        ["교수님 안녕하세요, ○○수업 홍길동입니다. 몸이 안 좋아 과제를 12일 정오까지 제출해도 될지 여쭙고 싶습니다.", "필요한 정보가 다 있어서 판단하기 쉬울 수 있어요"],
+        ["교수님, ○○수업 홍길동입니다. 사정이 있어 과제 제출 기한을 하루 연장해 주실 수 있을지 문의드립니다.", "정중하지만 사유가 없어서 되물으실 수도 있어요"],
+        ["교수님 과제 하루만 늦게 내도 되나요ㅠㅠ", "내 초안이에요. 누군지 모르고, 가볍게 느끼실 수 있어요"]
+      ]
+    },
+    c: [
+      ["fix", "인사와 소속·이름이 없어요", "누가 보냈는지 알 수 있게 첫 줄에 넣어 보세요"],
+      ["fix", "이모티콘 'ㅠㅠ'", "교수님께는 빼는 편이 무난해요"],
+      ["fix", "사유와 희망 기한이 없어요", "'하루만'보다 구체적인 날짜가 판단하기 쉬워요"],
+      ["ok", "호칭 '교수님'", ""],
+      ["ok", "맞춤법", ""]
+    ]
+  }
+};
+
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+
+function frame(s, dockNodes, draftBubble) {
+  const top = el("div", "topbar"); top.append(el("span", "back", "‹"), el("span", null, s.room));
+  const chat = el("div", "chat");
+  s.chat.forEach(([k, t]) => chat.append(el("div", k === "time" ? "time" : "b " + k, t)));
+  if (draftBubble) chat.append(el("div", "b draft", s.draft));
+  const dock = el("div", "dock"); dockNodes.forEach(n => dock.append(n));
+  return [top, chat, dock];
+}
+
+function inputRow(text) { const r = el("div", "input"); r.append(el("span", null, text), el("span", "send", "보내기")); return r; }
+
+function renderA(s) {
+  const h = el("div", "hint");
+  const t = el("div"); t.append(el("strong", null, "잠깐, "), document.createTextNode(s.a.line));
+  const row = el("div", "row"); row.append(el("span", "pill solid", "고쳐 쓰기"), el("span", "pill", "그대로 보내기"));
+  h.append(t, el("div", null, s.a.detail), row);
+  return frame(s, [h, inputRow(s.draft)], false);
+}
+
+function renderB(s) {
+  const sh = el("div", "sheet");
+  sh.append(el("h3", null, "상대가 기대하는 것"));
+  const ul = el("ul", "expect"); s.b.expect.forEach(x => ul.append(el("li", null, x))); sh.append(ul);
+  sh.append(el("div", "muted", s.b.goal));
+  sh.append(el("h3", null, "이렇게 보내면"));
+  const opts = el("div", "checks");
+  s.b.opts.forEach(([say, react], i) => {
+    const b = el("button", "opt"); b.type = "button"; b.setAttribute("aria-pressed", String(i === 0));
+    const r = el("span", "react"); r.append(el("b", null, "상대는 "), document.createTextNode(react));
+    b.append(el("span", "say", say), r);
+    b.onclick = () => { opts.querySelectorAll(".opt").forEach(o => o.setAttribute("aria-pressed", "false")); b.setAttribute("aria-pressed", "true"); };
+    opts.append(b);
+  });
+  sh.append(opts);
+  return frame(s, [sh, inputRow("고른 답장으로 바꾸기")], true);
+}
+
+function renderC(s) {
+  const sh = el("div", "sheet");
+  sh.append(el("h3", null, "보내기 전 확인"));
+  if (!s.c) {
+    sh.append(el("div", "empty", "친구·동기 사이라 확인할 격식이 없어요."));
+    return frame(s, [sh, inputRow(s.draft)], false);
+  }
+  const list = el("div", "checks");
+  s.c.forEach(([k, title, tip]) => {
+    const row = el("div", "check");
+    row.append(el("span", "mark " + k, k === "ok" ? "✓" : "!"));
+    const body = el("div"); body.append(el("div", null, title)); if (tip) body.append(el("div", "muted", tip));
+    row.append(body); list.append(row);
+  });
+  sh.append(list);
+  return frame(s, [sh, inputRow(s.draft)], false);
+}
+
+function show(key) {
+  const s = S[key];
+  document.getElementById("s-team").setAttribute("aria-pressed", String(key === "team"));
+  document.getElementById("s-prof").setAttribute("aria-pressed", String(key === "prof"));
+  document.getElementById("ctx").textContent = "상황: " + s.ctx;
+  document.getElementById("phone-a").replaceChildren(...renderA(s));
+  document.getElementById("phone-b").replaceChildren(...renderB(s));
+  document.getElementById("phone-c").replaceChildren(...renderC(s));
+}
+document.getElementById("s-team").onclick = () => show("team");
+document.getElementById("s-prof").onclick = () => show("prof");
+show("team");
+</script>
