@@ -7,6 +7,7 @@ import RootLayout from '../app/_layout';
 import tokens from '../lib/tokens.json';
 
 // 글꼴·스플래시·라우터는 가짜로 바꾼다. 가짜 Stack.Protected는 진짜처럼 guard가 거짓이면 화면을 아예 그리지 않는다.
+jest.mock('../lib/splash', () => ({ SPLASH_MIN_MS: 0 }));
 jest.mock('expo-font', () => ({ useFonts: () => [true, null] }));
 jest.mock('expo-splash-screen', () => ({ preventAutoHideAsync: jest.fn(), hide: jest.fn() }));
 const mockStatusBar = jest.fn((_p: { style?: string }) => null);

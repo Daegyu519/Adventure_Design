@@ -32,7 +32,7 @@
         {
           "backgroundColor": "#0B0B0D",
           "image": "./assets/images/oops-wordmark.png",
-          "imageWidth": 240
+          "imageWidth": 300
         }
       ],
       "expo-font",

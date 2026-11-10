@@ -2,10 +2,11 @@ import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { BrandSplash } from '../components/BrandSplash';
 import { useConsented } from '../lib/consent';
 import { gate } from '../lib/gate';
+import { SPLASH_MIN_MS } from '../lib/splash';
 import { usePushTaps } from '../lib/push';
 import { SessionProvider, useSession } from '../lib/session';
 import { supabase } from '../lib/supabase';
@@ -50,15 +51,25 @@ function Gated() {
   const { status, profileStatus } = useSession();
   const g = gate({ consented: useConsented(), backend: supabase !== null, session: status, profile: profileStatus });
   // 글꼴이 실패해도 시스템 글꼴로 계속 가고, 동의·세션·프로필을 읽기 전(g === 'loading')에는 스플래시를 붙잡는다.
-  const ready = (loaded || error !== null) && g !== 'loading';
+  const fontsReady = loaded || error !== null;
+  // 시작 화면은 최소 SPLASH_MIN_MS는 보여 준다(0이면 바로 통과: 테스트)
+  const [minDone, setMinDone] = useState(SPLASH_MIN_MS <= 0);
+  useEffect(() => {
+    if (minDone) return;
+    const id = setTimeout(() => setMinDone(true), SPLASH_MIN_MS);
+    return () => clearTimeout(id);
+  }, [minDone]);
+  const ready = fontsReady && g !== 'loading' && minDone;
 
   useEffect(() => {
     if (__DEV__ && error) console.warn('[fonts] Pretendard 로드 실패, 시스템 글꼴로 계속합니다.', error);
   }, [error]);
 
+  // 네이티브 스플래시는 글꼴·동의·세션을 다 읽으면 걷는다(예전과 같다). 최소 시간이 남았으면 같은 모양의 BrandSplash가 이어받는다
+  const loadedAll = fontsReady && g !== 'loading';
   useEffect(() => {
-    if (ready) SplashScreen.hide();
-  }, [ready]);
+    if (loadedAll) SplashScreen.hide();
+  }, [loadedAll]);
 
   // 읽는 동안에는 OOPS 시작 화면을 둔다. 스플래시가 걷힌 뒤(로그인 직후 프로필을 읽는 동안)에 흰 프레임이 번쩍이지 않게.
   if (!ready) return <BrandSplash />;
