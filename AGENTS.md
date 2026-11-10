@@ -21,6 +21,8 @@
 
 P-34(2026-11-04): 전송 시점 최대 1.5초 확인 구현 완료, 사용자 요청으로 main에 land. 기존 `/v1/hint`·Sheet·Button 재사용, 모델·DB 변경 없음. Windows asyncio socketpair 호환을 테스트 환경에 보완했고 독립 리뷰 통과. Python 3.12에서 scripts/check 통과: 엔진 586 passed/28 skipped(실제 PostgreSQL 없음 27·FakeRepo 잠금 1), DB(PGlite) 26, 앱 751·tsc·lint·대비 OK. 웹 export 통과. 운영 배포·실기기 확인은 별도. 자세한 동작은 ARCHITECTURE §3 P-34.
 
+P-35(2026-11-10): OOPS 리디자인 + 앱 이름 OOPS!(사용자 요청, `OOPS_웹앱_프로토타입.html` 기준). 토큰·글로우·컴포넌트·시작 화면을 시안 모양으로, 기능·문구·접근성은 그대로. scripts/check 통과(엔진 pytest·DB 26·앱 752·tsc·lint·대비). 웹 재배포는 아래 기록 참고. 라이트 모드는 시안에 없어 파생한 값이라 확인 대기.
+
 `docs/tasks.md` 기준으로 직접 센 값이다(`-live` 행과 선택은 따로).
 
 **배포 상태(2026-10-31):** 웹 `https://tone-chat.expo.app`, Android APK(EAS preview), 엔진은 GPU 서버 상시 + Tailscale Funnel, DB는 서울 pilot 프로젝트(T-29b·T-29c·T-30a). 남은 것: pilot SMTP(로그인 메일), 실제 메시지 웹훅 확인, Android 푸시(FCM).
@@ -224,6 +226,7 @@ flowchart LR
 - 실제 대화(가린 문장)는 NVIDIA API 카탈로그 무료 등급으로 간다 — 파일럿을 위한 의도된 결정(원 설계 ARCHITECTURE의 공급자 선택), [NVIDIA API Trial 약관](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf)(내용은 사람이 확인 필요), Masker가 이름·개인정보를 먼저 가린다(규칙 16).
 
 ### 앱
+- OOPS 리디자인(P-35, 2026-11-10) — 사용자가 `OOPS_웹앱_프로토타입.html`을 기준으로 지시. 다크 기본 종이색·글로우 팔레트(`tokens.json`, 라이트는 파생이라 사용자 확인 전), 글로우는 `useTheme().fx`(색 리터럴 금지 규칙 때문에 토큰 + 투명도 16진 두 자리), 시작 화면 `BrandSplash`, 앱 이름 "OOPS!"(slug·scheme·번들 ID는 EAS·딥링크 때문에 유지). 값·규칙은 `design-system/tone-chat/MASTER.md`.
 - 앱 환경 변수는 `apps/mobile/.env`에만(Expo는 루트 `.env`를 읽지 않는다) — 루트와 따로 관리하는 이유. `EXPO_PUBLIC_ENGINE_URL`이 비면 개발·테스트는 mock 엔진 + 개발 중 경고, 배포 빌드(`__DEV__` 아님)는 엔진이 꺼진다: mock도 던짐도 없이 모든 호출이 `EngineError(0, 'engine_not_configured')`로 실패하고 만들 때 `console.error` 한 번(값 없음). 힌트는 조용히 없고 살펴보기·털어놓기·거울·리포트는 기존 고정 문구, 채팅(방·보내기·Realtime·푸시 등록)은 그대로(규칙 11). EAS preview·production 빌드는 `eas-build-pre-install`에서 실패. T-30에서는 `isMock === false`만으로는 모자라니(꺼진 엔진도 false) 콘솔에 그 오류가 없고 힌트가 실제로 오는지 확인.
 - 엔진 클라이언트 시간 제한: hint 1700ms, detail 9000ms, 나머지 10000ms — 서버 예산(1.5초·8초)보다 조금 길게.
 - 생성 타입은 손으로 쓰지 않는다. 생성 스크립트는 `.tmp`에 쓰고 성공해야 `mv` — 실패해도 기존 파일 유지. `gen:engine:pull`은 엔진 OpenAPI를 앱 seed 위에 합친다(엔진이 제공하는 경로가 이김).
