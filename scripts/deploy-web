@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# 사용법: scripts/deploy-web            (어느 디렉터리에서든, main 최신 코드를 받은 상태에서)
+# 웹을 production에 올린다: EAS production 값 받기 → 그 값으로 export → 번들 주소 검사 → eas deploy --prod → 새 번들이 나올 때까지 확인.
+# 왜: apps/mobile/.env는 개발용(엔진 localhost 등)이라 그냥 export하면 production 번들에 개발 값이 들어가 로그인이 깨진다(2026-11-10 사고).
+set -euo pipefail
+cd "$(git rev-parse --show-toplevel)/apps/mobile"
+
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT   # 받은 값은 공개 값(EXPO_PUBLIC_*)이지만 남기지 않는다
+
+echo "1/4 EAS production 값 받기"
+npx -y eas-cli@latest env:pull --environment production --path "$TMP/prod.env" --non-interactive >/dev/null 2>&1 \
+  || { echo "deploy-web: eas env:pull 실패(npx eas-cli login 상태 확인)" >&2; exit 1; }
+
+echo "2/4 production 값으로 export"
+rm -rf dist
+# 값은 셸에 source하지 않고 파이썬이 프로세스 env로만 넘긴다. 필요한 키가 없으면 멈춘다.
+TMP="$TMP" python3 -I - <<'PY'
+import os, re, subprocess, sys
+env = dict(os.environ)
+need = ("EXPO_PUBLIC_SUPABASE_URL", "EXPO_PUBLIC_SUPABASE_ANON_KEY", "EXPO_PUBLIC_ENGINE_URL", "EXPO_PUBLIC_VAPID_PUBLIC_KEY")
+for line in open(os.path.join(os.environ["TMP"], "prod.env")):
+    m = re.match(r"^([A-Z_]+)=(.*)$", line.strip())
+    if m:
+        env[m.group(1)] = m.group(2).strip().strip("\"'")
+missing = [k for k in need if not env.get(k)]
+if missing:
+    sys.exit(f"deploy-web: production 값이 없다: {missing}")
+r = subprocess.run(["npx", "expo", "export", "-p", "web"], env=env, capture_output=True, text=True)
+if r.returncode:
+    sys.exit(r.stdout[-800:] + r.stderr[-800:])
+def host(u):
+    m = re.match(r"https?://([^/]+)", u); return m.group(1) if m else u
+open(os.path.join(os.environ["TMP"], "hosts"), "w").write(host(env["EXPO_PUBLIC_SUPABASE_URL"]) + "\n" + host(env["EXPO_PUBLIC_ENGINE_URL"]) + "\n")
+PY
+
+echo "3/4 번들 안 주소 검사"
+JS=dist/_expo/static/js
+if grep -rqE "localhost:8000" "$JS"; then echo "deploy-web: 번들에 localhost:8000(개발 엔진)이 들어갔다. 올리지 않는다." >&2; exit 1; fi
+while read -r h; do
+  grep -rqF "$h" "$JS" || { echo "deploy-web: 번들에 production 주소($h)가 없다. 올리지 않는다." >&2; exit 1; }
+done < "$TMP/hosts"
+echo "   ok: $(tr '\n' ' ' < "$TMP/hosts")"
+
+echo "4/4 eas deploy --prod"
+npx -y eas-cli@latest deploy --prod 2>&1 | grep -E "Production URL|Deployment URL|rror" || true
+
+# 새 번들이 production 주소에서 나올 때까지(전파) 최대 2분 기다린다.
+WANT="$(ls dist/_expo/static/js/web | grep -oE '^__common-[a-z0-9]+\.js' | head -1)"
+for i in $(seq 1 40); do
+  GOT="$(curl -s -H 'Cache-Control: no-cache' https://tone-chat.expo.app/ | grep -oE '__common-[a-z0-9]+\.js' | head -1 || true)"
+  [ "$GOT" = "$WANT" ] && { echo "반영됨(약 $((i*3))초): https://tone-chat.expo.app"; exit 0; }
+  sleep 3
+done
+echo "deploy-web: 올렸지만 2분 안에 새 번들이 보이지 않았다(전파 지연일 수 있다). 잠시 뒤 다시 확인." >&2
+exit 1

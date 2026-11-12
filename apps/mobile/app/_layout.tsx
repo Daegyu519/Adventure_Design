@@ -4,6 +4,7 @@ import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { BrandSplash } from '../components/BrandSplash';
+import { UpdateBanner } from '../components/UpdateBanner';
 import { useConsented } from '../lib/consent';
 import { gate } from '../lib/gate';
 import { SPLASH_MIN_MS } from '../lib/splash';
@@ -77,6 +78,7 @@ function Gated() {
     <>
       <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       {g === 'app' && <PushTaps />}
+      <UpdateBanner />
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }}>
         <Stack.Protected guard={g === 'consent'}>
           <Stack.Screen name="consent" />

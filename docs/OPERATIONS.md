@@ -125,6 +125,8 @@ npx expo export -p web
 npx eas-cli deploy --prod
 ```
 
+> **웹 배포는 `scripts/deploy-web` 한 줄이다**(P-38): production 값 받기 → export → 번들 주소 검사(localhost·다른 Supabase면 중단) → `eas deploy --prod` → 새 번들이 나올 때까지 확인. 아래는 그 스크립트가 하는 일의 설명이다. 열려 있는 웹 앱은 새 버전을 스스로 알아챈다(`lib/webUpdate.ts`): 다시 보일 때와 5분마다 확인해 새 버전이면 "새 버전이 있어요" 배너를 띄우고, 1분 넘게 자리를 비웠다 돌아오면 바로 새로고침한다. Android APK는 해당 없음(EAS 재빌드 필요).
+
 > 주의(2026-11-10 사고): `apps/mobile/.env`는 **개발용**(엔진 `localhost:8000`, 다른 Supabase 프로젝트)이다. Expo는 `.env`를 자동으로 읽으므로 위 export를 그냥 돌리면 production 번들에 개발 값이 들어가 로그인이 깨진다. 반드시 EAS production 값을 프로세스 env로 넣는다: `npx eas-cli env:pull --environment production --path <임시 파일>` → 그 값을 env로 넘겨 `expo export` (셸 `source` 금지). export 뒤 `grep -ohE 'https?://[a-z0-9.-]*(supabase\.co|ts\.net)|localhost:8000' -r dist/_expo/static/js`로 Supabase·엔진 주소가 pilot 값인지 확인하고 올린다. 올린 뒤 production 주소가 새 번들을 주는 데 몇 초~1분 걸릴 수 있다.
 
 </details>
