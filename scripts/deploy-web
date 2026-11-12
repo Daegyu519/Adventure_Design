@@ -45,12 +45,12 @@ echo "   ok: $(tr '\n' ' ' < "$TMP/hosts")"
 echo "4/4 eas deploy --prod"
 npx -y eas-cli@latest deploy --prod 2>&1 | grep -E "Production URL|Deployment URL|rror" || true
 
-# 새 번들이 production 주소에서 나올 때까지(전파) 최대 2분 기다린다.
+# 새 번들이 production 주소에서 나올 때까지(전파) 최대 10분 기다린다. 2026-11-12에 약 6분 걸렸다(배포 자체는 즉시, 주소 전환이 늦다).
 WANT="$(ls dist/_expo/static/js/web | grep -oE '^__common-[a-z0-9]+\.js' | head -1)"
-for i in $(seq 1 40); do
+for i in $(seq 1 200); do
   GOT="$(curl -s -H 'Cache-Control: no-cache' https://tone-chat.expo.app/ | grep -oE '__common-[a-z0-9]+\.js' | head -1 || true)"
   [ "$GOT" = "$WANT" ] && { echo "반영됨(약 $((i*3))초): https://tone-chat.expo.app"; exit 0; }
   sleep 3
 done
-echo "deploy-web: 올렸지만 2분 안에 새 번들이 보이지 않았다(전파 지연일 수 있다). 잠시 뒤 다시 확인." >&2
+echo "deploy-web: 올렸지만 10분 안에 새 번들이 보이지 않았다. 새 배포 주소(Deployment URL)는 바로 열리니 그쪽으로 확인하고, EAS 대시보드에서 production 전환을 본다." >&2
 exit 1
