@@ -50,3 +50,31 @@ test('changedWords spec example (살펴보기): only changed 어절', () =>
 test('changedWords: punctuation attached to a word counts as a change', () => expect(changed('중이에요.', '중이에요')).toEqual(['중이에요']));
 test('changedWords: repeated words are matched once', () => expect(changed('네 네 알겠어요', '네 알겠어요')).toEqual([]));
 test('changedWords: empty original → every word changed', () => expect(changed('', '고마워요 정말')).toEqual(['고마워요', '정말']));
+
+describe('카드 덱 도우미', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const m = require('../mirror') as typeof import('../mirror');
+  test('격려 문구는 두 줄이고 어느 시드든 하나를 고른다(점수·순위 말 없음)', () => {
+    for (const s of [0, 1, 7, -3, 2.9]) {
+      const c = m.pickCheer(s);
+      expect(c).toHaveLength(2);
+      expect(c.join(' ')).not.toMatch(/점|등|순위|연속|최고/);
+    }
+  });
+  test('gapCandidates: 차이만큼 떨어진 칸 후보, 1~5 밖은 뺀다', () => {
+    expect(m.gapCandidates(3, 0)).toEqual([3]);
+    expect(m.gapCandidates(3, 1)).toEqual([2, 4]);
+    expect(m.gapCandidates(1, 2)).toEqual([3]);
+    expect(m.gapCandidates(5, 4)).toEqual([1]);
+  });
+  test('칸마다 붙는 말은 5개', () => {
+    expect(m.SCALE_WORDS.receive).toHaveLength(5);
+    expect(m.SCALE_WORDS.predict).toHaveLength(5);
+  });
+  test('didLine·은는', () => {
+    expect(m.didLine('predict', { gap: 0 })).toContain('꼭 맞게');
+    expect(m.didLine('roleplay', { choice: 'a' })).toContain('바꿔');
+    expect(m.eunNeun('선배')).toBe('선배는');
+    expect(m.eunNeun('팀원')).toBe('팀원은');
+  });
+});

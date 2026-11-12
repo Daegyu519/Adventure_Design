@@ -73,6 +73,7 @@ export function fxFor(c: Colors, scheme: 'light' | 'dark') {
     soft: dark ? `3px 5px 12px ${c.glowSoft}73` : `0 3px 10px ${c.text}26`, // 주 버튼·보내기·배지·켜진 스위치
     chip: dark ? `2px 3px 0 ${c.glowLight}73, 5px 7px 12px ${c.glowDeep}59` : `0 2px 8px ${c.text}26`, // 종류 알약
     bar: (dir: 'to right' | 'to bottom' = 'to right') => (dark ? `linear-gradient(${dir}, ${c.primary} 0%, ${c.glowLight} 55%, ${c.glowSoft} 100%)` : `linear-gradient(${dir}, ${c.glowSoft} 0%, ${c.accent} 100%)`),
+    temp: `linear-gradient(to right, ${c.glowSoft} 0%, ${c.glowLight} 30%, ${c.coolMid} 65%, ${c.cool} 100%)`, // 말의 온도 막대: 따뜻함 → 차가움
     glowText: (dark ? { textShadowColor: `${c.glowSoft}73`, textShadowOffset: { width: 3, height: 4 }, textShadowRadius: 14 } : {}) as TextStyle, // 큰 숫자 번짐
   };
 }

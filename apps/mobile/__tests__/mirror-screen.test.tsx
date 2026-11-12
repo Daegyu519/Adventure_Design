@@ -38,7 +38,7 @@ async function setup() {
   });
   const byLabel = (l: string) => root.container.queryAll((n) => n.props.accessibilityLabel === l || n.props.accessibilityLabel === `${l}, 처리 중`);
   const btn = (l: string, nth = 0) => byLabel(l).filter((n) => n.props.accessibilityRole === 'button')[nth];
-  const radio = (card: number, l: string) => root.container.queryAll((n) => n.props.accessibilityRole === 'radiogroup')[card].queryAll((n) => n.props.accessibilityRole === 'radio' && n.props.accessibilityLabel === l)[0];
+  const radio = (card: number, l: string) => root.container.queryAll((n) => n.props.accessibilityRole === 'radiogroup')[card].queryAll((n) => n.props.accessibilityRole === 'radio' && String(n.props.accessibilityLabel).split(',')[0] === l)[0];
   const text = () => textOf(root.container);
   return { root, byLabel, btn, radio, text };
 }
@@ -48,13 +48,38 @@ beforeEach(() => {
   answer.mockReset();
 });
 
-test('세 카드를 한 번만 불러와 종류 머리말과 함께 세로로 보여 준다', async () => {
-  const { text } = await setup();
+const hiddenSlides = (root: Awaited<ReturnType<typeof setup>>['root']) => root.container.queryAll((n) => StyleSheet.flatten(n.props.style)?.display === 'none');
+const progress = (root: Awaited<ReturnType<typeof setup>>['root']) => root.container.queryAll((n) => typeof n.props.accessibilityLabel === 'string' && n.props.accessibilityLabel.startsWith('오늘 푼 카드'))[0]?.props.accessibilityLabel;
+
+test('세 카드를 한 번만 불러오고 첫 카드만 보여 준다(나머지는 숨겨 두고 상태를 지킨다)', async () => {
+  const { text, root } = await setup();
   expect(today).toHaveBeenCalledTimes(1);
-  const t = text();
-  expect(t.indexOf('역할극')).toBeLessThan(t.indexOf('되돌려 받기'));
-  expect(t.indexOf('되돌려 받기')).toBeLessThan(t.indexOf('예측 맞히기'));
-  expect(t).toContain('선배라면 얼마나 부정적으로 읽을까요?');
+  expect(text()).toContain('1 / 3');
+  expect(hiddenSlides(root)).toHaveLength(2);
+  expect(text()).toContain('선배라면 얼마나 부정적으로 읽을까요?'); // 숨긴 카드도 그려져 있다
+});
+
+test('덱: 답하면 "다음 카드"가 생기고, 누르면 다음 카드가 보이며 "이전"으로 돌아올 수 있다', async () => {
+  answer.mockResolvedValue({ readings: READINGS, gap: 1 });
+  const { root, radio, btn, text, byLabel } = await setup();
+  expect(byLabel('다음 카드')).toHaveLength(0);
+  expect(text()).toContain('답하면 다음 카드로 넘어가요');
+  expect(byLabel('이전 카드')).toHaveLength(0);
+  const input = root.container.queryAll((n) => n.props.accessibilityLabel === '답장' && n.props.onChangeText)[0];
+  await act(async () => input.props.onChangeText('네'));
+  await click(btn('보내기'));
+  expect(byLabel('다음 카드')).toHaveLength(0); // 그대로·A를 고르기 전에는 끝난 카드가 아니다
+  await click(btn('그대로'));
+  expect(progress(root)).toBe('오늘 푼 카드 1 / 3');
+  await click(btn('다음 카드'));
+  expect(text()).toContain('2 / 3');
+  expect(btn('이전 카드')).toBeDefined();
+  await click(radio(0, '3'));
+  await click(btn('확인하기'));
+  await click(btn('이전 카드'));
+  expect(text()).toContain('1 / 3');
+  await click(btn('다음 카드'));
+  expect(progress(root)).toBe('오늘 푼 카드 2 / 3');
 });
 
 test('예측 맞히기: 칸을 고르고 확인하면 차이만 보이고 폼 대신 결과가 포커스를 받는다', async () => {
@@ -73,7 +98,7 @@ test('예측 맞히기: 칸을 고르고 확인하면 차이만 보이고 폼 �
 test('되돌려 받기: score를 보내고 reveal과 "내 느낌" 차이를 보여 준다', async () => {
   answer.mockResolvedValue({ readings: READINGS, reveal: '지난주에 당신이 보낸 문장이에요', gap: 4 });
   const { radio, btn, text } = await setup();
-  await click(radio(0, '5, 매우'));
+  await click(radio(0, '5'));
   await click(btn('확인하기'));
   expect(answer).toHaveBeenCalledWith({ card_id: 'c-recv', score: 5 });
   expect(text()).toContain('지난주에 당신이 보낸 문장이에요');
@@ -99,20 +124,30 @@ test('역할극: 답장을 보내면 속마음과 읽힘이 나오고, A를 고�
   expect(changed).toEqual(['미안해요']);
 });
 
-test('세 카드를 다 하면 마무리 문구가 나온다(점수 합계 · 연속 기록 · 효과 없음)', async () => {
+test('세 카드를 다 하고 "마무리 보기"를 누르면 격려와 오늘 한 일이 나온다(점수 합계 · 연속 기록 · 효과 없음)', async () => {
   answer.mockResolvedValue({ readings: READINGS, gap: 0, inner_voice: '괜찮아요', options: [] });
-  const { root, radio, btn, text } = await setup();
-  expect(text()).not.toContain('오늘 카드는 여기까지예요');
+  const { root, radio, btn, text, byLabel } = await setup();
+  expect(text()).not.toContain('모두 풀었어요');
   const input = root.container.queryAll((n) => n.props.accessibilityLabel === '답장' && n.props.onChangeText)[0];
   await act(async () => input.props.onChangeText('네'));
   await click(btn('보내기'));
   await click(btn('그대로'));
+  await click(btn('다음 카드'));
   await click(radio(0, '3'));
   await click(btn('확인하기'));
+  await click(btn('다음 카드'));
   await click(radio(0, '3'));
   await click(btn('확인하기'));
-  expect(text()).toContain('오늘 카드는 여기까지예요. 내일 또 만나요.');
-  expect(text()).not.toMatch(/연속|축하/);
+  await click(btn('마무리 보기'));
+  expect(text()).toContain('오늘 카드 3장을 모두 풀었어요');
+  expect(text()).toContain('오늘 내가 고른 말');
+  expect(text()).toContain('오늘 한 일');
+  expect(text()).toContain('상대의 읽힘을 꼭 맞게 짐작했어요'); // 예측 gap 0
+  expect(text()).not.toMatch(/연속|축하|점수|등급/);
+  expect(text()).toContain('내일 새 카드가 와요');
+  await click(btn('역할극, 내 답장을 다시 읽어 봤어요, 다시 보기')); // 오늘 한 일 → 그 카드로
+  expect(text()).toContain('1 / 3');
+  expect(byLabel('다음 카드').length).toBeGreaterThan(0);
 });
 
 test.each([
@@ -153,9 +188,11 @@ async function finishAll(h: Awaited<ReturnType<typeof setup>>) {
   await act(async () => input.props.onChangeText('네'));
   await click(h.btn('보내기'));
   await click(h.btn('그대로'));
+  await click(h.btn('다음 카드'));
   await click(h.radio(0, '3'));
   await click(h.btn('확인하기'));
-  await click(h.radio(0, '3'));
+  await click(h.btn('다음 카드'));
+  await click(h.radio(0, '3')); // 받은 카드의 칸은 결과로 바뀌어 사라졌으니 예측 카드가 첫 칸 묶음이다
 }
 
 test('a11y-1: 마지막 카드를 끝내도 포커스·알림은 그 카드 결과에 남고, 마무리 문구는 포커스도 alert도 아니다', async () => {
@@ -165,10 +202,10 @@ test('a11y-1: 마지막 카드를 끝내도 포커스·알림은 그 카드 결�
   const before = focused.length;
   await click(h.btn('확인하기')); // 세 번째 카드
   expect(focused.length - before).toBe(1); // 결과 상자 하나만 포커스를 받는다
-  const finish = h.root.container.queryAll((n) => typeof n.props.children === 'string' && n.props.children.includes('오늘 카드는 여기까지예요'));
-  expect(finish.length).toBeGreaterThan(0);
-  expect(h.root.container.queryAll((n) => n.props.accessibilityRole === 'alert' && textOf(n).includes('오늘 카드는 여기까지예요'))).toHaveLength(0);
-  expect(h.root.container.queryAll((n) => n.props.accessibilityLiveRegion === 'polite' && textOf(n).includes('오늘 카드는 여기까지예요'))).not.toHaveLength(0);
+  expect(h.text()).not.toContain('모두 풀었어요'); // 마무리는 "마무리 보기"를 눌러야 열린다
+  await click(h.btn('마무리 보기'));
+  expect(h.root.container.queryAll((n) => n.props.accessibilityRole === 'alert' && textOf(n).includes('모두 풀었어요'))).toHaveLength(0);
+  expect(h.root.container.queryAll((n) => n.props.accessibilityLiveRegion === 'polite' && textOf(n).includes('모두 풀었어요'))).not.toHaveLength(0);
   expect(h.root.container.queryAll((n) => n.props.accessibilityRole === 'alert' && textOf(n).includes('예측과 한 칸 차이'))).not.toHaveLength(0);
 });
 
@@ -209,7 +246,8 @@ test('a11y-6: 역할극 결과 상자는 이름 있는 group이라 포커스가 
 
 test('a11y-M4: 진행 문구는 눈에 보이는 글 그대로 읽힌다(이름을 따로 붙이지 않는다)', async () => {
   const { root, text } = await setup();
-  expect(text()).toContain('오늘 푼 카드 0 / 3');
+  expect(text()).toContain('1 / 3'); // 눈에 보이는 위치
+  expect(progress(root)).toBe('오늘 푼 카드 0 / 3'); // 막대(점)는 푼 개수를 이름으로 읽힌다
   expect(root.container.queryAll((n) => typeof n.props.accessibilityLabel === 'string' && n.props.accessibilityLabel.includes('장 풀었어요'))).toHaveLength(0);
 });
 
@@ -233,19 +271,20 @@ test('code-M2: 422(카드가 바뀜)이면 안내와 "카드 새로 받기"가 �
   expect(byLabel('카드 새로 받기')).toHaveLength(0); // 새 카드로 바뀌어 폼이 새로 열렸다
 });
 
-test('fix2-3: 카드를 새로 받는 동안은 푼 개수를 그대로 두고, 새 카드가 오면 0으로 돌린다', async () => {
+test('fix2-3: 카드를 새로 받는 동안은 푼 개수를 그대로 두고, 새 카드가 오면 0으로 돌리고 첫 카드로 간다', async () => {
   let release!: (v: unknown) => void;
   answer.mockResolvedValueOnce({ readings: READINGS, gap: 0 }).mockRejectedValueOnce(new EngineError(422, 'bad_card'));
-  const { radio, btn, text } = await setup();
+  const { root, radio, btn, text } = await setup();
   await click(radio(1, '3'));
-  await click(btn('확인하기', 1)); // 예측 카드 끝
+  await click(btn('확인하기', 1)); // 예측 카드 끝(숨겨 둔 카드라도 상태는 지킨다)
   await click(radio(0, '3'));
   await click(btn('확인하기')); // 422
   today.mockReturnValueOnce(new Promise((r) => (release = r)));
   await click(btn('카드 새로 받기'));
-  expect(text()).toContain('오늘 푼 카드 1 / 3');
+  expect(progress(root)).toBe('오늘 푼 카드 1 / 3');
   await act(async () => release({ cards: CARDS }));
-  expect(text()).toContain('오늘 푼 카드 0 / 3');
+  expect(progress(root)).toBe('오늘 푼 카드 0 / 3');
+  expect(text()).toContain('1 / 3');
 });
 
 // 안내 영역은 화면마다 하나(AM-9): 다시 받은 카드 묶음(FocusBox) 안의 결과 상자(FocusBox)가 영역을 겹쳐 그리지 않는다.
@@ -275,9 +314,9 @@ describe('앞선 말(P-19)', () => {
     });
     const { text, byLabel } = await setup();
     expect(text()).toContain('내가 먼저 한 말');
-    expect(text()).toContain('“내일까지 가능해요?”');
+    expect(text()).toContain('내일까지 가능해요?');
     expect(text()).toContain('상대가 먼저 한 말');
-    expect(text()).toContain('“그럼 제가 할게요.”');
+    expect(text()).toContain('그럼 제가 할게요.');
     expect(text().indexOf('내가 먼저 한 말')).toBeLessThan(text().indexOf('안 돼요.'));
     expect(byLabel('상대가 먼저 한 말: 그럼 제가 할게요.')).toHaveLength(1);
   });

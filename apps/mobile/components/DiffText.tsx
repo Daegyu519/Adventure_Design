@@ -1,10 +1,12 @@
 import { Fragment } from 'react';
 
 import { changedWords } from '../lib/mirror';
+import type { Colors } from '../lib/theme';
 import { AppText } from './AppText';
 
 // 고친 문장에서 원문과 달라진 어절만 primary 글자 + 밑줄(MASTER). 밑줄이 있어 색만으로 전하지 않는다.
-export function DiffText({ original, revised }: { original: string; revised: string }) {
+// base/changed: 말풍선(primary 바탕) 안에서는 둘 다 onPrimary로 둔다(밑줄이 달라진 어절을 알린다).
+export function DiffText({ original, revised, base = 'text', changedColor = 'primary' }: { original: string; revised: string; base?: keyof Colors; changedColor?: keyof Colors }) {
   const words = changedWords(original, revised);
   const changed = words.filter((w) => w.changed).map((w) => w.text);
   const removed = original.split(/\s+/).filter(Boolean).length - words.filter((w) => !w.changed).length;
@@ -18,7 +20,7 @@ export function DiffText({ original, revised }: { original: string; revised: str
       {words.map((w, i) => (
         <Fragment key={i}>
           {i ? ' ' : ''}
-          <AppText color={w.changed ? 'primary' : 'text'} weight={w.changed ? '600' : '400'} style={w.changed ? { textDecorationLine: 'underline' } : undefined}>
+          <AppText color={w.changed ? changedColor : base} weight={w.changed ? '600' : '400'} style={w.changed ? { textDecorationLine: 'underline' } : undefined}>
             {w.text}
           </AppText>
         </Fragment>

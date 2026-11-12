@@ -1,4 +1,3 @@
-import Check from 'lucide-react-native/icons/check';
 import { Pressable, View } from 'react-native';
 
 import { focusRing, useTheme } from '../lib/theme';
@@ -11,67 +10,92 @@ type Props = {
   highLabel: string;
   accessibilityLabel: string;
   disabled?: boolean;
+  words?: readonly string[]; // 칸마다 붙는 말. 고른 칸 위에 알약으로 따라온다
 };
 
-// MASTER 거울 카드: 1~5칸(각 44 이상, radio), 양끝 설명, 고른 칸은 종이색(primary) 바탕 + 글로우(OOPS).
-// 선택은 색만으로 전하지 않는다(1.4.1): 굵은 테두리(2) + 체크 아이콘. 양끝 칸의 이름에는 눈에 보이는 숫자와 끝 설명을 함께 넣어 화면 읽기 프로그램이 1·5의 뜻을 알게 한다.
-export function ScaleRow({ value, onChange, lowLabel, highLabel, accessibilityLabel, disabled = false }: Props) {
+const DOT = 26;
+const SIDE = 22; // 칸(폭 44)의 가운데까지
+
+// 말의 온도(OOPS 거울): 따뜻함 → 차가움 막대 위 1~5칸(각 44 이상, radio). 고른 칸은 커지고 종이색, 위에 칸마다 다른 말이 붙는다.
+// 선택은 색만으로 전하지 않는다(1.4.1): 크기 + 숫자 반전 + 말 알약 + checked 상태. 양끝 칸 이름에는 숫자와 끝 설명을 함께 넣는다.
+export function ScaleRow({ value, onChange, lowLabel, highLabel, accessibilityLabel, disabled = false, words }: Props) {
   const { colors, radius, space, fx } = useTheme();
   const pick = (n: number) => !disabled && onChange(n);
+  const word = value != null ? words?.[value - 1] : undefined;
   return (
     <View style={{ gap: space[0] }}>
-      <View accessibilityRole="radiogroup" accessibilityLabel={accessibilityLabel} style={{ flexDirection: 'row', gap: space[1] }}>
-        {[1, 2, 3, 4, 5].map((n) => {
-          const checked = n === value;
-          return (
-            <Pressable
-              key={n}
-              onPress={() => pick(n)}
-              accessibilityRole="radio"
-              accessibilityLabel={n === 1 ? `1, ${lowLabel}` : n === 5 ? `5, ${highLabel}` : String(n)}
-              accessibilityState={{ checked, disabled }}
-              aria-checked={checked}
-              // react-native-web의 Pressable은 radio에서 Space를 누름으로 바꿔 주지 않는다(ChipRow와 같은 처리, WCAG 2.1.1).
-              {...({
-                onKeyDown: (e: { key: string; preventDefault(): void }) => {
-                  if (e.key === ' ') {
-                    e.preventDefault();
-                    pick(n);
-                  }
-                },
-              } as object)}
-              style={({ pressed }) => ({
-                flex: 1,
-                minHeight: 48,
-                minWidth: 44,
-                borderRadius: radius.card - 6,
-                borderWidth: checked ? 2 : 1.5,
-                borderColor: checked ? colors.primary : colors.borderStrong,
-                backgroundColor: checked ? colors.primary : 'transparent',
-                ...(checked ? { boxShadow: fx.soft } : null),
-                alignItems: 'center',
-                justifyContent: 'center',
-                opacity: disabled ? 0.4 : pressed ? 0.8 : 1,
-                ...focusRing(colors.accent),
-              })}
-            >
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
-                {checked && <Check color={colors.onPrimary} size={14} aria-hidden />}
-                <AppText weight="700" color={checked ? 'onPrimary' : 'text'}>
-                  {String(n)}
+      <View style={{ paddingTop: 30 }}>
+        <View aria-hidden pointerEvents="none" style={{ position: 'absolute', left: SIDE, right: SIDE, top: 49, height: 10, borderRadius: 5, backgroundImage: fx.temp, opacity: 0.9 }} />
+        {word && value != null ? (
+          <View aria-hidden pointerEvents="none" style={{ position: 'absolute', top: 0, left: SIDE, right: SIDE }}>
+            <View style={{ position: 'absolute', left: `${((value - 1) / 4) * 100}%`, width: 160, marginLeft: -80, alignItems: 'center' }}>
+              <View style={{ paddingVertical: 3, paddingHorizontal: 10, borderRadius: radius.chip, backgroundColor: colors.hintBg, boxShadow: fx.chip }}>
+                <AppText weight="700" style={{ color: colors.hintText, fontSize: 12, lineHeight: 18 }}>
+                  {word}
                 </AppText>
               </View>
-            </Pressable>
-          );
-        })}
+            </View>
+          </View>
+        ) : null}
+        <View accessibilityRole="radiogroup" accessibilityLabel={accessibilityLabel} style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+          {[1, 2, 3, 4, 5].map((n) => {
+            const checked = n === value;
+            const w = words?.[n - 1];
+            return (
+              <Pressable
+                key={n}
+                onPress={() => pick(n)}
+                accessibilityRole="radio"
+                accessibilityLabel={`${n}${w ? `, ${w}` : ''}${n === 1 ? `, ${lowLabel}` : n === 5 ? `, ${highLabel}` : ''}`}
+                accessibilityState={{ checked, disabled }}
+                aria-checked={checked}
+                // react-native-web의 Pressable은 radio에서 Space를 누름으로 바꿔 주지 않는다(ChipRow와 같은 처리, WCAG 2.1.1).
+                {...({
+                  onKeyDown: (e: { key: string; preventDefault(): void }) => {
+                    if (e.key === ' ') {
+                      e.preventDefault();
+                      pick(n);
+                    }
+                  },
+                } as object)}
+                style={({ pressed }) => ({ width: 44, height: 48, minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center', opacity: disabled ? 0.4 : pressed ? 0.8 : 1, ...focusRing(colors.accent) })}
+              >
+                <View
+                  style={{
+                    width: DOT,
+                    height: DOT,
+                    borderRadius: DOT / 2,
+                    borderWidth: 2,
+                    borderColor: checked ? colors.primary : colors.borderStrong,
+                    backgroundColor: checked ? colors.primary : colors.surface,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transform: [{ scale: checked ? 1.35 : 1 }],
+                    ...(checked ? { boxShadow: fx.soft } : null),
+                  }}
+                >
+                  <AppText weight="700" color={checked ? 'onPrimary' : 'textMuted'} style={{ fontSize: 12, lineHeight: 16 }}>
+                    {String(n)}
+                  </AppText>
+                </View>
+              </Pressable>
+            );
+          })}
+        </View>
       </View>
-      <View aria-hidden style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-        <AppText variant="small" color="textMuted">
-          {lowLabel}
-        </AppText>
-        <AppText variant="small" color="textMuted">
-          {highLabel}
-        </AppText>
+      <View aria-hidden style={{ flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 4 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colors.glowSoft }} />
+          <AppText variant="small" color="textMuted" style={{ fontSize: 12 }}>
+            {lowLabel}
+          </AppText>
+        </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: colors.cool }} />
+          <AppText variant="small" color="textMuted" style={{ fontSize: 12 }}>
+            {highLabel}
+          </AppText>
+        </View>
       </View>
     </View>
   );

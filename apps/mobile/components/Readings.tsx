@@ -8,7 +8,10 @@ const KEYS = ['차갑게', '성의없게', '화나게', '무난하게', '따뜻�
 const LEVEL = { 자주: 86, 가끔: 55, 드물어요: 22 } as const; // 막대 길이(%). 숫자는 보여 주지 않고 단계 글자로도 전한다
 
 // "이렇게 읽힐 수 있어요"(OOPS 시안): 읽힘 이름 · 단계 글자 · 글로우 막대. 퍼센트 없음, 단계는 글자로도 전한다(색·길이만으로 알리지 않는다).
-export function Readings({ readings }: { readings: MirrorAnswerRes['readings'] }) {
+const RANK = { 자주: 0, 가끔: 1, 드물어요: 2 } as const;
+
+// top: 많이 읽힌 순서로 n개만(카드 안에서 한 화면에 들어가게). 없으면 다섯 개 모두.
+export function Readings({ readings, top }: { readings: MirrorAnswerRes['readings']; top?: number }) {
   const { colors, space, fx } = useTheme();
   return (
     <View style={{ gap: space[2] }}>
@@ -16,7 +19,7 @@ export function Readings({ readings }: { readings: MirrorAnswerRes['readings'] }
         이렇게 읽힐 수 있어요
       </AppText>
       <View style={{ gap: space[2] - 2 }}>
-        {KEYS.map((k) => {
+        {(top ? [...KEYS].sort((a, b) => RANK[readings[a]] - RANK[readings[b]]).slice(0, top) : KEYS).map((k) => {
           const level = readings[k];
           return (
             <View key={k} accessible accessibilityLabel={`${k} ${level}`}>
