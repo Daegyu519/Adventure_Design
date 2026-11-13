@@ -38,6 +38,7 @@ c="$(code -X POST -H 'Content-Type: application/json' --data-binary @"$big" "$BA
 
 # 2b. edge 전용: 엔진이 제한하지 않는 경로(/nope, 엔진은 404)로 보내므로 Cloudflare 규칙만 막을 수 있다. https일 때만.
 case "$BASE" in
+  https://*.ts.net|https://*.ts.net/*) echo "SKIP  edge 64 KB probe (Tailscale Funnel has no WAF; engine 413 checked above)";;
   https://*)
     c="$(code -X POST -H 'Content-Type: application/json' --data-binary @"$big" "$BASE/nope")"
     case "$c" in 403|413) ok "edge: oversize POST /nope -> $c (Cloudflare rule)";;

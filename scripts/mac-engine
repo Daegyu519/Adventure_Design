@@ -67,30 +67,36 @@ ts_login() {   # 로그인이 필요하면 링크를 보여 준다(사람이 연
   return 3
 }
 
-engine_pid() { [ -f "$RUN/engine.pid" ] && kill -0 "$(cat "$RUN/engine.pid")" 2>/dev/null && cat "$RUN/engine.pid" || true; }
+# pid 파일과 종료 대상은 포트마다 따로다: 'test'(8010)가 운영 엔진(8000)의 pid를 덮어쓰거나 함께 끄지 않게(2026-11-14 사고)
+pidfile() { echo "$RUN/engine-$1.pid"; }
+engine_pid() { local f; f="$(pidfile "${1:-$PORT}")"; [ -f "$f" ] && kill -0 "$(cat "$f")" 2>/dev/null && cat "$f" || true; }
+match() { echo "uvicorn app.main:app --host 127.0.0.1 --port $1 "; }   # 이 포트의 엔진만 고른다
 
 start_engine() {   # start_engine <port> <log>
-  local port="$1" log="$2"
+  local port="$1" log="$2" f; f="$(pidfile "$1")"
   lsof -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1 && die "포트 $port를 이미 다른 프로그램이 쓴다(OOPS_ENGINE_PORT로 바꿀 수 있다)"
-  ( cd "$ROOT/engine" && USE_LOCAL_MODEL=0 MODELS_PATH="$MODELS" nohup caffeinate -is \
-      uv run --locked uvicorn app.main:app --host 127.0.0.1 --port "$port" --workers 1 --env-file "$ENV_FILE" >"$log" 2>&1 & echo $! >"$RUN/engine.pid" )
+  # 백그라운드 전체의 입출력을 로그로 돌린다(아니면 부른 쪽 파이프·터미널을 붙잡아 'up'이 안 끝난 것처럼 보인다). exec로 pid = caffeinate
+  ( cd "$ROOT/engine" && USE_LOCAL_MODEL=0 MODELS_PATH="$MODELS" exec nohup caffeinate -is \
+      uv run --locked uvicorn app.main:app --host 127.0.0.1 --port "$port" --workers 1 --env-file "$ENV_FILE" ) >"$log" 2>&1 </dev/null &
+  echo $! >"$f"
   for _ in $(seq 1 60); do
     curl -s -o /dev/null -m 2 "http://127.0.0.1:$port/health" && return 0
-    kill -0 "$(cat "$RUN/engine.pid")" 2>/dev/null || { tail -20 "$log" >&2; die "엔진이 시작하다 멈췄다($log)"; }
+    kill -0 "$(cat "$f")" 2>/dev/null || { tail -20 "$log" >&2; die "엔진이 시작하다 멈췄다($log)"; }
     sleep 1
   done
   die "엔진이 60초 안에 응답하지 않았다($log)"
 }
 
-stop_engine() {
-  local pid; pid="$(engine_pid)"
-  [ -n "$pid" ] || return 0
-  pkill -P "$pid" 2>/dev/null || true; kill "$pid" 2>/dev/null || true
-  for _ in $(seq 1 20); do kill -0 "$pid" 2>/dev/null || break; sleep 0.3; done
-  pkill -f "uvicorn app.main:app --host 127.0.0.1" 2>/dev/null || true
+stop_engine() {   # stop_engine <port>: 그 포트의 엔진만 끈다
+  local port="$1" pid; pid="$(engine_pid "$port")"
+  if [ -n "$pid" ]; then
+    pkill -P "$pid" 2>/dev/null || true; kill "$pid" 2>/dev/null || true
+    for _ in $(seq 1 20); do kill -0 "$pid" 2>/dev/null || break; sleep 0.3; done
+  fi
+  pkill -f "$(match "$port")" 2>/dev/null || true
   # 엔진은 남은 작업을 정리하고 끝나는 데 몇 초 걸린다. 다 끝날 때까지(최대 15초) 기다린다
-  for _ in $(seq 1 30); do pgrep -f "uvicorn app.main:app --host 127.0.0.1" >/dev/null || break; sleep 0.5; done
-  rm -f "$RUN/engine.pid"
+  for _ in $(seq 1 30); do pgrep -f "$(match "$port")" >/dev/null || break; sleep 0.5; done
+  rm -f "$(pidfile "$port")"
 }
 
 case "${1:-}" in
@@ -107,7 +113,7 @@ case "${1:-}" in
     start_engine "$TEST_PORT" "$RUN/engine-test.log"
     curl -s -m 5 "http://127.0.0.1:$TEST_PORT/health" | python3 -I -c 'import json,sys; d=json.load(sys.stdin); m={**d.get("providers",{}),**d.get("models",{})}; print("  /health:", ", ".join(f"{k}={v}" for k,v in m.items()))'
     grep -E "model unavailable|WARNING|ERROR" "$RUN/engine-test.log" | sed 's/^/  log: /' | head -10 || true
-    stop_engine; say "로컬 시험 끝(엔진 껐음)" ;;
+    stop_engine "$TEST_PORT"; say "로컬 시험 끝(시험 엔진만 껐음)" ;;
   up)     # 진행: 엔진 + 공개(Funnel) + 점검
     check_env >/dev/null; gen_models
     tailscaled_up; ts_login || { say "로그인 후 다시: scripts/mac-engine up"; exit 3; }
@@ -117,10 +123,10 @@ case "${1:-}" in
     timeout 30 tailscale --socket="$SOCK" funnel --bg "$PORT" >/dev/null 2>&1 || die "Funnel을 켜지 못했다(tailnet에서 Funnel 허용이 필요할 수 있다). 'tailscale --socket=$SOCK funnel --bg $PORT'를 직접 실행해 안내를 본다"
     say "공개 주소: https://$h"
     [ "$h" = "$EXPECTED_HOST" ] || say "주의: 앱은 https://$EXPECTED_HOST 를 쓴다. 옛 학교 서버 기기를 Tailscale에서 지우고 다시 'up' 하거나, 앱 주소를 이 주소로 바꿔 배포해야 한다."
-    "$ROOT/scripts/deploy-smoke" "https://$h" || say "점검에 실패한 항목이 있다(위 FAIL). 엔진 로그: $RUN/engine.log" ;;
+    CORS_ORIGINS=https://tone-chat.expo.app "$ROOT/scripts/deploy-smoke" "https://$h" || say "점검에 실패한 항목이 있다(위 FAIL). 엔진 로그: $RUN/engine.log" ;;
   down)   # 공개를 끄고 엔진을 끈다(학교 서버로 돌아갈 때)
     if [ -S "$SOCK" ]; then tailscale --socket="$SOCK" funnel --bg "$PORT" off >/dev/null 2>&1 || tailscale --socket="$SOCK" funnel reset >/dev/null 2>&1 || true; fi
-    stop_engine
+    stop_engine "$PORT"
     if [ -f "$RUN/tailscaled.pid" ]; then kill "$(cat "$RUN/tailscaled.pid")" 2>/dev/null || true; rm -f "$RUN/tailscaled.pid"; fi
     say "끔(Funnel·엔진·tailscaled). 학교 서버로 돌아가려면: Tailscale에서 이 Mac 기기 이름을 바꾸거나 지운 뒤 scripts/deploy-school" ;;
   status)

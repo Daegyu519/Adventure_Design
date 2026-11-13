@@ -21,6 +21,8 @@
 
 P-34(2026-11-04): 전송 시점 최대 1.5초 확인 구현 완료, 사용자 요청으로 main에 land. 기존 `/v1/hint`·Sheet·Button 재사용, 모델·DB 변경 없음. Windows asyncio socketpair 호환을 테스트 환경에 보완했고 독립 리뷰 통과. Python 3.12에서 scripts/check 통과: 엔진 586 passed/28 skipped(실제 PostgreSQL 없음 27·FakeRepo 잠금 1), DB(PGlite) 26, 앱 751·tsc·lint·대비 OK. 웹 export 통과. 운영 배포·실기기 확인은 별도. 자세한 동작은 ARCHITECTURE §3 P-34.
 
+**운영 상태(2026-11-14)**: 학교 GPU 서버(168.188.128.36)가 2026-11-13경부터 응답 없음(ssh·주피터·ping 모두, Tailscale 노드 오프라인). **엔진은 지금 사용자 Mac에서 임시 운영**(`scripts/mac-engine up`, 공개 주소는 그대로 `tone-chat.tail6baef9.ts.net`, 실시간 판정만 NVIDIA laguna, 판별기·GPU 모델 꺼짐, deploy-smoke ALL PASS). Mac이 잠들거나 꺼지면 AI만 멈춘다. 학교 서버가 돌아오면 `scripts/mac-engine down` → Tailscale에서 이 Mac 기기 제거·이름 변경 → `scripts/deploy-school`. 자세한 건 docs/OPERATIONS.md "학교 GPU 서버가 꺼졌을 때".
+
 P-35(2026-11-10): OOPS 리디자인 + 앱 이름 OOPS!(사용자 요청, `OOPS_웹앱_프로토타입.html` 기준). 토큰·글로우·컴포넌트·시작 화면을 시안 모양으로, 기능·문구·접근성은 그대로. scripts/check 통과(엔진 pytest·DB 26·앱 752·tsc·lint·대비). 2026-11-10 웹 재배포(`expo export -p web` → `eas deploy --prod`, https://tone-chat.expo.app, 새 디자인·이름 확인). Android APK는 아직 이전 빌드(새 이름·아이콘은 EAS 재빌드 필요). 라이트 모드는 시안에 없어 파생한 값이라 확인 대기.
 
 `docs/tasks.md` 기준으로 직접 센 값이다(`-live` 행과 선택은 따로).
