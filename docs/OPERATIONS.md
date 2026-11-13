@@ -132,6 +132,24 @@ npx eas-cli deploy --prod
 </details>
 
 <details>
+<summary>학교 GPU 서버가 꺼졌을 때: 이 Mac에서 엔진 임시 운영(scripts/mac-engine, P-39)</summary>
+
+학교 서버(엔진+GPU)가 응답하지 않을 때 AI 기능을 살려 두는 임시 방법이다. AI 계산은 NVIDIA 무료 API로 하고, **실시간 판정(tone_label)만** GPU Qwen3-30B 대신 `nvidia:poolside/laguna-xs-2.1`로 바꾼 설정 복사본(`~/.oops-engine/models.mac.yaml`, `MODELS_PATH`)을 쓴다. 저장소의 `models.yaml`은 그대로다. 2026-11-14 대조 세트 16문장 실측: 정밀도 0.75 · 재현율 0.38 · 평균 0.84초(최대 1.35초, 2/16 기권). 판별기(KcELECTRA)는 꺼진다.
+
+```bash
+scripts/mac-engine prep     # 준비(도구·env 키 이름·설정 복사본·의존성·사용자 모드 tailscaled·로그인 링크)
+scripts/mac-engine test     # 공개 없이 127.0.0.1:8010으로 띄워 /health 보고 끈다
+scripts/mac-engine up       # 진행: 엔진(127.0.0.1:8000, 잠자기 방지) + Funnel 공개 + deploy-smoke
+scripts/mac-engine status   # 상태
+scripts/mac-engine down     # 끄기(학교 서버로 돌아갈 때)
+```
+
+- 공개 주소를 앱이 쓰는 `tone-chat.tail6baef9.ts.net` 그대로 쓰려면, Tailscale 관리 화면에서 옛 `tone-chat`(학교 서버) 기기를 지운 뒤 `up`(이 Mac 이름을 `tone-chat`로 바꾼다). 그러면 앱·CORS·DB 웹훅을 바꾸지 않아도 된다. 학교 서버로 돌아갈 땐 `down` → 이 Mac 기기를 지우거나 이름 변경 → `scripts/deploy-school`(서버 tailscale이 로그인 링크를 다시 낼 수 있다).
+- 감수할 것: Mac을 켜고 충전기를 꽂아 둔다(덮개를 닫거나 재시작하면 AI만 멈추고 채팅은 그대로). NVIDIA 무료 한도는 분당 약 40회로 공유라 사용자가 몰리면 힌트가 조용히 빠진다.
+
+</details>
+
+<details>
 <summary>배포: 다른 서버라면 Docker + Cloudflare Tunnel</summary>
 
 **다른 서버라면** 아래 Docker + Cloudflare Tunnel 절차를 쓴다.

@@ -1,0 +1,130 @@
+#!/usr/bin/env bash
+# 사용법: scripts/mac-engine prep|test|up|down|status
+# 학교 GPU 서버가 꺼졌을 때 엔진을 이 Mac에서 임시로 돌린다(방안 2, P-39).
+#   - AI 계산은 NVIDIA 무료 API. 실시간 판정(tone_label)만 GPU Qwen3-30B 대신 NVIDIA laguna로 바꾼 설정 복사본을 쓴다(MODELS_PATH).
+#     저장소의 engine/config/models.yaml은 건드리지 않는다. 학교 서버가 돌아오면 `down` 후 scripts/deploy-school.
+#   - 엔진은 127.0.0.1에서만 열고, 공개는 Tailscale Funnel(사용자 모드 tailscaled, 관리자 권한 없음)로만 한다.
+#   - 비밀값은 셸로 읽지 않는다: uvicorn --env-file(.env.pilot.engine)로만 넘긴다. 키 존재 확인도 파이썬으로 값 없이.
+#   - 엔진이 켜져 있는 동안 caffeinate로 Mac 잠자기를 막는다(화면은 꺼져도 된다).
+set -euo pipefail
+
+ROOT="$(dirname "$(git -C "$(dirname "$0")" rev-parse --path-format=absolute --git-common-dir)")"   # worktree에서 불러도 루트 체크아웃
+ENV_FILE="$ROOT/.env.pilot.engine"
+RUN="${OOPS_ENGINE_HOME:-$HOME/.oops-engine}"
+MODELS="$RUN/models.mac.yaml"
+SOCK="$RUN/ts/tailscaled.sock"
+PORT="${OOPS_ENGINE_PORT:-8000}"
+TEST_PORT=8010
+TS_NAME="${OOPS_TS_NAME:-tone-chat}"             # 앱이 아는 주소(tone-chat.<tailnet>.ts.net)를 그대로 쓰려면 이 이름이어야 한다
+EXPECTED_HOST="tone-chat.tail6baef9.ts.net"      # 앱·CORS·DB 웹훅이 가리키는 엔진 주소
+RT_MODEL="${OOPS_RT_MODEL:-poolside/laguna-xs-2.1}"   # 2026-11-14 대조 세트 실측: 정밀도 0.75·재현율 0.38·평균 0.84초
+OLD_LINE="model: local_detail:qwen3-30b-a3b, prompt: tone_label, paths: [realtime]"
+
+mkdir -p "$RUN/ts"; chmod 700 "$RUN"
+ts() { tailscale --socket="$SOCK" "$@"; }
+say() { printf '%s\n' "$*"; }
+die() { printf 'mac-engine: %s\n' "$*" >&2; exit 1; }
+
+check_env() {   # 키 이름만 확인한다(값은 출력하지 않는다)
+  [ -f "$ENV_FILE" ] || die "$ENV_FILE 없음(파일럿 엔진 env)"
+  python3 -I - "$ENV_FILE" <<'PY' || exit 1
+import re, sys
+keys = {m.group(1) for l in open(sys.argv[1]) if (m := re.match(r'^([A-Z_]+)=(.+)$', l.strip()))}
+need = ["NVIDIA_API_KEY", "SUPABASE_URL", "SUPABASE_DB_URL", "HOOK_SECRET", "MIRROR_SECRET"]
+miss = [k for k in need if k not in keys]
+if miss: sys.exit(f"mac-engine: env 파일에 값이 없다: {miss}")
+print("  env 파일: 필요한 키 있음 (" + ", ".join(need) + ")")
+PY
+}
+
+gen_models() {   # 설정 복사본: 실시간 판정 한 줄만 NVIDIA로
+  python3 -I - "$ROOT/engine/config/models.yaml" "$MODELS" "$OLD_LINE" "$RT_MODEL" <<'PY' || exit 1
+import sys
+src, dst, old, model = sys.argv[1:]
+s = open(src, encoding="utf-8").read()
+if old not in s: sys.exit("mac-engine: models.yaml의 실시간 줄이 바뀌었다. scripts/mac-engine의 OLD_LINE을 맞춰야 한다")
+open(dst, "w", encoding="utf-8").write("# 생성 파일(scripts/mac-engine). 손으로 고치지 않는다.\n" + s.replace(old, f"model: nvidia:{model}, prompt: tone_label, paths: [realtime]"))
+print(f"  설정 복사본: 실시간 판정 = nvidia:{model}")
+PY
+}
+
+tailscaled_up() {   # 사용자 모드 tailscaled(관리자 권한·시스템 확장 없음)
+  if [ -S "$SOCK" ] && ts status --json >/dev/null 2>&1; then return 0; fi
+  command -v tailscaled >/dev/null || die "tailscale 없음: brew install tailscale"
+  nohup tailscaled --tun=userspace-networking --statedir="$RUN/ts" --socket="$SOCK" --port=0 >"$RUN/tailscaled.log" 2>&1 &
+  echo $! >"$RUN/tailscaled.pid"
+  for _ in $(seq 1 20); do ts status --json >/dev/null 2>&1 && return 0; sleep 0.5; done
+  die "tailscaled가 뜨지 않았다($RUN/tailscaled.log)"
+}
+
+ts_state() { ts status --json 2>/dev/null | python3 -I -c 'import json,sys; print(json.load(sys.stdin).get("BackendState",""))' 2>/dev/null || echo ""; }
+ts_host() { ts status --json 2>/dev/null | python3 -I -c 'import json,sys; print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))' 2>/dev/null || echo ""; }
+
+ts_login() {   # 로그인이 필요하면 링크를 보여 준다(사람이 연다)
+  [ "$(ts_state)" = Running ] && return 0
+  say "  Tailscale 로그인이 필요하다. 아래 링크를 브라우저에서 열어 학교 서버와 같은 계정으로 로그인:"
+  ( ts up --hostname="$TS_NAME" --accept-dns=false --timeout=25s 2>&1 || true ) | grep -o 'https://login.tailscale.com/[^ ]*' | head -1 | sed 's/^/    /'
+  return 3
+}
+
+engine_pid() { [ -f "$RUN/engine.pid" ] && kill -0 "$(cat "$RUN/engine.pid")" 2>/dev/null && cat "$RUN/engine.pid" || true; }
+
+start_engine() {   # start_engine <port> <log>
+  local port="$1" log="$2"
+  lsof -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1 && die "포트 $port를 이미 다른 프로그램이 쓴다(OOPS_ENGINE_PORT로 바꿀 수 있다)"
+  ( cd "$ROOT/engine" && USE_LOCAL_MODEL=0 MODELS_PATH="$MODELS" nohup caffeinate -is \
+      uv run --locked uvicorn app.main:app --host 127.0.0.1 --port "$port" --workers 1 --env-file "$ENV_FILE" >"$log" 2>&1 & echo $! >"$RUN/engine.pid" )
+  for _ in $(seq 1 60); do
+    curl -s -o /dev/null -m 2 "http://127.0.0.1:$port/health" && return 0
+    kill -0 "$(cat "$RUN/engine.pid")" 2>/dev/null || { tail -20 "$log" >&2; die "엔진이 시작하다 멈췄다($log)"; }
+    sleep 1
+  done
+  die "엔진이 60초 안에 응답하지 않았다($log)"
+}
+
+stop_engine() {
+  local pid; pid="$(engine_pid)"
+  [ -n "$pid" ] || return 0
+  pkill -P "$pid" 2>/dev/null || true; kill "$pid" 2>/dev/null || true
+  for _ in $(seq 1 20); do kill -0 "$pid" 2>/dev/null || break; sleep 0.3; done
+  pkill -f "uvicorn app.main:app --host 127.0.0.1" 2>/dev/null || true
+  # 엔진은 남은 작업을 정리하고 끝나는 데 몇 초 걸린다. 다 끝날 때까지(최대 15초) 기다린다
+  for _ in $(seq 1 30); do pgrep -f "uvicorn app.main:app --host 127.0.0.1" >/dev/null || break; sleep 0.5; done
+  rm -f "$RUN/engine.pid"
+}
+
+case "${1:-}" in
+  prep)   # 실행 직전까지: 도구·env·설정 복사본·의존성·tailscaled·로그인 상태
+    say "1/4 도구"; command -v uv >/dev/null || die "uv 없음"; command -v tailscale >/dev/null || die "tailscale 없음: brew install tailscale"; say "  uv, tailscale 있음"
+    say "2/4 env·설정"; check_env; gen_models
+    say "3/4 엔진 의존성"; ( cd "$ROOT/engine" && uv sync --locked -q ) && say "  uv sync 완료"
+    say "4/4 Tailscale"; tailscaled_up
+    if ts_login; then say "  로그인됨: $(ts_host)"; else say "  로그인 후 다시: scripts/mac-engine prep"; exit 3; fi
+    h="$(ts_host)"; [ "$h" = "$EXPECTED_HOST" ] || say "  주의: 이 Mac의 주소는 $h 이다. 앱은 $EXPECTED_HOST 를 쓴다. Tailscale 관리 화면에서 옛 'tone-chat'(학교 서버) 기기를 지우면 up이 이름을 '$TS_NAME'로 바꿔 같은 주소를 쓴다."
+    say "준비 끝. 진행할 때: scripts/mac-engine up" ;;
+  test)   # 공개 없이 로컬에서만 띄워 보고 끈다(포트 $TEST_PORT). 웹훅·공개 주소는 이 Mac에 닿지 않는다
+    check_env >/dev/null; gen_models >/dev/null
+    start_engine "$TEST_PORT" "$RUN/engine-test.log"
+    curl -s -m 5 "http://127.0.0.1:$TEST_PORT/health" | python3 -I -c 'import json,sys; d=json.load(sys.stdin); m={**d.get("providers",{}),**d.get("models",{})}; print("  /health:", ", ".join(f"{k}={v}" for k,v in m.items()))'
+    grep -E "model unavailable|WARNING|ERROR" "$RUN/engine-test.log" | sed 's/^/  log: /' | head -10 || true
+    stop_engine; say "로컬 시험 끝(엔진 껐음)" ;;
+  up)     # 진행: 엔진 + 공개(Funnel) + 점검
+    check_env >/dev/null; gen_models
+    tailscaled_up; ts_login || { say "로그인 후 다시: scripts/mac-engine up"; exit 3; }
+    [ "$(ts_host)" = "$EXPECTED_HOST" ] || ts set --hostname="$TS_NAME" >/dev/null 2>&1 || true
+    h="$(ts_host)"
+    if [ -n "$(engine_pid)" ]; then say "엔진 이미 실행 중"; else start_engine "$PORT" "$RUN/engine.log"; say "엔진 실행(127.0.0.1:$PORT, 잠자기 방지 켬)"; fi
+    timeout 30 tailscale --socket="$SOCK" funnel --bg "$PORT" >/dev/null 2>&1 || die "Funnel을 켜지 못했다(tailnet에서 Funnel 허용이 필요할 수 있다). 'tailscale --socket=$SOCK funnel --bg $PORT'를 직접 실행해 안내를 본다"
+    say "공개 주소: https://$h"
+    [ "$h" = "$EXPECTED_HOST" ] || say "주의: 앱은 https://$EXPECTED_HOST 를 쓴다. 옛 학교 서버 기기를 Tailscale에서 지우고 다시 'up' 하거나, 앱 주소를 이 주소로 바꿔 배포해야 한다."
+    "$ROOT/scripts/deploy-smoke" "https://$h" || say "점검에 실패한 항목이 있다(위 FAIL). 엔진 로그: $RUN/engine.log" ;;
+  down)   # 공개를 끄고 엔진을 끈다(학교 서버로 돌아갈 때)
+    if [ -S "$SOCK" ]; then tailscale --socket="$SOCK" funnel --bg "$PORT" off >/dev/null 2>&1 || tailscale --socket="$SOCK" funnel reset >/dev/null 2>&1 || true; fi
+    stop_engine
+    if [ -f "$RUN/tailscaled.pid" ]; then kill "$(cat "$RUN/tailscaled.pid")" 2>/dev/null || true; rm -f "$RUN/tailscaled.pid"; fi
+    say "끔(Funnel·엔진·tailscaled). 학교 서버로 돌아가려면: Tailscale에서 이 Mac 기기 이름을 바꾸거나 지운 뒤 scripts/deploy-school" ;;
+  status)
+    p="$(engine_pid)"; say "엔진: $([ -n "$p" ] && echo "실행 중(pid $p)" || echo 꺼짐)"
+    if [ -S "$SOCK" ] && ts status --json >/dev/null 2>&1; then say "Tailscale: $(ts_state) $(ts_host)"; ts funnel status 2>/dev/null | sed 's/^/  /' | head -6; else say "Tailscale: 꺼짐"; fi ;;
+  *) echo "usage: scripts/mac-engine prep|test|up|down|status" >&2; exit 2 ;;
+esac
