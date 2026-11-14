@@ -91,3 +91,16 @@
 - 고쳐 쓰기 후보가 원래 의도(거절·기한·요청)를 지켰는가
 - 엔진이 낸 설명이 실제 문제 구절을 짚었는가
 - 관련 구절·맥락을 지우거나 바꿨을 때 판정이 바뀌는가
+
+## 거친 말 맥락 세트 (T-16b, 초안 2026-11-14)
+
+`eval/label/candidates_t16b.jsonl` — 12쌍(24문장). 같은 거친 말(욕·"꺼져"·"뭐래" 등)을 **장난 맥락(A)**과 **무거운 맥락(B)**에 붙였다. T-16에서는 맥락대로 갈린 쌍이 30쌍 중 7쌍뿐이었는데, 거친 말은 맥락이 판단을 실제로 가르는 구간인지 보려는 세트다(일지 2026-11-13 9절).
+
+- **AI가 쓴 초안이다.** 라벨 전에 조원 한 명이 "A가 정말 장난으로 읽히는지, 평소 우리가 이렇게 치는지" 보고 고친다. T-16에서는 AI가 만든 "괜찮은 맥락"이 사람에게 괜찮지 않았다.
+- 판단 기준은 위와 같다("친한 사이의 농담이나 장난이 맥락상 분명하다"면 알려 줄 필요 없음).
+- **T-16의 `key.json`·합의본을 덮어쓰지 않게 폴더와 파일을 따로 준다.**
+  ```bash
+  uv run --project engine python eval/label/label.py export --candidates eval/label/candidates_t16b.jsonl --out eval/label/out_t16b --seed 17
+  uv run --project engine python eval/label/label.py merge --key eval/label/out_t16b/key.json --out eval/contrast_set_t16b.jsonl labels_*.json
+  ```
+- 합의본이 나오면 `eval/live_eval.py run --set eval/contrast_set_t16b.jsonl …`로 실제 모델이 맥락대로 가르는지 본다.

@@ -17,6 +17,16 @@ def test_candidates_shape():
         assert (a["side"], b["side"]) == ("A", "B") and a["draft"] == b["draft"] and a["them"] != b["them"]
 
 
+def test_rough_word_candidates_shape():
+    # T-16b(거친 말 × 장난/무거운 맥락) 초안: 쌍마다 같은 문장, 다른 상대 말. 라벨 전이라 정답 칸이 없다
+    rows = label._read(REPO / "eval/label/candidates_t16b.jsonl")
+    assert len(rows) == 24 and all(set(r) == {"pair", "side", "relation", "them", "draft"} for r in rows)
+    for p in range(1, 13):
+        a, b = [r for r in rows if r["pair"] == p]
+        assert (a["side"], b["side"]) == ("A", "B") and a["draft"] == b["draft"] and a["them"] != b["them"]
+        assert a["relation"] == b["relation"]
+
+
 def test_export_blinded_and_not_adjacent(tmp_path):
     label.export(CANDS, tmp_path, seed=1)
     key = json.loads((tmp_path / "key.json").read_text(encoding="utf-8"))
