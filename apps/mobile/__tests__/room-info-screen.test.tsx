@@ -210,16 +210,18 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 describe('P-46 편한 사이', () => {
   beforeEach(() => AsyncStorage.clear());
   const casualSwitch = (find: Awaited<ReturnType<typeof setup>>['find']) => find((n) => n.props.accessibilityRole === 'switch' && n.props.accessibilityLabel === '편한 사이')[0];
+  const on = (n: TestInstance) => n.props['aria-checked'] ?? n.props.value ?? n.props.checked;
+  // 웹에서 그려진 스위치는 onChange를 받는다(알림 끄기 테스트와 같은 방식)
+  const flip = (n: TestInstance, v: boolean) => act(async () => (n.props.onChange as (e: unknown) => void)({ nativeEvent: { value: v }, target: { value: v } }));
 
-  // TODO(P-46): 스위치를 누르는 부분에서 테스트가 실패한다(원인 미확인). 고칠 때까지 건너뛴다
-  test.skip('켜면 이 방에 저장하고, 끄면 지운다. 서버에는 쓰지 않는다', async () => {
+  test('켜면 이 방에 저장하고, 끄면 지운다. 서버에는 쓰지 않는다', async () => {
     const { find, texts } = await setup('direct');
-    expect(casualSwitch(find).props.value).toBe(false);
+    expect(on(casualSwitch(find))).toBeFalsy();
     expect(texts()).toContain('상대는 다르게 느낄 수도 있어요');
-    await act(async () => casualSwitch(find).props.onValueChange(true));
-    expect(casualSwitch(find).props.value).toBe(true);
+    await flip(casualSwitch(find), true);
+    expect(on(casualSwitch(find))).toBeTruthy();
     expect(await AsyncStorage.getItem('casual:r1')).toBe('1');
-    await act(async () => casualSwitch(find).props.onValueChange(false));
+    await flip(casualSwitch(find), false);
     expect(await AsyncStorage.getItem('casual:r1')).toBeNull();
     expect(mockUpdate).not.toHaveBeenCalled();
   });
@@ -227,6 +229,6 @@ describe('P-46 편한 사이', () => {
   test('저장해 둔 표시를 읽어 켜진 채로 보인다', async () => {
     await AsyncStorage.setItem('casual:r1', '1');
     const { find } = await setup('direct');
-    expect(casualSwitch(find).props.value).toBe(true);
+    expect(on(casualSwitch(find))).toBeTruthy();
   });
 });
