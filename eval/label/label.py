@@ -2,6 +2,8 @@
   export: 후보(candidates_t16.jsonl) -> 섞인 라벨 양식(form.html)과 정답 대응표(key.json)
   merge : 두 사람 라벨(json) + key -> 일치율·Cohen's kappa·불일치 목록, 합의본 jsonl
           세 사람 이상 -> 다수결 합의본, Fleiss kappa, 만장일치·거의 갈림(3:2)·동표, 사람별 경고 비율(보고서 json)
+  codes : 라벨 페이지(T-16c)의 제출 코드·저장소 문서(한 줄에 JSON 하나) -> 사람별 labels_<이름>.json(merge 입력)
+  ranks : 같은 제출의 욕 세기(약1·중2·강3) -> 표현별 득표, 사람끼리 일치도, 엔진 강도 표(P-44)와 비교
 후보는 AI가 초안만 썼다. 어느 면이 의도였는지는 양식에 나오지 않고, 최종 라벨은 사람이 정한다."""
 from __future__ import annotations
 
@@ -154,6 +156,71 @@ def merge_many(key: Path, files: list[Path], out: Path) -> dict:
     return res
 
 
+def codes(src: Path, out: Path) -> list[Path]:
+    """제출 코드(또는 저장소에서 내보낸 문서)를 사람별 파일로. 같은 이름이 또 오면 나중 것이 이긴다(다시 제출)."""
+    out.mkdir(parents=True, exist_ok=True)
+    by: dict[str, dict] = {}
+    for line in Path(src).read_text(encoding="utf-8-sig").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        d = json.loads(line)
+        name = str(d.get("labeler", "")).strip()
+        if not name or not isinstance(d.get("labels"), dict):
+            raise SystemExit("labeler와 labels가 있어야 한다")
+        by[name] = {"labeler": name, "labels": d["labels"], "ranks": d.get("ranks", {})}
+    files = []
+    for name, d in by.items():
+        f = out / f"labels_{''.join(c if c.isalnum() else '_' for c in name)}.json"
+        f.write_text(json.dumps(d, ensure_ascii=False), encoding="utf-8")
+        files.append(f)
+    print(f"{len(files)}명 -> {out}")
+    return files
+
+
+def fleiss_multi(counts: list[list[int]]) -> float | None:
+    """counts: 항목마다 범주별 표 수. 모든 항목의 평가자 수가 같아야 한다(2명 이상)."""
+    if not counts:
+        return None
+    n = sum(counts[0])
+    if n < 2 or any(sum(c) != n for c in counts):
+        return None
+    big_n = len(counts)
+    p_bar = sum((sum(x * x for x in c) - n) / (n * (n - 1)) for c in counts) / big_n
+    p_j = [sum(c[j] for c in counts) / (big_n * n) for j in range(len(counts[0]))]
+    pe = sum(x * x for x in p_j)
+    return (p_bar - pe) / (1 - pe) if pe < 1 else (1.0 if p_bar == 1 else 0.0)
+
+
+def ranks(table: Path, files: list[Path], out: Path | None = None) -> dict:
+    """표현별 약·중·강 득표, 다수(동표면 None), 사람끼리 일치도(Fleiss, 셋 범주), 엔진 표와 같은 비율."""
+    rows = _read(table)
+    ls = [json.loads(Path(f).read_text(encoding="utf-8")) for f in files]
+    items, counts = [], []
+    for r in rows:
+        votes = [l["ranks"][r["id"]] for l in ls if r["id"] in l.get("ranks", {})]
+        c = [votes.count(v) for v in (1, 2, 3)]
+        top = max(c)
+        major = (c.index(top) + 1) if top and c.count(top) == 1 else None
+        items.append({"id": r["id"], "text": r["text"], "table": r["table"], "votes": c, "majority": major,
+                      "mean": round(sum(votes) / len(votes), 2) if votes else None})
+        if len(votes) == len(ls):
+            counts.append(c)
+    k = fleiss_multi(counts)
+    decided = [i for i in items if i["majority"] is not None]
+    res = {"labelers": len(ls), "n": len(items), "fleiss_kappa": round(k, 3) if k is not None else None,
+           "agree_with_table": round(sum(i["majority"] == i["table"] for i in decided) / len(decided), 3) if decided else None,
+           "ties": [i["id"] for i in items if i["majority"] is None], "items": items}
+    print(f"라벨러 {res['labelers']}명, 표현 {res['n']}개, Fleiss kappa(약·중·강) {res['fleiss_kappa']}, "
+          f"다수가 엔진 표와 같은 비율 {res['agree_with_table']}, 동표 {len(res['ties'])}")
+    for i in items:
+        mark = "" if i["majority"] == i["table"] else "  ← 표와 다름"
+        print(f"  {i['text']:<8} 약{i['votes'][0]} 중{i['votes'][1]} 강{i['votes'][2]}  다수 {i['majority']} · 표 {i['table']}{mark}")
+    if out:
+        Path(out).write_text(json.dumps(res, ensure_ascii=False, indent=1), encoding="utf-8")
+    return res
+
+
 def main(argv: list[str]) -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -165,11 +232,22 @@ def main(argv: list[str]) -> None:
     m.add_argument("--key", type=Path, default=HERE / "out" / "key.json")
     m.add_argument("labels", type=Path, nargs="+", help="라벨 파일 2개(합의 전 일치율) 또는 3개 이상(다수결)")
     m.add_argument("--out", type=Path, default=HERE.parent / "contrast_set_t16.jsonl")
+    c = sub.add_parser("codes")
+    c.add_argument("src", type=Path, help="제출 코드를 한 줄에 하나씩 모은 파일")
+    c.add_argument("--out", type=Path, default=HERE / "out_t16c")
+    r = sub.add_parser("ranks")
+    r.add_argument("labels", type=Path, nargs="+")
+    r.add_argument("--table", type=Path, default=HERE / "rough_rank_t16c.jsonl")
+    r.add_argument("--out", type=Path, default=HERE.parent / "rough_rank_t16c.report.json")
     a = ap.parse_args(argv)
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")   # Windows 콘솔(cp949)에서 한국어 출력이 깨지지 않게
     if a.cmd == "export":
         export(a.candidates, a.out, a.seed)
+    elif a.cmd == "codes":
+        codes(a.src, a.out)
+    elif a.cmd == "ranks":
+        ranks(a.table, a.labels, a.out)
     elif len(a.labels) == 2:
         merge(a.key, *a.labels, a.out)
     elif len(a.labels) >= 3:
