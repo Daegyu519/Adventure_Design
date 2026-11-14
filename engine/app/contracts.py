@@ -17,11 +17,16 @@ class HintIn(BaseModel):
     text: Draft
     seq: int = Field(ge=0)
     reply_to: int | None = Field(None, gt=0, lt=2**63)   # messages.id는 양수 bigint(hooks.py와 같은 범위)
+    # 보내는 사람이 이 방을 '편한 사이'로 표시했다(기기 설정, P-46). 자기 알림 단계를 낮추는 데만 쓴다. 없거나 null이면 표시 안 함
+    # (기본값을 두지 않는다: 생성한 앱 타입에서 필수 칸이 되어 옛 호출이 깨진다)
+    casual: bool | None = None
 
 
 class HintBody(BaseModel):
     title: str
     detail: str
+    level: Literal["card", "soft"] = "card"   # card: 보내기 전에 묻는다 · soft: 막지 않고 조용히 알린다(P-46)
+    can_soften: bool = False                  # 편한 사이로 표시하면 단계가 낮아지는 알림(앱이 그때만 버튼을 보인다)
 
 
 class HintOut(BaseModel):

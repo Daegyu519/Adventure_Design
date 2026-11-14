@@ -212,13 +212,26 @@ export interface components {
         };
         /** HintBody */
         HintBody: {
+            /**
+             * Can Soften
+             * @default false
+             */
+            can_soften: boolean;
             /** Detail */
             detail: string;
+            /**
+             * Level
+             * @default card
+             * @enum {string}
+             */
+            level: "card" | "soft";
             /** Title */
             title: string;
         };
         /** HintIn */
         HintIn: {
+            /** Casual */
+            casual?: boolean | null;
             /** Reply To */
             reply_to?: number | null;
             /**

@@ -14,7 +14,8 @@ from experts.registry import Registry, run_all
 from harness.pii import TOKEN, Masker
 from harness.schemas import Conversation, DetailReport, FeedbackResult, GateResult, Hint, RewriteOption, Turn, Verdict
 from harness.store import ProfileStore
-from layers import gate, rewrite
+from harness import korean as K
+from layers import gate, level, rewrite
 from layers.aggregate import aggregate, merged, top_reading
 from layers.guard import OPTION_LABELS, guard, render_detail, render_hint, render_mismatch
 
@@ -31,11 +32,14 @@ class RealtimeOutcome:
     results: list[ExpertResult]
     outcome: Literal["gated", "abstain", "alert", "none"]
     clf: float | None = None   # 판별기 cold_score(숫자만). 못 왔으면 None
+    level: level.Level = "none"   # 알림 단계(P-46): card·soft·none. hint가 있으면 card나 soft
+    can_soften: bool = False      # 편한 사이로 표시하면 단계가 낮아지는 알림인가
 
 
 async def realtime(reg: Registry, draft: str, convo: Conversation, store: ProfileStore, user_id: str,
-                   names: list[str], t0: float) -> RealtimeOutcome:
-    """t0는 요청이 들어온 time.monotonic(). 전문가는 t0 + expert_deadline_ms 안에 온 것만 쓴다."""
+                   names: list[str], t0: float, casual: bool = False) -> RealtimeOutcome:
+    """t0는 요청이 들어온 time.monotonic(). 전문가는 t0 + expert_deadline_ms 안에 온 것만 쓴다.
+    casual: 보내는 사람이 이 방을 편한 사이로 표시했다(앱 기기 설정). 알림 단계를 낮추는 데만 쓴다(layers/level.py)."""
     m = Masker(names)
     draft, convo = m(draft), m.conversation(convo)
     path, agg = reg.cfg["paths"]["realtime"], reg.cfg["aggregate"]
@@ -52,8 +56,11 @@ async def realtime(reg: Registry, draft: str, convo: Conversation, store: Profil
     ctx = next((r.output for r in results if r.role == "context"), None)
     tones = [(r.output, reg.weight(r.expert_id)) for r in results if r.role == "tone"]
     v = aggregate(draft, g, ctx, tones, store, convo, agg, clf, cues=True)
-    hint = render_hint(v)
-    return RealtimeOutcome(g, v, hint, results, "abstain" if v.abstain else "alert" if v.alert else "none", clf)
+    rough, banter = K.rough_level(draft), level.playful(convo.last_them())
+    lv = level.decide(v.alert, rough, casual, banter, v.pattern_used)
+    hint = render_hint(v) if lv != "none" else None
+    status = "abstain" if v.abstain else "alert" if hint else "none"   # 단계가 none으로 낮아진 알림은 힌트 없음과 같다
+    return RealtimeOutcome(g, v, hint, results, status, clf, lv, level.can_soften(v.alert, rough, casual, banter, v.pattern_used))
 
 
 def mask_feedback(complaint: str, about: str, names: list[str]) -> tuple[str, str]:

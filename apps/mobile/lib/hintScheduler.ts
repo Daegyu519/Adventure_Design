@@ -1,6 +1,7 @@
 import type { HintRes } from './engine';
 
-export type Hint = NonNullable<HintRes['hint']>;
+// 화면에 보이는 문구만. 알림 단계(level·can_soften, P-46)는 보낼 때 확인(sendReview)에서 HintRes로 직접 본다.
+export type Hint = Pick<NonNullable<HintRes['hint']>, 'title' | 'detail'>;
 type Result = { hint: Hint | null; traceId: string | null };
 const NONE: Result = { hint: null, traceId: null };
 const BACKOFF_MS = 5000; // 실패(429 Retry-After 없음·503·네트워크·그 밖의 상태) 뒤 기본 대기

@@ -11,6 +11,7 @@ import { loadErrorMessage } from '../../../lib/dbErrors';
 import { useAnnounce } from '../../../lib/announce';
 import { focusNode } from '../../../lib/focus';
 import { GROUP_MAX, MAKE_FAILED, rpcText, shareInviteCode } from '../../../lib/invite';
+import { loadCasual, saveCasual } from '../../../lib/casual';
 import { fetchRoom, roomTitle, setMuted, type Member } from '../../../lib/rooms';
 import { useSession } from '../../../lib/session';
 import { supabase } from '../../../lib/supabase';
@@ -27,6 +28,21 @@ export default function RoomInfo() {
   const [tick, setTick] = useState(0);
   const [muted, setMutedState] = useState(false);
   const [muteError, setMuteError] = useState(false);
+  const [casual, setCasual] = useState(false); // 편한 사이 표시(P-46, 이 기기에만 저장)
+  useEffect(() => {
+    if (!id) return;
+    let alive = true;
+    void loadCasual(id).then((v) => alive && setCasual(v));
+    return () => {
+      alive = false;
+    };
+  }, [id]);
+  const toggleCasual = (next: boolean) => {
+    if (!id) return;
+    setCasual(next);
+    void saveCasual(id, next);
+    say(next ? '이 방을 편한 사이로 표시했어요' : '편한 사이 표시를 껐어요');
+  };
   const muting = useRef(false);
   const [code, setCode] = useState<string | null>(null);
   const [inviteError, setInviteError] = useState<string | null>(null);
@@ -203,6 +219,35 @@ export default function RoomInfo() {
                     바꾸지 못했어요. 연결을 확인하고 다시 해 주세요.
                   </AppText>
                 )}
+              </View>
+
+              <View style={{ gap: space[0] }}>
+                <View testID="casual-row" style={{ flexDirection: 'row', alignItems: 'center', gap: space[3], minHeight: 44 }}>
+                  <Pressable
+                    testID="casual-label"
+                    accessible={false}
+                    tabIndex={-1}
+                    aria-hidden
+                    accessibilityElementsHidden
+                    importantForAccessibility="no-hide-descendants"
+                    onPress={() => toggleCasual(!casual)} style={{ flex: 1, minHeight: 44, justifyContent: 'center' }}>
+                    <AppText>편한 사이</AppText>
+                  </Pressable>
+                  <Switch
+                    accessibilityRole="switch"
+                    accessibilityLabel="편한 사이"
+                    accessibilityHint="가벼운 거친 말 알림을 줄여요"
+                    value={casual}
+                    onValueChange={toggleCasual}
+                    hitSlop={space[1]}
+                    trackColor={{ false: colors.textMuted, true: colors.primary }}
+                    thumbColor={colors.background}
+                    {...{ activeThumbColor: colors.background }}
+                  />
+                </View>
+                <AppText variant="small" color="textMuted">
+                  켜면 장난스러운 대화에서 가벼운 거친 말 알림이 줄어요. 센 말이나 진지한 대화에서는 그대로 알려요. 상대는 다르게 느낄 수도 있어요. 이 기기에만 저장돼요.
+                </AppText>
               </View>
 
               <View ref={searchBtnRef}>

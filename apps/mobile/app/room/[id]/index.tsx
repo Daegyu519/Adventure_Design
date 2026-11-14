@@ -28,6 +28,7 @@ import { useTyping } from '../../../lib/useTyping';
 import { useReactions } from '../../../lib/useReactions';
 import { useRoomMessages, type SendError, type SendInput } from '../../../lib/useRoomMessages';
 import { useSession } from '../../../lib/session';
+import { CASUAL_NOTE, loadCasual, saveCasual } from '../../../lib/casual';
 import { reviewBeforeSend } from '../../../lib/sendReview';
 import type { HintRes } from '../../../lib/engine';
 import { logToneEvent } from '../../../lib/toneEvents';
@@ -95,6 +96,18 @@ function RoomBody({ id, me }: { id: string; me: string }) {
   const [ventFor, setVentFor] = useState<Msg | null>(null);
   const [detailText, setDetailText] = useState<string | null>(null); // 살펴보기 시트: 열 때의 입력창 글(null = 닫힘)
   const [toast, setToast] = useState<string | null>(null);
+  // 편한 사이 표시(P-46, 기기 저장). 방 정보에서 바꾸고 돌아오면 다시 읽는다. 읽기 전에는 표시하지 않은 것으로 본다.
+  const casual = useRef(false);
+  useEffect(() => {
+    if (!id || !focused) return;
+    let alive = true;
+    void loadCasual(id).then((v) => {
+      if (alive) casual.current = v;
+    });
+    return () => {
+      alive = false;
+    };
+  }, [id, focused]);
   const hideToast = useCallback(() => setToast(null), []);
   const [replyTarget, setReplyTarget] = useState<Msg | null>(null);
   const [extra, setExtra] = useState<Map<number, Msg>>(new Map()); // 불러온 범위 밖 원문(인용용). 목록에는 넣지 않는다
@@ -296,6 +309,15 @@ function RoomBody({ id, me }: { id: string; me: string }) {
     retryFocus(() => (unmounted.current ? null : inputRef.current), { delay: reducedMotion ? 0 : 30 });
   }, [transmit, reducedMotion]);
 
+  // 경고창의 "편한 사이예요": 이 방을 편한 사이로 표시하고(기기 저장) 이번 글은 그대로 보낸다.
+  const markCasual = useCallback(() => {
+    casual.current = true;
+    void saveCasual(id, true);
+    setToast(CASUAL_NOTE);
+    say(CASUAL_NOTE);
+    confirmSend();
+  }, [id, say, confirmSend]);
+
   const onSend = useCallback(async () => {
     const text = draft.trim();
     if (!text || sending.current) return;
@@ -311,11 +333,16 @@ function RoomBody({ id, me }: { id: string; me: string }) {
       reviewCtrl.current = ctrl;
       setChecking(true);
       say('전송 확인 중');
-      const result = await reviewBeforeSend({ room_id: id, text, seq: ++reviewSeq.current, ...(replyTarget ? { reply_to: replyTarget.id } : {}) }, ctrl.signal);
+      const result = await reviewBeforeSend({ room_id: id, text, seq: ++reviewSeq.current, casual: casual.current, ...(replyTarget ? { reply_to: replyTarget.id } : {}) }, ctrl.signal);
       if (unmounted.current || ctrl.signal.aborted) return;
       reviewCtrl.current = null;
       setChecking(false);
-      if (result?.hint) {
+      if (result?.hint?.level === 'soft') {
+        // 조용한 표시(P-46): 보내기를 막지 않는다. 한 줄로만 알리고 그대로 전송한다.
+        logToneEvent({ room_id: id, kind: 'hint_shown', signals: { trace_id: result.trace_id, level: 'soft' } });
+        setToast(result.hint.title);
+        say(result.hint.title);
+      } else if (result?.hint) {
         warnedDraft.current = text;
         setSendWarning(result);
         logToneEvent({ room_id: id, kind: 'hint_shown', signals: { trace_id: result.trace_id } });
@@ -600,6 +627,7 @@ function RoomBody({ id, me }: { id: string; me: string }) {
         <AppText>{sendWarning?.hint?.detail}</AppText>
         <Button label="수정하기" onPress={closeDetail} />
         <Button label="그대로 보내기" kind="secondary" onPress={confirmSend} />
+        {sendWarning?.hint?.can_soften ? <Button label="편한 사이예요" kind="ghost" onPress={markCasual} /> : null}
         <Button label="살펴보기" kind="ghost" onPress={() => {
           if (pendingSend.current?.text) setDetailText(pendingSend.current.text);
         }} />

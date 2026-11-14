@@ -35,7 +35,7 @@ async def hint(body: HintIn, user: UUID = Depends(current_user), repo: Repo = De
     async def run() -> pipeline.RealtimeOutcome:
         await ensure_member(repo, body.room_id, user)   # 방을 읽기 전에(Repo는 접근 검사를 하지 않는다)
         ctx = await load_context(repo, body.room_id, user, body.reply_to, datetime.now(timezone.utc))
-        return await pipeline.realtime(reg, body.text, ctx.convo, ctx.store, str(user), ctx.names, t0)
+        return await pipeline.realtime(reg, body.text, ctx.convo, ctx.store, str(user), ctx.names, t0, bool(body.casual))
 
     budget = reg.cfg["paths"]["realtime"]["deadline_ms"] / 1000 - (time.monotonic() - t0)
     out: pipeline.RealtimeOutcome | None = None
@@ -50,5 +50,6 @@ async def hint(body: HintIn, user: UUID = Depends(current_user), repo: Repo = De
         log.warning("hint failed: %s", type(e).__name__)
         status = "error"
     traces.submit(queue, repo, trace_id, "realtime", user, body.room_id, status, t0, out)
-    shown = HintBody(title=out.hint.title, detail=out.hint.detail) if out and out.hint else None
+    shown = (HintBody(title=out.hint.title, detail=out.hint.detail, level="soft" if out.level == "soft" else "card",
+                      can_soften=out.can_soften) if out and out.hint else None)
     return HintOut(seq=body.seq, hint=shown, trace_id=trace_id)

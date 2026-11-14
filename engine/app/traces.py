@@ -49,6 +49,8 @@ def build_trace(trace_id: UUID, path: Literal["realtime", "detail"], user_id: UU
                "results": [expert_summary(r) for r in outcome.results] if outcome else []}
     if outcome and outcome.clf is not None:
         experts["clf"] = round(outcome.clf, 3)   # 판별기 cold_score, 숫자만(P-28)
+    if isinstance(outcome, pipeline.RealtimeOutcome) and v is not None and v.alert:
+        experts["level"] = outcome.level   # 알림 단계 card·soft·none(P-46, 고정 어휘)
     # DB check는 hint|detail|mirror다: 엔진 안의 realtime 경로 이름은 hint로 적는다.
     return TraceRow(trace_id, "hint" if path == "realtime" else path, user_id, room_id, experts,
                     v.risk if v else None, bool(v and v.alert), latency_ms)

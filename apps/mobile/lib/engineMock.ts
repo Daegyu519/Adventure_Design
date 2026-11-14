@@ -48,9 +48,15 @@ export function createMockEngine(): Engine {
       await wait(o?.signal);
       const t = b.text.trim();
       const cold = t.endsWith('.') || /안 돼|싫|알아서/.test(t);
+      // 알림 단계 시연(P-46): 가벼운 거친 말은 편한 사이로 표시하면 조용한 표시로 낮아진다. 실제 규칙은 엔진 layers/level.py
+      const rough = /ㅅㅂ|시발|꺼져|닥쳐|지랄/.test(t);
       return {
         seq: b.seq,
-        hint: cold ? { title: '차갑게 느껴질 수도 있어요', detail: '이유 없이 거절하는 말로 읽힐 수도 있어요' } : null,
+        hint: rough
+          ? { title: '화난 것처럼 느껴질 수도 있어요', detail: '거친 말이 섞이면 화난 것처럼 들리기도 해요', level: b.casual ? 'soft' : 'card', can_soften: !b.casual }
+          : cold
+            ? { title: '차갑게 느껴질 수도 있어요', detail: '이유 없이 거절하는 말로 읽힐 수도 있어요', level: 'card', can_soften: false }
+            : null,
         trace_id: 'mock',
       };
     },

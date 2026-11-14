@@ -8,7 +8,7 @@ let results: { hint: Hint | null; traceId: string | null }[];
 let on: boolean;
 const request = jest.fn((text: string, seq: number, signal: AbortSignal) => new Promise<HintRes>((resolve, reject) => calls.push({ text, seq, signal, resolve, reject })));
 const mk = () => createHintScheduler({ request, onResult: (r) => results.push(r), enabled: () => on });
-const ok = (seq: number, hint: Hint | null = H): HintRes => ({ seq, hint, trace_id: 't' });
+const ok = (seq: number, hint: Hint | null = H): HintRes => ({ seq, hint: hint as HintRes['hint'], trace_id: 't' }); // 스케줄러는 문구(title·detail)만 쓴다
 const last = () => results[results.length - 1];
 
 beforeEach(() => {
