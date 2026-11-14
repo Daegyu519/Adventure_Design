@@ -17,6 +17,16 @@ def test_candidates_shape():
         assert (a["side"], b["side"]) == ("A", "B") and a["draft"] == b["draft"] and a["them"] != b["them"]
 
 
+def test_rough_word_candidates_shape():
+    # T-16b(거친 말 × 장난/무거운 맥락) 초안: 쌍마다 같은 문장, 다른 상대 말. 라벨 전이라 정답 칸이 없다
+    rows = label._read(REPO / "eval/label/candidates_t16b.jsonl")
+    assert len(rows) == 24 and all(set(r) == {"pair", "side", "relation", "them", "draft"} for r in rows)
+    for p in range(1, 13):
+        a, b = [r for r in rows if r["pair"] == p]
+        assert (a["side"], b["side"]) == ("A", "B") and a["draft"] == b["draft"] and a["them"] != b["them"]
+        assert a["relation"] == b["relation"]
+
+
 def test_export_blinded_and_not_adjacent(tmp_path):
     label.export(CANDS, tmp_path, seed=1)
     key = json.loads((tmp_path / "key.json").read_text(encoding="utf-8"))
@@ -80,8 +90,9 @@ def test_merge_many_majority_weak_ties_and_eval(tmp_path):
     assert res["labelers"] == 5 and res["n"] == 60 and res["consensus"] == 59
     assert res["weak"] == ["i001"] and res["ties"] == ["i003"]
     rows = label._read(out)
-    assert all(set(r) == {"pair", "side", "relation", "them", "draft", "alert"} for r in rows)
+    assert all(set(r) == {"pair", "side", "relation", "them", "draft", "alert", "votes"} for r in rows)
     assert all(r["alert"] == (r["side"] == "B") for r in rows)
+    assert all(3 <= sum(r["votes"]) <= 5 and r["alert"] == (r["votes"][0] > r["votes"][1]) for r in rows)
     assert res["per_labeler"]["c"]["agree_with_majority"] < 1.0 and res["per_labeler"]["a"]["agree_with_majority"] == 1.0
     assert 0 < res["fleiss_kappa"] < 1
     rep = json.loads(out.with_suffix(".report.json").read_text(encoding="utf-8"))

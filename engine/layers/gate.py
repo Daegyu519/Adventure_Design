@@ -56,8 +56,10 @@ def score(draft: str, convo: Conversation, store: ProfileStore, user_id: str, th
     matched = pattern_matches(signals, store, convo.pair_id, global_min_obs)
     prior += min(0.3, 0.15 * len(matched))
 
+    # 욕·따지는 말에 붙은 "!", "~", "좀"은 누그러뜨리는 말이 아니다("꺼져!", "좀 닥쳐"). 사과만 그대로 본다(P-42)
+    rough = s["profanity"] or s["blame"]
     for k in ("softener", "hedge", "apology"):
-        if s[k]:
+        if s[k] and not (rough and k != "apology"):
             prior -= 0.1
     if s["has_reason"]:
         prior -= 0.1

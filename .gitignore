@@ -26,3 +26,4 @@ model.ts
 
 # P-16 라벨 내보내기 산출물(정답 key 포함)
 eval/label/out/
+eval/label/out_*/

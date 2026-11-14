@@ -205,3 +205,26 @@ def test_profanity_cue_reads_angry():
     g = GateResult(prior=0.6, signals=["따지는 말투", "비속어"], passed=True)
     v = A.aggregate("ㅅㅂ 왜 이제 말해", g, None, [(neg, 1.0)], ProfileStore(), CONVO, CFG, cues=True)
     assert v.top_reading == "화나게" and v.signals[0] == "비속어"
+
+
+def test_rough_word_false_positives_p42():
+    score = lambda t: gate.score(t, CONVO, ProfileStore(), "me", 0.0, 5)  # noqa: E731
+    # 강조어로만 쓴 거친 말 + 좋은 뜻: 비속어 아님. 욕 자체나 따지는 말이 있으면 그대로 비속어
+    for t in ("존나 고마워", "ㅁㅊ 대박", "ㅈㄴ 맛있다", "졸라 웃겨"):
+        assert "비속어" not in score(t).signals, t
+    for t in ("존나 싫어", "ㅈㄴ 귀찮게 하네", "씨발 고마워", "존나 안 좋아", "존나 좋겠냐", "ㅈㄴ 좋은데 왜 이제 말해"):
+        assert "비속어" in score(t).signals, t
+    # 비슷한 낱말
+    for t in ("그 말 계속 곱씹게 돼", "애가 졸라서 사줬어", "허리띠 졸라매야지"):
+        assert "비속어" not in score(t).signals, t
+    assert "비속어" in score("씹어 먹을 놈").signals and "비속어" in score("졸라 짜증나").signals
+    # 공감하는 말은 따지는 말투가 아니다
+    for t in ("진짜 짜증나겠다ㅠ", "와 열받겠다", "짜증날 만하네"):
+        assert "따지는 말투" not in score(t).signals, t
+    for t in ("아 짜증나", "열받네 진짜"):
+        assert "따지는 말투" in score(t).signals, t
+    # 욕·따지는 말에 붙은 느낌표·물결·"좀"은 사전점수를 깎지 않는다. 사과는 깎는다
+    assert score("꺼져!").prior == score("꺼져").prior and score("좀 닥쳐~").prior == score("닥쳐").prior
+    assert score("왜 매번 이래!").prior == score("왜 매번 이래").prior
+    assert score("고마워!").prior <= score("고마워").prior          # 평범한 말에서는 그대로 누그러뜨림
+    assert score("미안 씨발 깜빡했어").prior < score("씨발 깜빡했어").prior

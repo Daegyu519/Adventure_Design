@@ -1,0 +1,60 @@
+{"pair": 1, "side": "A", "relation": "친구", "them": "오늘 비 와서 약속 취소해도 괜찮지?", "draft": "괜찮아", "alert": false, "votes": [0, 5]}
+{"pair": 1, "side": "B", "relation": "친구", "them": "나 오늘 면접 또 떨어졌어... 진짜 괜찮은 건가 싶다", "draft": "괜찮아", "alert": false, "votes": [0, 5]}
+{"pair": 2, "side": "A", "relation": "연인", "them": "저녁 뭐 먹을까? 난 아무거나 좋아", "draft": "알아서 해", "alert": true, "votes": [5, 0]}
+{"pair": 2, "side": "B", "relation": "연인", "them": "나 친구들이랑 여행 가도 돼? 너 혼자 있게 되는데", "draft": "알아서 해", "alert": true, "votes": [4, 1]}
+{"pair": 3, "side": "A", "relation": "가족", "them": "엄마 반찬 보냈어 안 먹어도 돼 부담 갖지 마", "draft": "됐어", "alert": true, "votes": [4, 1]}
+{"pair": 3, "side": "B", "relation": "가족", "them": "엄마가 일부러 시간 내서 데리러 간다는데 왜 연락도 없어?", "draft": "됐어", "alert": true, "votes": [5, 0]}
+{"pair": 4, "side": "A", "relation": "선후배", "them": "선배 저 먼저 퇴근합니다!", "draft": "수고하세요", "alert": false, "votes": [0, 5]}
+{"pair": 4, "side": "B", "relation": "선후배", "them": "선배 저 이번 과제 때문에 며칠째 밤샜어요ㅠ", "draft": "수고하세요", "alert": true, "votes": [4, 1]}
+{"pair": 5, "side": "A", "relation": "직장", "them": "보고서 수정본 공유드립니다", "draft": "확인했습니다", "alert": false, "votes": [0, 5]}
+{"pair": 5, "side": "B", "relation": "직장", "them": "팀장님 이번 프로젝트 제 실수로 일정이 밀렸습니다 죄송합니다", "draft": "확인했습니다", "alert": false, "votes": [0, 5]}
+{"pair": 6, "side": "A", "relation": "동아리", "them": "이번 주 모임 장소 바뀐대", "draft": "그렇구나", "alert": false, "votes": [1, 4]}
+{"pair": 6, "side": "B", "relation": "동아리", "them": "나 이번에 동아리 회장 떨어졌어... 열심히 준비했는데", "draft": "그렇구나", "alert": true, "votes": [4, 1]}
+{"pair": 7, "side": "A", "relation": "친구", "them": "나 오늘 장학금 받았어!!", "draft": "축하해", "alert": false, "votes": [1, 4]}
+{"pair": 7, "side": "B", "relation": "친구", "them": "나 이번에 같이 준비하던 시험 붙었어. 너는 어때?", "draft": "축하해", "alert": false, "votes": [1, 4]}
+{"pair": 8, "side": "A", "relation": "연인", "them": "생일 선물 마음에 들어?", "draft": "고마워", "alert": false, "votes": [2, 3]}
+{"pair": 8, "side": "B", "relation": "연인", "them": "오늘 기념일인데 나 하루 종일 기다렸어", "draft": "고마워", "alert": false, "votes": [2, 3]}
+{"pair": 9, "side": "A", "relation": "가족", "them": "아빠 오늘 늦을 것 같아 먼저 먹어", "draft": "알았어", "alert": false, "votes": [0, 5]}
+{"pair": 9, "side": "B", "relation": "가족", "them": "아빠 나 이번 학기 휴학하려고 해. 얘기 좀 하자", "draft": "알았어", "alert": false, "votes": [0, 5]}
+{"pair": 10, "side": "A", "relation": "선후배", "them": "내일 회의 10시로 바뀌었어", "draft": "네 알겠습니다", "alert": false, "votes": [0, 5]}
+{"pair": 10, "side": "B", "relation": "선후배", "them": "선배 저 이거 어떻게 하는지 정말 모르겠어요 도와주실 수 있을까요", "draft": "네 알겠습니다", "alert": false, "votes": [0, 5]}
+{"pair": 11, "side": "A", "relation": "직장", "them": "그 자료 오늘 중으로 가능할까요?", "draft": "그건 어렵습니다", "alert": false, "votes": [1, 4]}
+{"pair": 11, "side": "B", "relation": "직장", "them": "제가 이번 일 정말 열심히 했는데 한 번만 봐주시면 안 될까요", "draft": "그건 어렵습니다", "alert": false, "votes": [2, 3]}
+{"pair": 12, "side": "A", "relation": "동아리", "them": "이번 행사 같이 준비할 수 있어?", "draft": "다음에 하자", "alert": false, "votes": [0, 5]}
+{"pair": 12, "side": "B", "relation": "동아리", "them": "저 사실 팀 프로젝트 때문에 많이 지쳐서 도움이 필요해요", "draft": "다음에 하자", "alert": true, "votes": [3, 2]}
+{"pair": 13, "side": "A", "relation": "친구", "them": "늦어도 괜찮아 천천히 와~", "draft": "미안", "alert": false, "votes": [2, 3]}
+{"pair": 13, "side": "B", "relation": "친구", "them": "너 어제 내 생일 완전 잊었더라 서운했어", "draft": "미안", "alert": true, "votes": [3, 2]}
+{"pair": 14, "side": "A", "relation": "연인", "them": "오늘 좀 피곤해서 일찍 잘게", "draft": "그래", "alert": false, "votes": [2, 3]}
+{"pair": 14, "side": "B", "relation": "연인", "them": "나 오늘 회사에서 크게 혼났어 너무 속상해", "draft": "그래", "alert": true, "votes": [4, 1]}
+{"pair": 15, "side": "A", "relation": "가족", "them": "용돈 모자라면 말해 알겠지?", "draft": "내가 알아서 할게", "alert": true, "votes": [5, 0]}
+{"pair": 15, "side": "B", "relation": "가족", "them": "너 방 좀 치우고 공부 좀 해라 진짜", "draft": "내가 알아서 할게", "alert": true, "votes": [3, 2]}
+{"pair": 16, "side": "A", "relation": "선후배", "them": "혹시 이 동아리 어떤 분위기인지 아세요?", "draft": "잘 모르겠어요", "alert": false, "votes": [0, 5]}
+{"pair": 16, "side": "B", "relation": "선후배", "them": "선배 저 이번에 발표 망친 것 같아서 계속 마음이 불편해요", "draft": "잘 모르겠어요", "alert": true, "votes": [5, 0]}
+{"pair": 17, "side": "A", "relation": "직장", "them": "이 문서 양식 제가 정해도 될까요?", "draft": "알아서 하세요", "alert": true, "votes": [5, 0]}
+{"pair": 17, "side": "B", "relation": "직장", "them": "대리님 저 이번 업무 어떻게 해야 할지 막막해요", "draft": "알아서 하세요", "alert": true, "votes": [5, 0]}
+{"pair": 18, "side": "A", "relation": "동아리", "them": "이번 모임 간식 내가 사올까?", "draft": "굳이?", "alert": true, "votes": [4, 1]}
+{"pair": 18, "side": "B", "relation": "동아리", "them": "내가 밤새 만든 포스터 어때? 의견 줘", "draft": "굳이?", "alert": true, "votes": [5, 0]}
+{"pair": 19, "side": "A", "relation": "친구", "them": "야 너 어제 그 영상 봤냐 미쳤음", "draft": "ㅎㅎ", "alert": true, "votes": [4, 1]}
+{"pair": 19, "side": "B", "relation": "친구", "them": "나 요즘 잠도 못 자고 너무 우울해...", "draft": "ㅎㅎ", "alert": true, "votes": [4, 1]}
+{"pair": 20, "side": "A", "relation": "연인", "them": "오늘 어디 갈래? 네가 정해도 좋아", "draft": "몰라", "alert": true, "votes": [4, 1]}
+{"pair": 20, "side": "B", "relation": "연인", "them": "우리 요즘 자주 싸우는 것 같아서 걱정돼", "draft": "몰라", "alert": true, "votes": [5, 0]}
+{"pair": 21, "side": "A", "relation": "가족", "them": "주말에 잠깐 볼 수 있어?", "draft": "바빠", "alert": true, "votes": [5, 0]}
+{"pair": 21, "side": "B", "relation": "가족", "them": "할머니 병원 가신대. 시간 되면 같이 가자", "draft": "바빠", "alert": true, "votes": [5, 0]}
+{"pair": 22, "side": "A", "relation": "선후배", "them": "선배 커피 한잔 하실래요?", "draft": "다음에요", "alert": true, "votes": [3, 2]}
+{"pair": 22, "side": "B", "relation": "선후배", "them": "선배 저 진로 때문에 고민인데 조언 좀 해주실 수 있어요?", "draft": "다음에요", "alert": true, "votes": [3, 2]}
+{"pair": 23, "side": "A", "relation": "직장", "them": "점심 메뉴 제가 골라도 될까요?", "draft": "그렇게 하세요", "alert": false, "votes": [2, 3]}
+{"pair": 23, "side": "B", "relation": "직장", "them": "팀장님 이 건 제가 판단하기 어려워서 의견 부탁드려요", "draft": "그렇게 하세요", "alert": true, "votes": [5, 0]}
+{"pair": 24, "side": "A", "relation": "동아리", "them": "새 로고 시안 두 개인데 취향대로 골라줘", "draft": "별로", "alert": true, "votes": [5, 0]}
+{"pair": 24, "side": "B", "relation": "동아리", "them": "내가 이번에 쓴 기획서야 솔직하게 피드백 부탁해!", "draft": "별로", "alert": true, "votes": [5, 0]}
+{"pair": 25, "side": "A", "relation": "친구", "them": "이따 6시에 역 앞에서 보자", "draft": "알겠다고", "alert": true, "votes": [3, 2]}
+{"pair": 25, "side": "B", "relation": "친구", "them": "내가 몇 번을 말했는데 약속 또 잊었어? 진짜 서운해", "draft": "알겠다고", "alert": true, "votes": [5, 0]}
+{"pair": 26, "side": "A", "relation": "연인", "them": "이 얘기 그만하고 영화나 볼까?", "draft": "그만하자", "alert": true, "votes": [4, 1]}
+{"pair": 26, "side": "B", "relation": "연인", "them": "나 요즘 너무 힘들어서 우리 관계도 고민돼", "draft": "그만하자", "alert": true, "votes": [3, 2]}
+{"pair": 27, "side": "A", "relation": "가족", "them": "형 나 이번 주 집에 내려갈게", "draft": "신경 꺼", "alert": true, "votes": [5, 0]}
+{"pair": 27, "side": "B", "relation": "가족", "them": "동생 너 요즘 왜 이렇게 말이 없어 무슨 일 있어?", "draft": "신경 꺼", "alert": true, "votes": [5, 0]}
+{"pair": 28, "side": "A", "relation": "직장", "them": "이번 안에 대해 몇 가지 수정 제안드려요", "draft": "참고하겠습니다", "alert": false, "votes": [0, 5]}
+{"pair": 28, "side": "B", "relation": "직장", "them": "제가 밤새 만든 안인데 한번 봐주세요 자신 있어요!", "draft": "참고하겠습니다", "alert": false, "votes": [1, 4]}
+{"pair": 29, "side": "A", "relation": "친구", "them": "나 오늘 일 때문에 못 갈 것 같아 미안", "draft": "그건 네 사정이지", "alert": true, "votes": [3, 2]}
+{"pair": 29, "side": "B", "relation": "친구", "them": "나 사실 요즘 집안 사정이 안 좋아서 너무 힘들어", "draft": "그건 네 사정이지", "alert": true, "votes": [5, 0]}
+{"pair": 30, "side": "A", "relation": "선후배", "them": "후배야 이번 달 회비 얼마였지?", "draft": "저도 몰라요", "alert": true, "votes": [3, 2]}
+{"pair": 30, "side": "B", "relation": "선후배", "them": "선배 저 이 일 처음이라 너무 무서워요 도와주세요", "draft": "저도 몰라요", "alert": true, "votes": [4, 1]}

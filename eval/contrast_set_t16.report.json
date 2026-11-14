@@ -1,0 +1,161 @@
+{
+ "labelers": 5,
+ "n": 60,
+ "consensus": 60,
+ "fleiss_kappa": 0.474,
+ "mean_pairwise_kappa": 0.476,
+ "unanimous": 29,
+ "weak": [
+  "i004",
+  "i006",
+  "i011",
+  "i014",
+  "i016",
+  "i020",
+  "i024",
+  "i030",
+  "i034",
+  "i036",
+  "i043",
+  "i044",
+  "i050",
+  "i053",
+  "i059"
+ ],
+ "ties": [],
+ "per_labeler": {
+  "L1": {
+   "n": 60,
+   "alert_rate": 0.667,
+   "agree_with_majority": 0.817
+  },
+  "L2": {
+   "n": 60,
+   "alert_rate": 0.517,
+   "agree_with_majority": 0.767
+  },
+  "L3": {
+   "n": 60,
+   "alert_rate": 0.583,
+   "agree_with_majority": 0.833
+  },
+  "L4": {
+   "n": 60,
+   "alert_rate": 0.533,
+   "agree_with_majority": 0.883
+  },
+  "L5": {
+   "n": 60,
+   "alert_rate": 0.583,
+   "agree_with_majority": 0.933
+  }
+ },
+ "weak_items": [
+  {
+   "pair": 13,
+   "side": "B",
+   "relation": "친구",
+   "them": "너 어제 내 생일 완전 잊었더라 서운했어",
+   "draft": "미안"
+  },
+  {
+   "pair": 25,
+   "side": "A",
+   "relation": "친구",
+   "them": "이따 6시에 역 앞에서 보자",
+   "draft": "알겠다고"
+  },
+  {
+   "pair": 14,
+   "side": "A",
+   "relation": "연인",
+   "them": "오늘 좀 피곤해서 일찍 잘게",
+   "draft": "그래"
+  },
+  {
+   "pair": 8,
+   "side": "A",
+   "relation": "연인",
+   "them": "생일 선물 마음에 들어?",
+   "draft": "고마워"
+  },
+  {
+   "pair": 29,
+   "side": "A",
+   "relation": "친구",
+   "them": "나 오늘 일 때문에 못 갈 것 같아 미안",
+   "draft": "그건 네 사정이지"
+  },
+  {
+   "pair": 22,
+   "side": "A",
+   "relation": "선후배",
+   "them": "선배 커피 한잔 하실래요?",
+   "draft": "다음에요"
+  },
+  {
+   "pair": 12,
+   "side": "B",
+   "relation": "동아리",
+   "them": "저 사실 팀 프로젝트 때문에 많이 지쳐서 도움이 필요해요",
+   "draft": "다음에 하자"
+  },
+  {
+   "pair": 8,
+   "side": "B",
+   "relation": "연인",
+   "them": "오늘 기념일인데 나 하루 종일 기다렸어",
+   "draft": "고마워"
+  },
+  {
+   "pair": 22,
+   "side": "B",
+   "relation": "선후배",
+   "them": "선배 저 진로 때문에 고민인데 조언 좀 해주실 수 있어요?",
+   "draft": "다음에요"
+  },
+  {
+   "pair": 30,
+   "side": "A",
+   "relation": "선후배",
+   "them": "후배야 이번 달 회비 얼마였지?",
+   "draft": "저도 몰라요"
+  },
+  {
+   "pair": 26,
+   "side": "B",
+   "relation": "연인",
+   "them": "나 요즘 너무 힘들어서 우리 관계도 고민돼",
+   "draft": "그만하자"
+  },
+  {
+   "pair": 13,
+   "side": "A",
+   "relation": "친구",
+   "them": "늦어도 괜찮아 천천히 와~",
+   "draft": "미안"
+  },
+  {
+   "pair": 23,
+   "side": "A",
+   "relation": "직장",
+   "them": "점심 메뉴 제가 골라도 될까요?",
+   "draft": "그렇게 하세요"
+  },
+  {
+   "pair": 15,
+   "side": "B",
+   "relation": "가족",
+   "them": "너 방 좀 치우고 공부 좀 해라 진짜",
+   "draft": "내가 알아서 할게"
+  },
+  {
+   "pair": 11,
+   "side": "B",
+   "relation": "직장",
+   "them": "제가 이번 일 정말 열심히 했는데 한 번만 봐주시면 안 될까요",
+   "draft": "그건 어렵습니다"
+  }
+ ],
+ "tie_items": []
+}

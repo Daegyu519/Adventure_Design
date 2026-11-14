@@ -104,7 +104,7 @@ def fleiss_kappa(counts: list[tuple[int, int]]) -> float | None:
 
 def merge_many(key: Path, files: list[Path], out: Path) -> dict:
     """라벨러 3명 이상: 다수결로 합의본을 쓰고, 일치도·합의 강도·사람별 경향을 낸다.
-    합의본은 2명 merge와 같은 형식이라 run_eval --set에 그대로 넣는다. 표가 같으면(짝수 라벨러) 합의본에서 빼고 tie로 남긴다."""
+    합의본은 2명 merge 형식에 votes([예 표, 아니오 표])만 더한 것이라 run_eval --set에 그대로 넣는다. 표가 같으면(짝수 라벨러) 합의본에서 빼고 tie로 남긴다."""
     key_d = json.loads(Path(key).read_text(encoding="utf-8"))
     ls = [json.loads(Path(f).read_text(encoding="utf-8")) for f in files]
     names = [l["labeler"] for l in ls]
@@ -124,7 +124,8 @@ def merge_many(key: Path, files: list[Path], out: Path) -> dict:
         if min(y, n) / (y + n) >= 0.4:   # 5명 중 3:2 처럼 거의 갈림
             weak.append(i)
         rows.append({"pair": meta["pair"], "side": meta["side"], "relation": meta["relation"],
-                     "them": meta["them"], "draft": meta["draft"], "alert": y > n})
+                     "them": meta["them"], "draft": meta["draft"], "alert": y > n,
+                     "votes": [y, n]})   # [알려 줄 만함, 괜찮음] 표 수. 합의 강도별 평가에 쓴다
     rows.sort(key=lambda r: (r["pair"], r["side"]))
     Path(out).write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), encoding="utf-8")
 
