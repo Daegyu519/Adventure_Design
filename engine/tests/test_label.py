@@ -80,8 +80,9 @@ def test_merge_many_majority_weak_ties_and_eval(tmp_path):
     assert res["labelers"] == 5 and res["n"] == 60 and res["consensus"] == 59
     assert res["weak"] == ["i001"] and res["ties"] == ["i003"]
     rows = label._read(out)
-    assert all(set(r) == {"pair", "side", "relation", "them", "draft", "alert"} for r in rows)
+    assert all(set(r) == {"pair", "side", "relation", "them", "draft", "alert", "votes"} for r in rows)
     assert all(r["alert"] == (r["side"] == "B") for r in rows)
+    assert all(3 <= sum(r["votes"]) <= 5 and r["alert"] == (r["votes"][0] > r["votes"][1]) for r in rows)
     assert res["per_labeler"]["c"]["agree_with_majority"] < 1.0 and res["per_labeler"]["a"]["agree_with_majority"] == 1.0
     assert 0 < res["fleiss_kappa"] < 1
     rep = json.loads(out.with_suffix(".report.json").read_text(encoding="utf-8"))
