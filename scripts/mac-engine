@@ -61,6 +61,8 @@ ts_state() { ts status --json 2>/dev/null | python3 -I -c 'import json,sys; prin
 ts_host() { ts status --json 2>/dev/null | python3 -I -c 'import json,sys; print(json.load(sys.stdin)["Self"]["DNSName"].rstrip("."))' 2>/dev/null || echo ""; }
 
 ts_login() {   # 로그인이 필요하면 링크를 보여 준다(사람이 연다)
+  # 막 켠 tailscaled는 저장된 로그인을 불러오는 데 몇 초 걸린다(그동안 NoState/Starting). 최대 15초 기다린다
+  for _ in $(seq 1 30); do case "$(ts_state)" in Running) return 0 ;; NeedsLogin|NeedsMachineAuth) break ;; esac; sleep 0.5; done
   [ "$(ts_state)" = Running ] && return 0
   say "  Tailscale 로그인이 필요하다. 아래 링크를 브라우저에서 열어 학교 서버와 같은 계정으로 로그인:"
   ( ts up --hostname="$TS_NAME" --accept-dns=false --timeout=25s 2>&1 || true ) | grep -o 'https://login.tailscale.com/[^ ]*' | head -1 | sed 's/^/    /'
@@ -122,6 +124,8 @@ case "${1:-}" in
     if [ -n "$(engine_pid)" ]; then say "엔진 이미 실행 중"; else start_engine "$PORT" "$RUN/engine.log"; say "엔진 실행(127.0.0.1:$PORT, 잠자기 방지 켬)"; fi
     timeout 30 tailscale --socket="$SOCK" funnel --bg "$PORT" >/dev/null 2>&1 || die "Funnel을 켜지 못했다(tailnet에서 Funnel 허용이 필요할 수 있다). 'tailscale --socket=$SOCK funnel --bg $PORT'를 직접 실행해 안내를 본다"
     say "공개 주소: https://$h"
+    # tailscaled를 막 켰으면 공개 경로가 열리는 데 1~2분 걸린다(2026-11-14 실측 약 96초). 최대 4분 기다린 뒤 점검한다
+    for i in $(seq 1 60); do [ "$(curl -s -o /dev/null -m 8 -w "%{http_code}" "https://$h/health")" = 200 ] && { say "공개 주소 열림(약 $((i*4))초)"; break; }; sleep 4; done
     [ "$h" = "$EXPECTED_HOST" ] || say "주의: 앱은 https://$EXPECTED_HOST 를 쓴다. 옛 학교 서버 기기를 Tailscale에서 지우고 다시 'up' 하거나, 앱 주소를 이 주소로 바꿔 배포해야 한다."
     CORS_ORIGINS=https://tone-chat.expo.app "$ROOT/scripts/deploy-smoke" "https://$h" || say "점검에 실패한 항목이 있다(위 FAIL). 엔진 로그: $RUN/engine.log" ;;
   down)   # 공개를 끄고 엔진을 끈다(학교 서버로 돌아갈 때)
