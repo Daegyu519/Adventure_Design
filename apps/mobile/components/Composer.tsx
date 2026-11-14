@@ -17,8 +17,11 @@ import type { Member } from '../lib/rooms';
 
 // MASTER 4·5장: iOS식 입력줄. 둥근 사진·파일 버튼, 둥근 입력창(모서리 18, 최소 높이 36), 둥근 보내기. 눌림 영역은 모두 44. 웹은 Enter로 보내고 Shift+Enter는 줄바꿈, 한글 조합 중 Enter는 보내지 않는다.
 // 입력창은 보낸 뒤에도 그대로 있어서 포커스를 잃지 않는다. 글이 비면 보내기는 aria-disabled(진짜 disabled 아님).
+// 키보드 유지(P-45): 보내기를 누르면 그 자리에서(사용자 동작 안에서) 입력창에 다시 포커스를 준다 — 휴대폰 웹은 버튼을 누르면 입력창이 포커스를 잃어 키보드가 내려가고,
+// 나중에(비동기로) 준 포커스로는 키보드가 다시 올라오지 않는다. 전송 확인 중에도 입력창을 읽기 전용으로 바꾸지 않는다(읽기 전용이 되면 키보드가 닫힌다): 대신 바뀐 글을 받지 않는다.
 // 답장 막대: 답장 대상을 고르면 입력창으로, 취소하면(막대가 사라지므로) 입력창으로 포커스를 옮긴다.
 export type InputHandle = ComponentRef<typeof TextInput>;
+const ignoreChange = () => {};
 type Props = {
   value: string;
   onChangeText(t: string): void;
@@ -137,10 +140,10 @@ export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, 
           ref={ref}
           accessibilityLabel={replyTo ? `메시지 입력, ${replyTo.name}에게 답장 중` : '메시지 입력'}
           multiline
-          editable={!inputLocked}
           maxLength={2000}
           value={value}
-          onChangeText={onChangeText}
+          onChangeText={inputLocked ? ignoreChange : onChangeText}
+          aria-readonly={inputLocked || undefined}
           onSelectionChange={(e) => onSelectionChange?.(e.nativeEvent.selection.start)}
           selection={selection}
           onBlur={onBlur}
@@ -204,7 +207,16 @@ export function Composer({ value, onChangeText, onSend, replyTo, onCancelReply, 
             ...focusRing(colors.primary),
           }}
         />
-        <IconButton icon={ArrowUp} label="보내기" disabled={sendBusy || value.trim() === ''} busy={sendBusy} onPress={onSend} circle={{ bg: 'primary', fg: 'onPrimary', glow: true }} />
+        <IconButton
+          icon={ArrowUp}
+          label="보내기"
+          disabled={sendBusy || value.trim() === ''}
+          busy={sendBusy}
+          onPress={() => {
+            ref.current?.focus(); // 누른 그 자리에서: 키보드가 내려가지 않게
+            onSend();
+          }}
+          circle={{ bg: 'primary', fg: 'onPrimary', glow: true }} />
       </View>
     </View>
   );

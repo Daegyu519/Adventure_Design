@@ -250,7 +250,7 @@ test('스택에서 방 포커스가 사라져도 초안을 보존하고 대기�
   expect(mockHintRequest.mock.calls[0][1].signal.aborted).toBe(true);
   expect(mockSend).not.toHaveBeenCalled();
   expect(s.input().props.value).toBe('안녕');
-  expect(s.input().props.editable).toBe(true);
+  expect(s.input().props['aria-readonly']).toBeUndefined(); // 잠금이 풀렸다(P-45: 잠금은 editable이 아니라 aria-readonly로 알린다)
   await act(async () => s.root.unmount());
 });
 

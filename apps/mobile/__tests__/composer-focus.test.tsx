@@ -53,6 +53,40 @@ test('멘션 후보를 고르면 목록이 사라져도 포커스가 입력창�
   expect(focus).toHaveBeenCalled();
 });
 
+// P-45: 보내기를 눌러도, 전송 확인 중에도 키보드가 내려가지 않게.
+test('보내기를 누르면 그 자리에서 입력창에 포커스를 주고 보낸다', async () => {
+  const order: string[] = [];
+  const ref = { current: null as null | { focus(): void } };
+  const root = createRoot();
+  await act(async () => {
+    root.render(<Composer value="안녕" onChangeText={() => {}} onSend={() => order.push('send')} replyTo={null} onCancelReply={() => {}} inputRef={ref as never} />);
+  });
+  ref.current!.focus = () => order.push('focus');
+  const button = root.container.queryAll((n) => n.props.accessibilityLabel === '보내기')[0];
+  await act(async () => button.props.onClick({ stopPropagation() {}, nativeEvent: {} }));
+  expect(order).toEqual(['focus', 'send']);
+});
+
+test('전송 확인 중에도 입력창은 읽기 전용이 아니고, 바뀐 글만 받지 않는다', async () => {
+  const onChangeText = jest.fn();
+  const root = createRoot();
+  const render = (locked: boolean) =>
+    act(async () => {
+      root.render(<Composer value="안녕" onChangeText={onChangeText} onSend={() => {}} replyTo={null} onCancelReply={() => {}} inputLocked={locked} />);
+    });
+  const input = () => root.container.queryAll((n) => String(n.props.accessibilityLabel).startsWith('메시지 입력'))[0];
+  await render(true);
+  expect(input().props.editable).not.toBe(false);
+  expect(input().props.readOnly).toBeUndefined();
+  expect(input().props['aria-readonly']).toBe(true);
+  await act(async () => input().props.onChangeText('안녕하'));
+  expect(onChangeText).not.toHaveBeenCalled();
+  await render(false);
+  expect(input().props['aria-readonly']).toBeUndefined();
+  await act(async () => input().props.onChangeText('안녕하'));
+  expect(onChangeText).toHaveBeenCalledWith('안녕하');
+});
+
 describe('멘션 콤보박스(웹)', () => {
   beforeEach(() => jest.replaceProperty(Platform, 'OS', 'web'));
   afterEach(() => jest.restoreAllMocks());
