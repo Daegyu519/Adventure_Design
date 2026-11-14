@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 사용법: scripts/mac-engine prep|test|up|down|status
+# 사용법: scripts/mac-engine prep|test|up|restart|down|status
 # 학교 GPU 서버가 꺼졌을 때 엔진을 이 Mac에서 임시로 돌린다(방안 2, P-39).
 #   - AI 계산은 NVIDIA 무료 API. 실시간 판정(tone_label)만 GPU Qwen3-30B 대신 NVIDIA laguna로 바꾼 설정 복사본을 쓴다(MODELS_PATH).
 #     저장소의 engine/config/models.yaml은 건드리지 않는다. 학교 서버가 돌아오면 `down` 후 scripts/deploy-school.
@@ -128,6 +128,14 @@ case "${1:-}" in
     for i in $(seq 1 60); do [ "$(curl -s -o /dev/null -m 8 -w "%{http_code}" "https://$h/health")" = 200 ] && { say "공개 주소 열림(약 $((i*4))초)"; break; }; sleep 4; done
     [ "$h" = "$EXPECTED_HOST" ] || say "주의: 앱은 https://$EXPECTED_HOST 를 쓴다. 옛 학교 서버 기기를 Tailscale에서 지우고 다시 'up' 하거나, 앱 주소를 이 주소로 바꿔 배포해야 한다."
     CORS_ORIGINS=https://tone-chat.expo.app "$ROOT/scripts/deploy-smoke" "https://$h" || say "점검에 실패한 항목이 있다(위 FAIL). 엔진 로그: $RUN/engine.log" ;;
+  restart)   # 엔진만 다시 켠다(env·설정·코드를 바꾼 뒤). Tailscale·Funnel은 그대로라 공개 주소는 몇 초만 끊긴다
+    check_env >/dev/null; gen_models
+    [ -n "$(engine_pid)" ] || [ -n "$(pgrep -f "$(match "$PORT")")" ] || say "엔진이 꺼져 있었다. 그냥 켠다"
+    stop_engine "$PORT"; start_engine "$PORT" "$RUN/engine.log"; say "엔진 다시 켬(127.0.0.1:$PORT)"
+    if [ -S "$SOCK" ] && ts status --json >/dev/null 2>&1; then
+      h="$(ts_host)"; for i in $(seq 1 30); do [ "$(curl -s -o /dev/null -m 8 -w "%{http_code}" "https://$h/health")" = 200 ] && { say "공개 주소 응답(약 $((i*2))초)"; break; }; sleep 2; done
+      CORS_ORIGINS=https://tone-chat.expo.app "$ROOT/scripts/deploy-smoke" "https://$h" || say "점검에 실패한 항목이 있다(위 FAIL). 엔진 로그: $RUN/engine.log"
+    else say "Tailscale이 꺼져 있다. 공개까지 하려면: scripts/mac-engine up"; fi ;;
   down)   # 공개를 끄고 엔진을 끈다(학교 서버로 돌아갈 때)
     if [ -S "$SOCK" ]; then tailscale --socket="$SOCK" funnel --bg "$PORT" off >/dev/null 2>&1 || tailscale --socket="$SOCK" funnel reset >/dev/null 2>&1 || true; fi
     stop_engine "$PORT"
@@ -136,5 +144,5 @@ case "${1:-}" in
   status)
     p="$(engine_pid)"; say "엔진: $([ -n "$p" ] && echo "실행 중(pid $p)" || echo 꺼짐)"
     if [ -S "$SOCK" ] && ts status --json >/dev/null 2>&1; then say "Tailscale: $(ts_state) $(ts_host)"; ts funnel status 2>/dev/null | sed 's/^/  /' | head -6; else say "Tailscale: 꺼짐"; fi ;;
-  *) echo "usage: scripts/mac-engine prep|test|up|down|status" >&2; exit 2 ;;
+  *) echo "usage: scripts/mac-engine prep|test|up|restart|down|status" >&2; exit 2 ;;
 esac

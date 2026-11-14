@@ -140,6 +140,7 @@ npx eas-cli deploy --prod
 scripts/mac-engine prep     # 준비(도구·env 키 이름·설정 복사본·의존성·사용자 모드 tailscaled·로그인 링크)
 scripts/mac-engine test     # 공개 없이 127.0.0.1:8010으로 띄워 /health 보고 끈다
 scripts/mac-engine up       # 진행: 엔진(127.0.0.1:8000, 잠자기 방지) + Funnel 공개 + deploy-smoke
+scripts/mac-engine restart  # 엔진만 다시 켜기(.env.pilot.engine·코드를 바꾼 뒤, 공개 주소는 몇 초만 끊김)
 scripts/mac-engine status   # 상태
 scripts/mac-engine down     # 끄기(학교 서버로 돌아갈 때)
 ```
