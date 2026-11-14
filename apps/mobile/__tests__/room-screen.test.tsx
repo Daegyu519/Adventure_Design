@@ -180,7 +180,7 @@ test('그대로 보내기는 분석을 반복하지 않고 원문을 한 번만 
   expect(mockHintRequest).toHaveBeenCalledTimes(1);
 });
 
-test('시간 초과는 1500ms에 한 번 전송하고 늦게 온 경고는 무시한다', async () => {
+test('시간 초과는 SEND_REVIEW_MS에 한 번 전송하고 늦게 온 경고는 무시한다', async () => {
   jest.useFakeTimers();
   let done!: (r: unknown) => void;
   mockHintRequest.mockImplementation(() => new Promise((r) => { done = r; }));
@@ -190,7 +190,7 @@ test('시간 초과는 1500ms에 한 번 전송하고 늦게 온 경고는 무�
   expect(s.texts()).toContain('전송 확인 중');
   await s.press('보내기');
   expect(mockHintRequest).toHaveBeenCalledTimes(1);
-  await act(async () => { await jest.advanceTimersByTimeAsync(1499); });
+  await act(async () => { await jest.advanceTimersByTimeAsync(SEND_REVIEW_MS - 1); });
   expect(mockSend).not.toHaveBeenCalled();
   await act(async () => { await jest.advanceTimersByTimeAsync(1); });
   expect(mockSend).toHaveBeenCalledTimes(1);
@@ -589,6 +589,7 @@ test('읽음 재시도 타이머: 새 타이머 전에 이전 것을 지운다',
 
 // ── T-09b fix round 1 ──
 import { AccessibilityInfo, Platform } from 'react-native';
+import { SEND_REVIEW_MS } from '../lib/sendReview';
 
 const keyEv = (key: string, extra: object = {}) => ({ key, preventDefault() {}, stopPropagation() {}, ...extra });
 const bodies = (root: Q) => root.container.queryAll((n) => (n as unknown as N).props.accessibilityHint === '메시지 메뉴 열기') as unknown as N[]; // 화면 위쪽(오래된)부터가 아니라 data 순서: 새 것부터

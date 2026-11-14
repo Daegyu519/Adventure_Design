@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect, useSyncExternalStore } from 'react';
 
 // 동의 문구를 바꾸면 이 숫자를 올린다. 옛 버전으로 동의한 사람에게 다시 묻는다.
-export const CONSENT_VERSION = 2;
+export const CONSENT_VERSION = 3; // 3: 확인 시간 "최대 1.5초" → "최대 3초"(2026-11-15)
 const KEY = 'consent'; // 웹에서는 localStorage 'consent'
 
 export async function loadConsent(): Promise<boolean> {

@@ -3,6 +3,7 @@ import { act } from 'react';
 import { createRoot } from 'test-renderer';
 
 import Consent from '../app/consent';
+import { CONSENT_VERSION } from '../lib/consent';
 
 // lucide는 ESM(.mjs)이라 jest가 못 읽는다. 아이콘 모양은 이 테스트와 관계없다.
 jest.mock('lucide-react-native/icons/check', () => () => null);
@@ -35,7 +36,7 @@ test('consent screen: 체크하면 시작하기가 켜지고, 누르면 동의�
   expect(byRole('button').props.accessibilityState.disabled).toBe(false);
   expect(byRole('button').props.accessibilityState.busy).toBe(false);
   await press('button');
-  expect(await AsyncStorage.getItem('consent')).toBe('2');
+  expect(await AsyncStorage.getItem('consent')).toBe(String(CONSENT_VERSION));
   expect(byRole('button').props.accessibilityState.busy).toBe(true); // 저장하는 동안. 웹의 aria-busy는 브라우저에서 확인
 });
 

@@ -1,5 +1,5 @@
 import { engine, type HintRes } from '../engine';
-import { reviewBeforeSend } from '../sendReview';
+import { reviewBeforeSend, SEND_REVIEW_MS } from '../sendReview';
 
 jest.mock('../engine', () => ({ engine: { hint: jest.fn() } }));
 const hint = engine.hint as jest.Mock;
@@ -18,12 +18,12 @@ test('경고·경고 없음 모두 응답 즉시 반환하고 타이머를 정�
   expect(hint.mock.calls[0][0]).toEqual(body);
 });
 
-test('abort를 무시하는 요청도 1500ms에 끝나고 늦은 경고를 버린다', async () => {
+test('abort를 무시하는 요청도 SEND_REVIEW_MS에 끝나고 늦은 경고를 버린다', async () => {
   let resolve!: (r: HintRes) => void;
   hint.mockImplementation(() => new Promise<HintRes>((r) => { resolve = r; }));
   const done = jest.fn();
   const p = reviewBeforeSend(body, new AbortController().signal).then(done);
-  await jest.advanceTimersByTimeAsync(1499);
+  await jest.advanceTimersByTimeAsync(SEND_REVIEW_MS - 1);
   expect(done).not.toHaveBeenCalled();
   await jest.advanceTimersByTimeAsync(1);
   await p;

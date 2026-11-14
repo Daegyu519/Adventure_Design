@@ -134,7 +134,7 @@ npx eas-cli deploy --prod
 <details>
 <summary>학교 GPU 서버가 꺼졌을 때: 이 Mac에서 엔진 임시 운영(scripts/mac-engine, P-39)</summary>
 
-학교 서버(엔진+GPU)가 응답하지 않을 때 AI 기능을 살려 두는 임시 방법이다. AI 계산은 NVIDIA 무료 API로 하고, **실시간 판정(tone_label)만** GPU Qwen3-30B 대신 `nvidia:poolside/laguna-xs-2.1`로 바꾼 설정 복사본(`~/.oops-engine/models.mac.yaml`, `MODELS_PATH`)을 쓴다. 저장소의 `models.yaml`은 그대로다. 2026-11-14 대조 세트 16문장 실측: 정밀도 0.75 · 재현율 0.38 · 평균 0.84초(최대 1.35초, 2/16 기권). 판별기(KcELECTRA)는 꺼진다.
+학교 서버(엔진+GPU)가 응답하지 않을 때 AI 기능을 살려 두는 임시 방법이다. AI 계산은 NVIDIA 무료 API로 하고, **실시간 판정(tone_label)만** GPU Qwen3-30B 대신 `nvidia:poolside/laguna-xs-2.1`로 바꾼 설정 복사본(`~/.oops-engine/models.mac.yaml`, `MODELS_PATH`)을 쓴다. 저장소의 `models.yaml`은 그대로다. 2026-11-14 대조 세트 16문장 실측: 정밀도 0.75 · 재현율 0.38 · 평균 0.84초(최대 1.35초, 2/16 기권). 판별기(KcELECTRA)는 꺼진다. 실시간 마감은 Mac에서만 3초(전문가 2.85초, `OOPS_RT_DEADLINE_MS`로 1500~3000 조절): NVIDIA는 p90 1.9초·p95 2.9초라 1.5초면 힌트가 자주 빠진다(2026-11-15 사용자 결정).
 
 ```bash
 scripts/mac-engine prep     # 준비(도구·env 키 이름·설정 복사본·의존성·사용자 모드 tailscaled·로그인 링크)

@@ -1,6 +1,8 @@
 import { engine, type HintReq, type HintRes } from './engine';
 
-export const SEND_REVIEW_MS = 1500;
+// 엔진이 실제 마감을 정한다(학교 GPU 1.5초, Mac 임시 운영 3초: scripts/mac-engine). 앱은 가장 긴 마감 + 왕복까지만 기다린다.
+// 학교 GPU 모드에서는 엔진이 1.5초에 답하므로 체감은 그대로다(2026-11-15 사용자 결정 "맥으로 진행하는 경우에는 늘리자").
+export const SEND_REVIEW_MS = 3200;
 
 // 앱에서 잰 최대 대기 시간(토큰 갱신·왕복 포함). 엔진/통신 실패는 전송을 막지 않는다.
 // fetch가 abort를 무시해도 끝나도록 별도 타이머로 경주한다. 원문은 메모리에만 둔다.

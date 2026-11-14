@@ -17,7 +17,8 @@ PORT="${OOPS_ENGINE_PORT:-8000}"
 TEST_PORT=8010
 TS_NAME="${OOPS_TS_NAME:-tone-chat}"             # 앱이 아는 주소(tone-chat.<tailnet>.ts.net)를 그대로 쓰려면 이 이름이어야 한다
 EXPECTED_HOST="tone-chat.tail6baef9.ts.net"      # 앱·CORS·DB 웹훅이 가리키는 엔진 주소
-RT_MODEL="${OOPS_RT_MODEL:-poolside/laguna-xs-2.1}"   # 2026-11-14 대조 세트 실측: 정밀도 0.75·재현율 0.38·평균 0.84초
+RT_MODEL="${OOPS_RT_MODEL:-poolside/laguna-xs-2.1}"
+RT_DEADLINE_MS="${OOPS_RT_DEADLINE_MS:-3000}"   # 실시간 마감(Mac만). NVIDIA p95 약 2.9초(2026-11-14 측정). 앱은 SEND_REVIEW_MS(3.2초)까지 기다린다   # 2026-11-14 대조 세트 실측: 정밀도 0.75·재현율 0.38·평균 0.84초
 OLD_LINE="model: local_detail:qwen3-30b-a3b, prompt: tone_label, paths: [realtime]"
 
 mkdir -p "$RUN/ts"; chmod 700 "$RUN"
@@ -38,13 +39,18 @@ PY
 }
 
 gen_models() {   # 설정 복사본: 실시간 판정 한 줄만 NVIDIA로
-  python3 -I - "$ROOT/engine/config/models.yaml" "$MODELS" "$OLD_LINE" "$RT_MODEL" <<'PY' || exit 1
-import sys
-src, dst, old, model = sys.argv[1:]
+  python3 -I - "$ROOT/engine/config/models.yaml" "$MODELS" "$OLD_LINE" "$RT_MODEL" "$RT_DEADLINE_MS" <<'PY' || exit 1
+import re, sys
+src, dst, old, model, dl = sys.argv[1:]
+dl = int(dl)
+if not 1500 <= dl <= 3000: sys.exit("mac-engine: OOPS_RT_DEADLINE_MS는 1500~3000 사이(앱이 3.2초까지만 기다린다)")
 s = open(src, encoding="utf-8").read()
 if old not in s: sys.exit("mac-engine: models.yaml의 실시간 줄이 바뀌었다. scripts/mac-engine의 OLD_LINE을 맞춰야 한다")
-open(dst, "w", encoding="utf-8").write("# 생성 파일(scripts/mac-engine). 손으로 고치지 않는다.\n" + s.replace(old, f"model: nvidia:{model}, prompt: tone_label, paths: [realtime]"))
-print(f"  설정 복사본: 실시간 판정 = nvidia:{model}")
+s = s.replace(old, f"model: nvidia:{model}, prompt: tone_label, paths: [realtime]")
+s, n = re.subn(r"(\n  realtime: \{deadline_ms: )\d+(, expert_deadline_ms: )\d+", rf"\g<1>{dl}\g<2>{dl - 150}", s, count=1)
+if n != 1: sys.exit("mac-engine: models.yaml의 paths.realtime 줄을 찾지 못했다")
+open(dst, "w", encoding="utf-8").write("# 생성 파일(scripts/mac-engine). 손으로 고치지 않는다.\n" + s)
+print(f"  설정 복사본: 실시간 판정 = nvidia:{model}, 실시간 마감 {dl}ms(전문가 {dl - 150}ms)")
 PY
 }
 
