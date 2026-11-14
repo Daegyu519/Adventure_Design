@@ -228,3 +228,23 @@ def test_rough_word_false_positives_p42():
     assert score("왜 매번 이래!").prior == score("왜 매번 이래").prior
     assert score("고마워!").prior <= score("고마워").prior          # 평범한 말에서는 그대로 누그러뜨림
     assert score("미안 씨발 깜빡했어").prior < score("씨발 깜빡했어").prior
+
+
+def test_rough_level_table_p44():
+    # 2026-11-15 사용자가 정한 강도 표. 강: 친해도 그대로 / 중 / 약
+    from harness import korean as K
+    table = {
+        3: ["씨발련아", "시발련아", "개새끼야", "미친새끼야", "병신같은년아", "븅신새끼야", "니애미", "느금마", "씨발놈아"],
+        2: ["병신아", "미친놈아", "ㅅㅂ아", "ㅅㅂ", "시발", "지랄하네", "좆같네", "꺼져", "닥쳐", "죽을래?",
+            "ㅂㅅ", "ㅁㅊㄴ", "ㄷㅊ", "니엄마", "ㄴㅇㅁ", "개새끼ㅋㅋㅋ"],
+        1: ["ㅅㅂㅋㅋㅋ", "ㅁㅊ다", "ㅁㅊ네", "미쳤네 진짜", "미친놈ㅋㅋ", "ㅈㄹㅋㅋ", "뭐래", "존나 싫어", "꺼져ㅋㅋ"],
+        0: ["안녕", "알겠어", "존나 고마워", "ㅁㅊ 대박", "존나 웃기네", "시발점이 어디야", "새끼손가락 다쳤어", "곱씹게 돼", "미친 맛있다"],
+    }
+    for level, texts in table.items():
+        for x in texts:
+            assert K.rough_level(x) == level, (x, K.rough_level(x), level)
+    # 가족을 건드리는 말은 웃음을 붙여도 강
+    assert K.rough_level("니애미ㅋㅋㅋ") == 3
+    # surface가 같이 내고, 기존 비속어 신호는 그대로다(판정에는 아직 안 쓴다)
+    assert K.surface("씨발련아")["rough_level"] == 3 and K.surface("씨발련아")["profanity"]
+    assert K.surface("꺼져ㅋㅋ")["rough_level"] == 1 and K.surface("꺼져ㅋㅋ")["profanity"]
