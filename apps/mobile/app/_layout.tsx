@@ -3,6 +3,7 @@ import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
+import { AppFrame } from '../components/AppFrame';
 import { BrandSplash } from '../components/BrandSplash';
 import { UpdateBanner } from '../components/UpdateBanner';
 import { useConsented } from '../lib/consent';
@@ -75,7 +76,7 @@ function Gated() {
   // 읽는 동안에는 OOPS 시작 화면을 둔다. 스플래시가 걷힌 뒤(로그인 직후 프로필을 읽는 동안)에 흰 프레임이 번쩍이지 않게.
   if (!ready) return <BrandSplash />;
   return (
-    <>
+    <AppFrame>
       <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       {g === 'app' && <PushTaps />}
       <UpdateBanner />
@@ -97,6 +98,6 @@ function Gated() {
           <Stack.Screen name="room/[id]/search" />
         </Stack.Protected>
       </Stack>
-    </>
+    </AppFrame>
   );
 }

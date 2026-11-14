@@ -4,7 +4,7 @@ import { Animated, Modal, Platform, Pressable, View } from 'react-native';
 import { SheetSaySlot, useAnnounce } from '../lib/announce';
 import { retryFocus } from '../lib/focus';
 import { MOTION_MS, useReducedMotion } from '../lib/motion';
-import { focusRing, useTheme } from '../lib/theme';
+import { APP_MAX_WIDTH, focusRing, useTheme } from '../lib/theme';
 import { AppText } from './AppText';
 import { Button } from './Button';
 
@@ -58,6 +58,9 @@ export function Sheet({ visible, onClose, title, children, initialFocus }: { vis
           style={{
             opacity: t,
             transform: [{ translateY: t.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) }],
+            width: '100%',
+            maxWidth: APP_MAX_WIDTH, // 웹 넓은 화면: 앱 기둥(AppFrame)과 같은 폭으로 가운데
+            alignSelf: 'center',
             backgroundColor: colors.background,
             borderTopLeftRadius: radius.sheet,
             borderTopRightRadius: radius.sheet,

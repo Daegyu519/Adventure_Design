@@ -5,6 +5,9 @@ import { Platform, useColorScheme, type TextStyle, type ViewStyle } from 'react-
 import tokens from './tokens.json';
 
 export type Colors = typeof tokens.light;
+
+// 웹 넓은 화면(태블릿·데스크톱)에서 앱을 담는 가운데 기둥 폭. 시트도 같은 폭으로 맞춘다(AppFrame·Sheet)
+export const APP_MAX_WIDTH = 480;
 export type ThemePref = 'system' | 'light' | 'dark';
 
 const KEY = 'theme.v1'; // 웹에서는 localStorage 'theme.v1'
