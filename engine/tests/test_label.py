@@ -108,3 +108,33 @@ def test_merge_many_rejects_duplicate_names(tmp_path):
     import pytest
     with pytest.raises(SystemExit):
         label.merge_many(tmp_path / "key.json", [f, f, f], tmp_path / "o.jsonl")
+
+
+def test_t16c_set_and_codes_and_ranks(tmp_path):
+    # T-16c: 거친 말 6개 × 장난/무거운 맥락 × 편한/조심하는 사이. 쌍마다 같은 문장·같은 사이, 다른 상대 말
+    rows = label._read(REPO / "eval/label/candidates_t16c.jsonl")
+    assert len(rows) == 24 and all("alert" not in r for r in rows)
+    for p in range(1, 13):
+        a, b = [r for r in rows if r["pair"] == p]
+        assert a["draft"] == b["draft"] and a["relation"] == b["relation"] and a["them"] != b["them"]
+    table = label._read(REPO / "eval/label/rough_rank_t16c.jsonl")
+    assert len(table) == 25 and {r["table"] for r in table} == {1, 2, 3}
+    # 엔진 강도 표(P-44)와 같은 값이어야 비교가 의미 있다
+    import sys
+    sys.path.insert(0, str(REPO / "engine"))
+    from harness import korean as K
+    assert all(K.rough_level(r["text"]) == r["table"] for r in table), [r for r in table if K.rough_level(r["text"]) != r["table"]]
+
+    ids = [r["id"] for r in table]
+    sub = lambda who, lv: {"set": "t16c", "labeler": who, "labels": {"i001": {"cold": True, "memo": ""}},  # noqa: E731
+                           "ranks": {i: lv(i) for i in ids}}
+    src = tmp_path / "codes.jsonl"
+    same = {r["id"]: r["table"] for r in table}
+    src.write_text("\n".join(json.dumps(x, ensure_ascii=False) for x in [
+        sub("가", lambda i: 1), sub("나", same.__getitem__), sub("다", same.__getitem__), sub("가", same.__getitem__)]), encoding="utf-8")
+    files = label.codes(src, tmp_path / "out")
+    assert len(files) == 3   # 같은 이름의 두 번째 제출이 첫 번째를 덮는다
+    assert json.loads(files[0].read_text(encoding="utf-8"))["ranks"]["r01"] == 3
+    res = label.ranks(REPO / "eval/label/rough_rank_t16c.jsonl", files, tmp_path / "rep.json")
+    assert res["labelers"] == 3 and res["fleiss_kappa"] == 1.0 and res["agree_with_table"] == 1.0
+    assert label.fleiss_multi([[1, 1, 0], [0, 2, 0]]) is not None and label.fleiss_multi([]) is None

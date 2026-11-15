@@ -104,3 +104,19 @@
   uv run --project engine python eval/label/label.py merge --key eval/label/out_t16b/key.json --out eval/contrast_set_t16b.jsonl labels_*.json
   ```
 - 합의본이 나오면 `eval/live_eval.py run --set eval/contrast_set_t16b.jsonl …`로 실제 모델이 맥락대로 가르는지 본다.
+
+## 거친 말 라벨 2차 (T-16c, 2026-11-15)
+
+T-16b 초안을 사용자 검토(9·10·16·17·18·20·24번이 "사이를 몰라서" 판단이 안 섰다)에 따라 다시 짰다.
+
+- **1부** `candidates_t16c.jsonl` 24문항: 거친 말 6개(죽을래?·ㅅㅂ·지랄하네·미쳤네 진짜·뭐래·꺼져) × 장난/무거운 맥락 × **평소 욕 섞어 쓰는 사이 / 조심해서 말하는 사이**. 같은 질문("알려 줄 만한가")에 사이를 관계 칸에 적어 넣었다. 보려는 것: 사이를 알려 주면 사람 판단이 모이는가, 장난 맥락의 거친 말을 사람도 낮추는가(P-46의 근거).
+- **2부** `rough_rank_t16c.jsonl` 25개: 맥락 없이 약·중·강. 엔진 강도 표(P-44)와 같은 값을 `table`에 두었다(페이지에는 나오지 않는다). 보려는 것: 사람마다 세기 감각이 얼마나 다른가, 엔진 표가 다수와 맞는가.
+- **링크**: claude.ai 페이지 [거친 말 라벨](https://claude.ai/artifact/WHPvRrp1Latvwt8WZgwBhj)(소유자만 열 수 있게 만들어져 있다 — Share에서 조원에게 공유해야 열린다). 1부 순서는 `export --candidates eval/label/candidates_t16c.jsonl --out eval/label/out_t16c --seed 18`로 만든 `out_t16c/key.json`과 맞으니 다른 seed로 다시 export하지 않는다.
+- 저장: 이 페이지에 Contributor 이상이면 `labels/<사람 id>`에 바로 저장된다(소유자·Editor만 읽는다). 그 밖의 사람(다른 조직의 계정 등)은 **제출 코드**가 뜬다 → 메시지로 받아 한 줄에 하나씩 파일에 모은다.
+- 합치기:
+  ```bash
+  uv run --project engine python eval/label/label.py codes eval/label/out_t16c/codes.jsonl
+  uv run --project engine python eval/label/label.py merge --key eval/label/out_t16c/key.json --out eval/contrast_set_t16c.jsonl eval/label/out_t16c/labels_*.json
+  uv run --project engine python eval/label/label.py ranks eval/label/out_t16c/labels_*.json
+  ```
+  저장소에 바로 저장된 답은 Claude가 `ArtifactData list labels`로 읽어 같은 `codes.jsonl`에 붙인다.

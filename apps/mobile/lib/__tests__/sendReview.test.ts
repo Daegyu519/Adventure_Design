@@ -4,7 +4,7 @@ import { reviewBeforeSend, SEND_REVIEW_MS } from '../sendReview';
 jest.mock('../engine', () => ({ engine: { hint: jest.fn() } }));
 const hint = engine.hint as jest.Mock;
 const body = { room_id: 'room', text: '안 돼.', seq: 1, reply_to: 7 };
-const warning: HintRes = { seq: 1, hint: { title: '차갑게 느껴질 수도 있어요', detail: '이유가 없어요' }, trace_id: 'trace' };
+const warning: HintRes = { seq: 1, hint: { title: '차갑게 느껴질 수도 있어요', detail: '이유가 없어요', level: 'card', can_soften: false }, trace_id: 'trace' };
 
 beforeEach(() => { jest.useFakeTimers(); hint.mockReset(); });
 afterEach(() => jest.useRealTimers());

@@ -54,7 +54,7 @@ def test_heavy_context_hint(client, login, fake):
     body = r.json()
     assert body["hint"]["title"] == "성의 없게 느껴질 수도 있어요"
     # 내부 점수(risk, 확률, signals …)는 응답에 없다
-    assert set(body) == {"seq", "hint", "trace_id"} and set(body["hint"]) == {"title", "detail"}
+    assert set(body) == {"seq", "hint", "trace_id"} and set(body["hint"]) == {"title", "detail", "level", "can_soften"}
     assert body["seq"] == 3
 
 

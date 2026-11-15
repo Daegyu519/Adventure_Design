@@ -19,6 +19,19 @@ PROFANITY = re.compile(r"(씨\s?[발빨바팔]|시\s?[발바](?![점견])|ㅅ\s?
 # 욕 자체(씨발·새끼 …)는 좋은 말이 같이 있어도 그대로 비속어다
 INTENSIFIER = re.compile(r"(존\s?나|졸\s?라(?![서대매])|ㅈ\s?ㄴ|ㅁ\s?ㅊ)")
 POSITIVE = re.compile(r"(고마|고맙|감사|(?<!안)(?<!안\s)좋(?!겠냐|냐)|맛있|대박|웃기|웃겨|귀엽|귀여|예쁘|예뻐|이쁘|이뻐|멋있|멋지|재밌|재미있|축하|사랑|최고|행복|잘했|잘한다|부럽|신나|설레)")
+# 거친 말의 강도(P-44, 2026-11-15 사용자가 정한 표). 0 없음 · 1 약 · 2 중 · 3 강. 아직 판정에 쓰지 않는다(surface의 rough_level로만 낸다).
+# 규칙: 온전히 쓴 욕·거친 말과 초성 욕은 중. 욕에 비하하는 말이 겹치면(련·년·새끼) 강. 감탄·강조어는 약.
+# ㅋㅋ·ㅎㅎ가 붙으면 한 단계 낮춘다(약 아래로는 안 내린다). 가족을 건드리는 말은 기본이 강이고 웃음으로 낮추지 않는다.
+# 사람마다 다르게 받아들이는 것(가족 욕의 체감, 초성의 세기)은 여기서 풀지 않는다
+ROUGH_FAMILY = re.compile(r"(니\s?[애에]미|느금마?|니미)")
+ROUGH_FAMILY_MILD = re.compile(r"(니\s?엄마|느그\s?엄마|ㄴ\s?ㅇ\s?ㅁ)")
+ROUGH_STRONG = re.compile(r"((씨\s?[발빨팔]|시\s?발)\s?(련|년|놈|새\s?끼)|개\s?(새\s?끼|색\s?[기히]|같은\s?(년|놈|새\s?끼))"
+                          r"|(병\s?신|븅\s?신|미친|또라이|좆)\s?(같은\s?)?(년|새\s?끼))")
+ROUGH_FULL = re.compile(r"(씨\s?[발빨바팔]|시\s?[발바](?![점견])|(?<!곱)씹|좆|좇|개\s?(새|색|같)|새\s?끼(?!\s?손)|병\s?신|븅\s?신|지\s?랄|썅"
+                        r"|미친\s?(놈|년|새|것)|또라이|꺼\s?져|닥\s?쳐|죽을래|뒤질래|엿\s?(먹|같)|염\s?병)")
+ROUGH_CHOSUNG = re.compile(r"(ㅅ\s?ㅂ|ㅆ\s?ㅂ|ㅂ\s?ㅅ|ㅁ\s?ㅊ\s?ㄴ|ㄷ\s?ㅊ|ㅈ\s?ㄹ|ㄱ\s?ㅅ\s?ㄲ|ㅈ\s?같)")
+ROUGH_MILD = re.compile(r"(ㅁ\s?ㅊ(?!\s?ㄴ)|미쳤|존\s?나|졸\s?라(?![서대매])|ㅈ\s?ㄴ|뭐래|개\s?(빡|짜증))")
+LAUGH_ANY = re.compile(r"(ㅋ{2,}|ㅎ{2,}|ㅋ$)")
 CONSONANTS = re.compile(r"^[ㄱ-ㅎ\s.!?~]+$")   # ㅇㅇ·ㅇㅋ·ㄴㄴ
 LAUGH = re.compile(r"^[ㅋㅎ\s.!?~]+$")         # ㅋㅋ·ㅎㅎ만이면 자음 답으로 보지 않는다
 
@@ -27,6 +40,21 @@ def profane(t: str) -> bool:
     blame = bool(BLAME.search(t))
     rest = INTENSIFIER.sub("", t) if POSITIVE.search(t) and not blame else t
     return bool(PROFANITY.search(rest))
+
+
+def rough_level(t: str) -> int:
+    """거친 말의 강도 0~3(위 규칙). 강조어만 있고 좋은 뜻의 말이면 0(profane과 같은 예외)."""
+    if ROUGH_FAMILY.search(t):
+        return 3
+    if ROUGH_STRONG.search(t):
+        level = 3
+    elif ROUGH_FULL.search(t) or ROUGH_CHOSUNG.search(t) or ROUGH_FAMILY_MILD.search(t):
+        level = 2
+    elif ROUGH_MILD.search(t) and not (POSITIVE.search(t) and not BLAME.search(t)):
+        level = 1
+    else:
+        return 0
+    return max(1, level - 1) if LAUGH_ANY.search(t) else level
 
 
 def surface(text: str) -> dict:
@@ -45,6 +73,7 @@ def surface(text: str) -> dict:
         "question_back": t.endswith("?"),
         "blame": bool(BLAME.search(t)),
         "profanity": profane(t),
+        "rough_level": rough_level(t),
         "consonants": bool(CONSONANTS.match(t)) and not LAUGH.match(t),
     }
 

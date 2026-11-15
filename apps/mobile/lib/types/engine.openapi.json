@@ -234,8 +234,22 @@
       },
       "HintBody": {
         "properties": {
+          "can_soften": {
+            "default": false,
+            "title": "Can Soften",
+            "type": "boolean"
+          },
           "detail": {
             "title": "Detail",
+            "type": "string"
+          },
+          "level": {
+            "default": "card",
+            "enum": [
+              "card",
+              "soft"
+            ],
+            "title": "Level",
             "type": "string"
           },
           "title": {
@@ -252,6 +266,17 @@
       },
       "HintIn": {
         "properties": {
+          "casual": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Casual"
+          },
           "reply_to": {
             "anyOf": [
               {

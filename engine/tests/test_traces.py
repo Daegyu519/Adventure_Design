@@ -114,7 +114,9 @@ def test_hint_trace_contents(client, login, fake, queue):
     _hint(client, room)
     [row] = _rows(fake, queue)
     e = row["experts"]
-    assert set(e) == {"status", "gate", "features", "results"}
+    # 알림이면 단계(P-46, 고정 어휘)도 남는다. 알림이 아니면 없다
+    assert set(e) - {"level"} == {"status", "gate", "features", "results"}
+    assert ("level" in e) == bool(row["alert"]) and e.get("level", "card") in {"card", "soft", "none"}
     assert set(e["gate"]) == {"prior", "signals"} and isinstance(e["gate"]["signals"], list)
     assert set(e["features"]) == FEATURES
     assert {r["role"] for r in e["results"]} == {"context", "tone"}

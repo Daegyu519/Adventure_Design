@@ -1,0 +1,243 @@
+<title>거친 말 라벨</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700&display=swap">
+<style>
+/* 채팅 앱(OOPS)과 같은 종이색 · 잉크 · 따뜻한 갈색. 한 열, 휴대폰 우선. 문항은 실제 대화처럼 말풍선 두 개 */
+:root {
+  --bg: #FFFDF8; --surface: #F6F0E6; --bubble: #EFE7DA; --ink: #17110A; --muted: #6B5442;
+  --line: #E4DACB; --line-strong: #CFC2AE; --accent: #8A6540; --on-ink: #FFF8EC; --danger: #B3261E; --ok: #2F6B4F;
+  --font: "Pretendard", "Noto Sans KR", -apple-system, "Apple SD Gothic Neo", sans-serif;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0B0B0D; --surface: #17171B; --bubble: #1E1E23; --ink: #F6F1E7; --muted: #9C9387;
+  --line: #26262B; --line-strong: #3A3A40; --accent: #D6BA96; --on-ink: #17110A; --danger: #FF6B5E; --ok: #7CC4A0; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0B0B0D; --surface: #17171B; --bubble: #1E1E23; --ink: #F6F1E7; --muted: #9C9387;
+  --line: #26262B; --line-strong: #3A3A40; --accent: #D6BA96; --on-ink: #17110A; --danger: #FF6B5E; --ok: #7CC4A0; color-scheme: dark }
+body { background: var(--bg); color: var(--ink); font: 16px/1.55 var(--font); }
+.wrap { max-width: 560px; margin: 0 auto; padding-block: 24px 120px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 28px; }
+h1 { font-size: 26px; line-height: 1.25; margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
+h2 { font-size: 19px; margin: 0; letter-spacing: -0.01em; }
+p { margin: 0; }
+.muted { color: var(--muted); }
+.small { font-size: 14px; }
+.intro { display: grid; gap: 10px; }
+.rules { display: grid; gap: 6px; padding: 14px 16px; background: var(--surface); border-radius: 16px; font-size: 15px; }
+.rules b { font-weight: 700; }
+label.name { display: grid; gap: 6px; font-weight: 600; }
+input[type=text], textarea { font: inherit; color: var(--ink); background: var(--bg); border: 1.5px solid var(--line-strong); border-radius: 14px; padding: 12px 14px; width: 100%; box-sizing: border-box; }
+textarea { min-height: 44px; resize: vertical; font-size: 15px; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.part { display: grid; gap: 14px; }
+.part-head { display: grid; gap: 4px; position: sticky; top: env(safe-area-inset-top, 0px); background: var(--bg); padding-block: 10px; z-index: 2; border-bottom: 1px solid var(--line); }
+.progress { font-variant-numeric: tabular-nums; }
+.card { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--line); border-radius: 20px; }
+.card[data-done="1"] { border-color: var(--line-strong); }
+.rel { font-size: 13px; color: var(--muted); letter-spacing: 0.01em; }
+.rel b { color: var(--ink); font-weight: 600; }
+.bubbles { display: grid; gap: 6px; }
+.b { max-width: 80%; padding: 9px 14px; border-radius: 20px; overflow-wrap: anywhere; }
+.b.them { background: var(--bubble); justify-self: start; border-bottom-left-radius: 6px; }
+.b.me { background: var(--ink); color: var(--on-ink); justify-self: end; border-bottom-right-radius: 6px; font-weight: 600; }
+.who { font-size: 12px; color: var(--muted); }
+.who.me { justify-self: end; }
+.choices { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.choices.three { grid-template-columns: repeat(3, 1fr); }
+.choices button { font: inherit; font-size: 15px; min-height: 48px; border-radius: 14px; border: 1.5px solid var(--line-strong); background: var(--bg); color: var(--ink); cursor: pointer; }
+.choices button[aria-pressed="true"] { background: var(--ink); color: var(--on-ink); border-color: var(--ink); font-weight: 700; }
+.rank-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr); gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.rank-row .word { font-size: 19px; font-weight: 700; overflow-wrap: anywhere; }
+.rank-row .choices button { min-height: 44px; }
+.memo summary { cursor: pointer; color: var(--muted); font-size: 14px; min-height: 32px; }
+.submit { display: grid; gap: 10px; }
+.btn { font: inherit; font-weight: 700; min-height: 52px; border-radius: 16px; border: 0; background: var(--ink); color: var(--on-ink); cursor: pointer; padding: 0 18px; }
+.btn.secondary { background: var(--surface); color: var(--ink); border: 1.5px solid var(--line-strong); font-weight: 600; }
+.btn[aria-disabled="true"] { opacity: .45; cursor: default; }
+.status { font-size: 15px; }
+.status.err { color: var(--danger); }
+.status.ok { color: var(--ok); font-weight: 600; }
+.code { display: grid; gap: 8px; padding: 14px; border-radius: 16px; background: var(--surface); }
+.code textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; min-height: 120px; }
+@media (prefers-reduced-motion: no-preference) { .choices button { transition: background .15s, color .15s; } }
+</style>
+
+<div class="wrap">
+  <header class="intro">
+    <h1>거친 말 라벨</h1>
+    <p class="muted">OOPS 엔진 평가용 2차 라벨(T-16c). 두 부분, 합쳐서 10~15분 걸려요. 정답은 없어요. 서로 상의하지 말고 각자 골라 주세요.</p>
+  </header>
+
+  <label class="name" for="who">이름 (다른 사람과 겹치지 않게)
+    <input id="who" type="text" autocomplete="nickname" maxlength="20" placeholder="예: 준응">
+  </label>
+
+  <section class="part" aria-labelledby="pa-title">
+    <div class="part-head">
+      <h2 id="pa-title">1부. 이 말, 알려 줄 만한가요?</h2>
+      <p class="small muted progress" id="pa-progress"></p>
+    </div>
+    <div class="rules">
+      <p><b>받는 사람 입장</b>에서 보세요. 이 사이, 이 대화에서 이 말을 받으면 서운하거나 공격받았다고 느낄 가능성이 꽤 있으면 <b>알려 줄 만함</b>, 이 사이라면 자연스러운 장난이나 반응이면 <b>괜찮음</b>.</p>
+      <p class="muted">관계 옆에 적힌 "평소 어떤 사이인지"를 꼭 같이 봐 주세요. 헷갈리면 메모에 이유를 짧게 남겨 주세요.</p>
+    </div>
+    <div id="items" class="part"></div>
+  </section>
+
+  <section class="part" aria-labelledby="pb-title">
+    <div class="part-head">
+      <h2 id="pb-title">2부. 이 말, 얼마나 센가요?</h2>
+      <p class="small muted progress" id="pb-progress"></p>
+    </div>
+    <div class="rules">
+      <p>이번엔 <b>맥락 없이</b> 말만 보고, 받았을 때 얼마나 센 말인지 골라 주세요. <b>약</b> 가볍게 넘길 만함 · <b>중</b> 거슬리거나 기분 나쁠 수 있음 · <b>강</b> 대부분 상처받거나 싸움이 될 만함.</p>
+    </div>
+    <div id="ranks"></div>
+  </section>
+
+  <section class="submit" aria-labelledby="done-title">
+    <h2 id="done-title">제출</h2>
+    <p class="small muted">제출한 내용은 준응만 볼 수 있어요. 다른 사람의 답은 보이지 않아요.</p>
+    <button id="send" class="btn" type="button">제출하기</button>
+    <p id="status" class="status" role="status" aria-live="polite"></p>
+    <div id="code" class="code" hidden>
+      <p class="small">이 화면에서는 바로 저장되지 않았어요. 아래 코드를 복사해서 준응에게 메시지로 보내 주세요.</p>
+      <textarea id="code-text" readonly aria-label="제출 코드"></textarea>
+      <button id="copy" class="btn secondary" type="button">코드 복사</button>
+    </div>
+  </section>
+</div>
+
+<script>
+const DATA = {"items": [{"id": "i001", "relation": "친구 · 평소 서로 조심해서 말하는 사이", "them": "나 요즘 진짜 힘들어서 그래. 좀 이해해 주면 안 돼?", "draft": "지랄하네"}, {"id": "i002", "relation": "친구 · 평소 서로 조심해서 말하는 사이", "them": "오늘따라 나 좀 잘생긴 듯 ㅋㅋ", "draft": "꺼져"}, {"id": "i003", "relation": "친구 · 평소 욕 섞어 쓰는 사이", "them": "네가 저번에 한 말 솔직히 좀 상처였어", "draft": "ㅅㅂ"}, {"id": "i004", "relation": "친구 · 평소 서로 조심해서 말하는 사이", "them": "네가 저번에 한 말 솔직히 좀 상처였어", "draft": "ㅅㅂ"}, {"id": "i005", "relation": "선후배 · 평소 거친 말도 편하게 하는 사이", "them": "선배 죄송한데 내일 발표 자료 아직 못 만들었어요..", "draft": "미쳤네 진짜"}, {"id": "i006", "relation": "동아리 · 평소 거친 말도 편하게 하는 사이", "them": "이번 행사 준비 나만 하는 것 같아서 좀 속상해", "draft": "뭐래"}, {"id": "i007", "relation": "친구 · 평소 서로 조심해서 말하는 사이", "them": "나 이번 시험 공부 하나도 안 했는데 A 나옴 ㅋ", "draft": "지랄하네"}, {"id": "i008", "relation": "친구 · 평소 서로 조심해서 말하는 사이", "them": "니 흑역사 사진 단톡에 올려도 됨? ㅋㅋ", "draft": "죽을래?"}, {"id": "i009", "relation": "친구 · 평소 욕 섞어 쓰는 사이", "them": "그 돈 다음 달에 갚아도 될까.. 진짜 미안", "draft": "죽을래?"}, {"id": "i010", "relation": "친구 · 평소 욕 섞어 쓰는 사이", "them": "오늘따라 나 좀 잘생긴 듯 ㅋㅋ", "draft": "꺼져"}, {"id": "i011", "relation": "동아리 · 평소 거친 말도 편하게 하는 사이", "them": "이번 MT 장기자랑 네가 센터 서라 ㅋㅋ", "draft": "뭐래"}, {"id": "i012", "relation": "친구 · 평소 서로 조심해서 말하는 사이", "them": "야 우리 조 발표 내일이래 ㅋㅋㅋ 망함", "draft": "ㅅㅂ"}, {"id": "i013", "relation": "선후배 · 평소 존댓말로 조심해서 말하는 사이", "them": "선배 저 이번에 장학금이랑 인턴 둘 다 붙었어요!!", "draft": "미쳤네 진짜"}, {"id": "i014", "relation": "친구 · 평소 욕 섞어 쓰는 사이", "them": "야 우리 조 발표 내일이래 ㅋㅋㅋ 망함", "draft": "ㅅㅂ"}, {"id": "i015", "relation": "동아리 · 평소 서로 조심해서 말하는 사이", "them": "이번 MT 장기자랑 네가 센터 서라 ㅋㅋ", "draft": "뭐래"}, {"id": "i016", "relation": "친구 · 평소 욕 섞어 쓰는 사이", "them": "아까는 내가 심했어. 얘기 좀 할 수 있을까?", "draft": "꺼져"}, {"id": "i017", "relation": "친구 · 평소 욕 섞어 쓰는 사이", "them": "나 요즘 진짜 힘들어서 그래. 좀 이해해 주면 안 돼?", "draft": "지랄하네"}, {"id": "i018", "relation": "친구 · 평소 서로 조심해서 말하는 사이", "them": "아까는 내가 심했어. 얘기 좀 할 수 있을까?", "draft": "꺼져"}, {"id": "i019", "relation": "친구 · 평소 욕 섞어 쓰는 사이", "them": "나 이번 시험 공부 하나도 안 했는데 A 나옴 ㅋ", "draft": "지랄하네"}, {"id": "i020", "relation": "선후배 · 평소 존댓말로 조심해서 말하는 사이", "them": "선배 죄송한데 내일 발표 자료 아직 못 만들었어요..", "draft": "미쳤네 진짜"}, {"id": "i021", "relation": "선후배 · 평소 거친 말도 편하게 하는 사이", "them": "선배 저 이번에 장학금이랑 인턴 둘 다 붙었어요!!", "draft": "미쳤네 진짜"}, {"id": "i022", "relation": "친구 · 평소 욕 섞어 쓰는 사이", "them": "니 흑역사 사진 단톡에 올려도 됨? ㅋㅋ", "draft": "죽을래?"}, {"id": "i023", "relation": "친구 · 평소 서로 조심해서 말하는 사이", "them": "그 돈 다음 달에 갚아도 될까.. 진짜 미안", "draft": "죽을래?"}, {"id": "i024", "relation": "동아리 · 평소 서로 조심해서 말하는 사이", "them": "이번 행사 준비 나만 하는 것 같아서 좀 속상해", "draft": "뭐래"}], "ranks": [{"id": "r21", "text": "ㅁㅊ다"}, {"id": "r03", "text": "미친새끼야"}, {"id": "r01", "text": "씨발련아"}, {"id": "r19", "text": "ㄴㅇㅁ"}, {"id": "r09", "text": "ㅅㅂ"}, {"id": "r13", "text": "닥쳐"}, {"id": "r10", "text": "지랄하네"}, {"id": "r17", "text": "ㄷㅊ"}, {"id": "r02", "text": "개새끼야"}, {"id": "r12", "text": "꺼져"}, {"id": "r24", "text": "ㅈㄹㅋㅋ"}, {"id": "r14", "text": "죽을래?"}, {"id": "r23", "text": "미친놈ㅋㅋ"}, {"id": "r05", "text": "니애미"}, {"id": "r20", "text": "ㅅㅂㅋㅋㅋ"}, {"id": "r25", "text": "뭐래"}, {"id": "r18", "text": "니엄마"}, {"id": "r16", "text": "ㅁㅊㄴ"}, {"id": "r07", "text": "병신아"}, {"id": "r08", "text": "미친놈아"}, {"id": "r11", "text": "좆같네"}, {"id": "r15", "text": "ㅂㅅ"}, {"id": "r22", "text": "미쳤네 진짜"}, {"id": "r04", "text": "병신같은년아"}, {"id": "r06", "text": "느금마"}]};
+const SET = "t16c";
+const DRAFT_KEY = "t16c-draft";
+const state = { who: "", labels: {}, ranks: {} };   // labels: {id: {cold, memo}}, ranks: {id: 1|2|3}
+
+// 작성 중인 답은 이 브라우저에만 임시로 둔다(새로고침해도 이어서). 저장소가 막히면 그냥 넘어간다
+try { Object.assign(state, JSON.parse(localStorage.getItem(DRAFT_KEY) || "{}")); } catch (e) {}
+const keep = () => { try { localStorage.setItem(DRAFT_KEY, JSON.stringify(state)); } catch (e) {} };
+
+const $ = (s) => document.querySelector(s);
+const el = (tag, attrs = {}, kids = []) => {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "text") n.textContent = v; else if (k.startsWith("on")) n.addEventListener(k.slice(2), v); else n.setAttribute(k, v);
+  }
+  for (const k of [].concat(kids)) if (k) n.append(k);
+  return n;
+};
+
+function choiceGroup(label, options, current, onPick, three) {
+  const g = el("div", { class: "choices" + (three ? " three" : ""), role: "group", "aria-label": label });
+  for (const [value, text] of options) {
+    g.append(el("button", { type: "button", "aria-pressed": String(current === value), text, onclick: (e) => {
+      onPick(value);
+      for (const b of g.querySelectorAll("button")) b.setAttribute("aria-pressed", String(b === e.currentTarget));
+    } }));
+  }
+  return g;
+}
+
+function renderItems() {
+  const box = $("#items");
+  DATA.items.forEach((it, i) => {
+    const [rel, ...rest] = it.relation.split(" · ");
+    const cur = state.labels[it.id];
+    const card = el("article", { class: "card", "aria-label": `${i + 1}번 문항`, "data-done": cur ? "1" : "0" });
+    const memo = el("textarea", { id: "memo-" + it.id, rows: "1", maxlength: "200", placeholder: "헷갈렸으면 이유 (선택)" });
+    memo.value = cur?.memo || "";
+    memo.addEventListener("input", () => {
+      if (state.labels[it.id]) { state.labels[it.id].memo = memo.value; keep(); }
+    });
+    card.append(
+      el("p", { class: "rel" }, [document.createTextNode(`${i + 1} / ${DATA.items.length} · `), el("b", { text: rel }), document.createTextNode(rest.length ? " · " + rest.join(" · ") : "")]),
+      el("div", { class: "bubbles" }, [
+        el("span", { class: "who", text: "상대" }), el("p", { class: "b them", text: it.them }),
+        el("span", { class: "who me", text: "내가 보낼 말" }), el("p", { class: "b me", text: it.draft }),
+      ]),
+      choiceGroup(`${i + 1}번 답`, [[true, "알려 줄 만함"], [false, "괜찮음"]], cur ? cur.cold : null, (v) => {
+        state.labels[it.id] = { cold: v, memo: memo.value };
+        card.dataset.done = "1"; keep(); progress();
+      }),
+      el("details", { class: "memo" }, [el("summary", { text: "메모 남기기" }), el("label", { class: "small muted", for: "memo-" + it.id, text: "메모" }), memo]),
+    );
+    if (cur?.memo) card.querySelector("details").open = true;
+    box.append(card);
+  });
+}
+
+function renderRanks() {
+  const box = $("#ranks");
+  for (const r of DATA.ranks) {
+    box.append(el("div", { class: "rank-row" }, [
+      el("span", { class: "word", text: r.text }),
+      choiceGroup(`${r.text}의 세기`, [[1, "약"], [2, "중"], [3, "강"]], state.ranks[r.id] ?? null, (v) => { state.ranks[r.id] = v; keep(); progress(); }, true),
+    ]));
+  }
+}
+
+function counts() {
+  return { a: Object.keys(state.labels).length, b: Object.keys(state.ranks).length };
+}
+function progress() {
+  const { a, b } = counts();
+  $("#pa-progress").textContent = `${a} / ${DATA.items.length} 골랐어요`;
+  $("#pb-progress").textContent = `${b} / ${DATA.ranks.length} 골랐어요`;
+  const ready = a === DATA.items.length && b === DATA.ranks.length && state.who.trim();
+  $("#send").setAttribute("aria-disabled", String(!ready));
+}
+
+const who = $("#who");
+who.value = state.who || "";
+who.addEventListener("input", () => { state.who = who.value; keep(); progress(); });
+
+function payload() {
+  return { set: SET, labeler: state.who.trim(), labels: state.labels, ranks: state.ranks, submitted_at: new Date().toISOString() };
+}
+function showCode() {
+  $("#code-text").value = JSON.stringify(payload());
+  $("#code").hidden = false;
+}
+
+// 저장: 쓸 수 있는 사람(이 페이지에 Contributor 이상)은 labels/<자기 id>에 바로. 아니면 제출 코드를 보여 준다
+let dbP = null, userP = null;
+if (window.claude?.use) {
+  dbP = window.claude.use("db").catch(() => null);
+  userP = window.claude.use("user").catch(() => null);
+}
+
+$("#send").addEventListener("click", async () => {
+  const status = $("#status");
+  const { a, b } = counts();
+  if (!state.who.trim()) { status.className = "status err"; status.textContent = "이름을 적어 주세요."; who.focus(); return; }
+  if (a < DATA.items.length || b < DATA.ranks.length) {
+    status.className = "status err";
+    status.textContent = `아직 안 고른 문항이 있어요: 1부 ${DATA.items.length - a}개, 2부 ${DATA.ranks.length - b}개.`;
+    return;
+  }
+  status.className = "status"; status.textContent = "저장하는 중…";
+  const [db, user] = await Promise.all([dbP, userP]);
+  const id = user ? await user.id().catch(() => null) : null;
+  if (db && id) {
+    try {
+      await db.collection("labels").doc(id).set(payload());
+      status.className = "status ok";
+      status.textContent = "저장했어요. 고마워요! 다시 제출하면 이전 답을 덮어써요.";
+      return;
+    } catch (e) { /* 쓰기 권한이 없으면 코드로 */ }
+  }
+  status.className = "status";
+  status.textContent = "";
+  showCode();
+});
+
+$("#copy").addEventListener("click", async () => {
+  const t = $("#code-text");
+  try { await navigator.clipboard.writeText(t.value); $("#copy").textContent = "복사했어요"; }
+  catch (e) { t.focus(); t.select(); $("#copy").textContent = "선택했어요. 길게 눌러 복사하세요"; }
+});
+
+renderItems();
+renderRanks();
+progress();
+</script>

@@ -122,6 +122,23 @@ tone-chat/
 - 지표 `hint_shown`은 확인창 표시, `sent_with_hint`는 경고 후 원문 전송 성공, `sent_after_fix`는 경고 후 수정 전송 성공을 뜻한다. 과거 입력 중 힌트 지표와 직접 비교하지 않는다.
 - 동의 문구에 전송 시점 확인과 최대 대기를 반영해 `CONSENT_VERSION=2`로 올렸다. 기존 참가자는 업데이트 후 다시 동의한다. 실기기 확인과 전체 검사 후 별도 배포한다.
 
+### P-46 알림 단계와 편한 사이 표시 (2026-11-15 사용자 요청)
+
+- 엔진은 알림이라고 판정한 문장을 **거친 말의 강도**(`harness/korean.rough_level`, 0~3, P-44) × **편한 사이 표시** × **직전 상대 말이 장난인가**로 단계를 나눈다(`layers/level.py`). 모델에 묻지 않는 계산이라 같은 입력은 같은 단계다(프롬프트로 넣은 실험은 효과가 작고 흔들렸다, 일지 2026-11-13 15절).
+
+| 강도 | 보통 | 편한 사이 + 장난 맥락 |
+|---|---|---|
+| 거친 말 없음·강 | card | card |
+| 중 | card | soft |
+| 약 | soft | 없음 |
+
+- `card`: 지금처럼 보내기 전에 시트로 묻는다. `soft`: 보내기를 막지 않고 토스트 한 줄로 알린 뒤 그대로 전송한다(`hint_shown`에 `level: soft`). 단계가 없음으로 낮아지면 `hint=null`.
+- 받는 사람의 하소연이 반영된 알림(`pattern_used`)은 낮추지 않는다.
+- 편한 사이 표시는 **보내는 사람이 자기 기기에 저장**한다(`apps/mobile/lib/casual.ts`, AsyncStorage `casual:<room_id>`). DB에 저장하지 않고 확인 요청의 `casual`로만 보낸다. 어떻게 읽히는지는 받는 사람의 것이라 끄기가 아니라 한 단계 낮추기만 한다.
+- 켜는 곳: 방 정보의 "편한 사이" 스위치, 또는 낮출 수 있는 경고(`can_soften`)의 "편한 사이예요" 버튼(그 글은 그대로 보낸다).
+- 직전 상대 말이 장난인가(`level.playful`): 웃음(ㅋㅋ·ㅎㅎ)이 있고 마음을 털어놓거나 사과하는 말이 아니다.
+- 한계: 기기를 바꾸면 표시가 사라진다. 장난 맥락의 거친 말에 알림이 맞는지는 사람 라벨이 아직 없다(T-16b).
+
 ### 3-1. 메시지 보내기
 1. 앱이 `public.messages`에 insert한다. RLS가 방 멤버인지(`is_member(room_id)`), `sender_id = auth.uid()`인지 확인한다. 답장이면 `reply_to`가 같은 방 메시지여야 한다. 사진은 먼저 Storage `chat-images/<room_id>/…`에 올리고 `image_path`를 넣는다. 파일(≤20MB)은 Storage `chat-files/<room_id>/…`에 올리고 `file_path`·`file_name`·`file_size`를 함께 넣는다(사진과 한 메시지에 같이 못 담는다). 파일은 서명 주소에 `download`를 붙여 첨부 파일로만 내려받는다(앱 출처에서 열리지 않게).
 2. Realtime(`postgres_changes`, `room_id` 필터)이 다른 멤버 앱에 전달한다. 구독자마다 RLS가 다시 확인된다. 공감(`reactions`)과 읽음(`room_members.last_read_at`)도 같은 방식으로 받는다.
@@ -221,7 +238,7 @@ sequenceDiagram
 
 | 메서드 | 경로 | 요청 | 응답 |
 |---|---|---|---|
-| POST | `/v1/hint` | `{room_id, text(1~500자, 앞뒤 공백 제외), seq(0 이상), reply_to?(같은 방이 아니면 422)}` | `{seq, hint: {title, detail} \| null, trace_id}` |
+| POST | `/v1/hint` | `{room_id, text(1~500자, 앞뒤 공백 제외), seq(0 이상), reply_to?(같은 방이 아니면 422), casual?(편한 사이 표시, P-46)}` | `{seq, hint: {title, detail, level(card\|soft), can_soften} \| null, trace_id}` |
 | POST | `/v1/detail` | `{room_id, text, intent?, reply_to?(같은 방이 아니면 422)}` | `{alert, top_reading, readings: {읽힘: "자주"\|"가끔"\|"드물어요"}, why: [str], options: [{label, text, keep, change}], mismatch?: str \| null, footnote, trace_id}` |
 | POST | `/v1/feedback` | `{room_id, message_id(이 방에서 받은 메시지), text(1~1000자)}` | 202 `{ack}`(큐가 가득 차도 같은 202) |
 | POST | `/v1/mirror/today` | 없음 | `{cards: [{card_id, kind: "roleplay"\|"receive"\|"predict", persona, relation, situation, message, context?}]}` |

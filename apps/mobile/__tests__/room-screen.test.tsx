@@ -1241,3 +1241,63 @@ test('시트가 열린 동안 받은 새 메시지는 그 시트(dialog) 안 영
   const dialog = root.container.queryAll((n) => n.props.role === 'dialog')[0];
   expect(dialog.queryAll((n) => n.props.accessibilityLiveRegion === 'polite').map((n) => textOf(n as unknown as TestNode)).join('|')).toContain('민수: 새 소식');
 });
+
+// ---- P-46 알림 단계: 조용한 표시(soft)와 편한 사이 표시 ----
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const ROUGH = { title: '화난 것처럼 느껴질 수도 있어요', detail: '거친 말이 섞이면 화난 것처럼 들리기도 해요' };
+const hintWith = (extra: { level: 'card' | 'soft'; can_soften: boolean }) =>
+  mockHintRequest.mockImplementation((b: { seq: number }) => Promise.resolve({ seq: b.seq, hint: { ...ROUGH, ...extra }, trace_id: 'hint-trace' }));
+const hasButton = (s: Awaited<ReturnType<typeof setup>>, label: string) =>
+  s.root.container.queryAll((n) => n.props.accessibilityRole === 'button' && n.props.accessibilityLabel === label).length > 0;
+
+describe('P-46 알림 단계', () => {
+  beforeEach(() => AsyncStorage.clear());
+
+  test('조용한 표시는 보내기를 막지 않고 한 줄로만 알린다', async () => {
+    hintWith({ level: 'soft', can_soften: false });
+    const s = await setup();
+    await s.type('ㅅㅂ');
+    await s.press('보내기');
+    expect(mockSend).toHaveBeenCalledTimes(1);
+    expect(mockSend).toHaveBeenCalledWith({ text: 'ㅅㅂ' });
+    expect(hasButton(s, '그대로 보내기')).toBe(false);
+    expect(s.texts()).toContain(ROUGH.title);
+    expect(mockLogTone).toHaveBeenCalledWith({ room_id: 'r1', kind: 'hint_shown', signals: { trace_id: 'hint-trace', level: 'soft' } });
+    expect(mockLogTone).not.toHaveBeenCalledWith({ room_id: 'r1', kind: 'sent_with_hint' });
+  });
+
+  test('낮출 수 있는 알림에만 "편한 사이예요"가 있고, 누르면 이 방에 저장하고 그대로 보낸다', async () => {
+    hintWith({ level: 'card', can_soften: true });
+    const s = await setup();
+    await s.type('ㅅㅂ');
+    await s.press('보내기');
+    expect(mockHintRequest.mock.calls[0][0].casual).toBe(false);
+    expect(mockSend).not.toHaveBeenCalled();
+    await s.press('편한 사이예요');
+    expect(mockSend).toHaveBeenCalledTimes(1);
+    expect(await AsyncStorage.getItem('casual:r1')).toBe('1');
+    expect(s.texts()).toContain('상대는 다르게 느낄 수도 있어요');
+    // 다음 확인 요청부터 편한 사이로 보낸다
+    await s.type('꺼져');
+    await s.press('보내기');
+    expect(mockHintRequest.mock.calls[1][0].casual).toBe(true);
+  });
+
+  test('낮출 수 없는 알림에는 "편한 사이예요"가 없다', async () => {
+    hintWith({ level: 'card', can_soften: false });
+    const s = await setup();
+    await s.type('씨발련아');
+    await s.press('보내기');
+    expect(hasButton(s, '그대로 보내기')).toBe(true);
+    expect(hasButton(s, '편한 사이예요')).toBe(false);
+  });
+
+  test('저장해 둔 편한 사이 표시를 확인 요청에 싣는다', async () => {
+    await AsyncStorage.setItem('casual:r1', '1');
+    const s = await setup();
+    await s.type('안녕');
+    await s.press('보내기');
+    expect(mockHintRequest.mock.calls[0][0].casual).toBe(true);
+  });
+});
