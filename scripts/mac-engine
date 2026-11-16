@@ -23,6 +23,9 @@ OLD_LINE="model: local_detail:qwen3-30b-a3b, prompt: tone_label, paths: [realtim
 
 mkdir -p "$RUN/ts"; chmod 700 "$RUN"
 ts() { tailscale --socket="$SOCK" "$@"; }
+# 부른 쪽(터미널·Claude Code)과 떨어진 새 세션으로 실행한다: 부른 프로그램이 끝나거나 재시작돼도 엔진·tailscaled가 같이 꺼지지 않게
+# (2026-11-16: Claude Code가 다시 로그인하며 재시작될 때 그 안에서 띄운 엔진과 tailscaled가 함께 종료됐다). exec라 pid가 그대로 남는다
+DETACH_PY='import os, sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])'   # python3 -I -c "$DETACH_PY" <명령...>: 새 세션에서 그 명령으로 바뀐다
 say() { printf '%s\n' "$*"; }
 die() { printf 'mac-engine: %s\n' "$*" >&2; exit 1; }
 
@@ -57,7 +60,7 @@ PY
 tailscaled_up() {   # 사용자 모드 tailscaled(관리자 권한·시스템 확장 없음)
   if [ -S "$SOCK" ] && ts status --json >/dev/null 2>&1; then return 0; fi
   command -v tailscaled >/dev/null || die "tailscale 없음: brew install tailscale"
-  nohup tailscaled --tun=userspace-networking --statedir="$RUN/ts" --socket="$SOCK" --port=0 >"$RUN/tailscaled.log" 2>&1 &
+  python3 -I -c "$DETACH_PY" tailscaled --tun=userspace-networking --statedir="$RUN/ts" --socket="$SOCK" --port=0 >"$RUN/tailscaled.log" 2>&1 </dev/null &
   echo $! >"$RUN/tailscaled.pid"
   for _ in $(seq 1 20); do ts status --json >/dev/null 2>&1 && return 0; sleep 0.5; done
   die "tailscaled가 뜨지 않았다($RUN/tailscaled.log)"
@@ -84,7 +87,7 @@ start_engine() {   # start_engine <port> <log>
   local port="$1" log="$2" f; f="$(pidfile "$1")"
   lsof -iTCP:"$port" -sTCP:LISTEN >/dev/null 2>&1 && die "포트 $port를 이미 다른 프로그램이 쓴다(OOPS_ENGINE_PORT로 바꿀 수 있다)"
   # 백그라운드 전체의 입출력을 로그로 돌린다(아니면 부른 쪽 파이프·터미널을 붙잡아 'up'이 안 끝난 것처럼 보인다). exec로 pid = caffeinate
-  ( cd "$ROOT/engine" && USE_LOCAL_MODEL=0 MODELS_PATH="$MODELS" exec nohup caffeinate -is \
+  ( cd "$ROOT/engine" && export USE_LOCAL_MODEL=0 MODELS_PATH="$MODELS" && exec python3 -I -c "$DETACH_PY" caffeinate -is \
       uv run --locked uvicorn app.main:app --host 127.0.0.1 --port "$port" --workers 1 --env-file "$ENV_FILE" ) >"$log" 2>&1 </dev/null &
   echo $! >"$f"
   for _ in $(seq 1 60); do
