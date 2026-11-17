@@ -36,10 +36,11 @@ serve() {   # serve <tmux> <gguf> <port> <alias> [추가 옵션]. 환경변수 M
 
 llm() {
   if [ -f "$GPU_OFF" ]; then echo "GPU off ($GPU_OFF): model servers not started (up.sh gpu-on to allow)"; return 0; fi
-  # Gemma는 SWA라 --swa-full이 있어야 고정 프롬프트 캐시를 다시 쓴다(없으면 요청마다 1초 더)
-  serve tone-llm-fast "$FAST_GGUF" "$FAST_PORT" "$FAST_ID" --swa-full
-  # Qwen3-30B-A3B: GPU 메모리 ~13.5GB. 여유 14000MiB 이상·사용률 50% 이하인 카드가 없으면 건너뛴다(선택 전문가라 엔진은 그대로 돈다)
+  # Qwen3-30B-A3B(실시간 tone_label): GPU 메모리 ~13.5GB. 여유 14000MiB 이상·사용률 50% 이하인 카드가 없으면 건너뛴다(선택 전문가라 엔진은 그대로 돈다)
+  # 가장 큰 빈 카드가 필요해서 먼저 띄운다(2026-11-17: 공유 호스트에 14GB 빈 카드가 하나뿐인데 Gemma가 먼저 차지해 Qwen이 빠질 뻔했다)
   MIN_FREE_MIB=14000 CTX=8192 serve tone-llm-detail "$DETAIL_GGUF" "$DETAIL_PORT" "$DETAIL_ID"
+  # Gemma(tone_fast, 지금 paths 없음 = 되돌림 대기, ~5GB): 남의 카드를 꽉 채우지 않게 여유 6000MiB 이상일 때만. SWA라 --swa-full이 있어야 고정 프롬프트 캐시를 다시 쓴다
+  MIN_FREE_MIB=6000 serve tone-llm-fast "$FAST_GGUF" "$FAST_PORT" "$FAST_ID" --swa-full
   # HCX Omni 8B: GPU 메모리 ~7GB. 여유 7000MiB 이상·사용률 50% 이하인 카드가 없으면 건너뜀(선택 전문가). 이 GPU 서버의 Gemma·Qwen과 다른 카드를 쓰게 하지 않는다(가장 한가한 카드 선택)
   SERVER_BIN=$HCX_BIN MIN_FREE_MIB=7000 CTX=8192 serve tone-hcx-8b "$HCX8_GGUF" "$HCX8_PORT" "$HCX8_ID" --jinja
   clf
