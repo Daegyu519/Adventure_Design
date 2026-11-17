@@ -32,6 +32,13 @@ serve() {   # serve <tmux> <gguf> <port> <alias> [추가 옵션]. 환경변수 M
   # 기본 로그 수준은 요청 문장을 남기지 않는다 — -v·--verbose·--log-verbosity를 붙이지 않는다(문장이 <세션>.log에 남음).
   tmux new-session -d -s "$1" "CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=$G ${SERVER_BIN:-./llama.cpp/build/bin/llama-server} -m $2 --host 127.0.0.1 --port $3 -ngl 99 -np 4 -c ${CTX:-16384} --no-slots --alias $4 ${5:-} > $1.log 2>&1"
   echo "$1 started on GPU $G"
+  # 로드(GPU 메모리 할당)가 끝날 때까지 기다려야 다음 serve·clf가 여유 메모리를 제대로 잰다(2026-11-17: 안 기다려서 셋이 한 카드에 몰려 Qwen이 메모리 부족으로 죽었다)
+  for _ in $(seq 180); do
+    curl -sf "http://127.0.0.1:$3/health" >/dev/null && return 0
+    has "$1" || { echo "$1: exited while loading (see $LLM/$1.log)"; return 0; }
+    sleep 1
+  done
+  echo "$1: still loading after 180s"
 }
 
 llm() {
