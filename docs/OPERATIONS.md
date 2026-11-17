@@ -145,7 +145,7 @@ scripts/mac-engine status   # 상태
 scripts/mac-engine down     # 끄기(학교 서버로 돌아갈 때)
 ```
 
-- 공개 주소를 앱이 쓰는 `tone-chat.tail6baef9.ts.net` 그대로 쓰려면, Tailscale 관리 화면에서 옛 `tone-chat`(학교 서버) 기기를 지운 뒤 `up`(이 Mac 이름을 `tone-chat`로 바꾼다). 그러면 앱·CORS·DB 웹훅을 바꾸지 않아도 된다. 학교 서버로 돌아갈 땐 `down` → 이 Mac 기기를 지우거나 이름 변경 → `scripts/deploy-school`(서버 tailscale이 로그인 링크를 다시 낼 수 있다).
+- 공개 주소를 앱이 쓰는 `tone-chat.tail6baef9.ts.net` 그대로 쓰려면, Tailscale 관리 화면에서 옛 `tone-chat`(학교 서버) 기기를 지운 뒤 `up`(이 Mac 이름을 `tone-chat`로 바꾼다). 그러면 앱·CORS·DB 웹훅을 바꾸지 않아도 된다. 학교 서버로 돌아갈 땐 `down` → 이 Mac 기기를 지우거나 이름 변경 → `scripts/deploy-school`(서버 tailscale이 로그인 링크를 다시 낼 수 있다). 2026-11-17에 실제로 한 순서(끊김 약 20초): `scripts/deploy-school --env .env.pilot.engine`(Funnel 단계가 로그인 링크를 내고 멈춤, 서버 엔진은 이미 켜짐) → 사용자가 링크로 로그인(서버는 `tone-chat-1`) → Mac `tailscale --socket=~/.oops-engine/ts/tailscaled.sock set --hostname=tone-chat-mac` → 서버 `set --hostname=tone-chat-school` 다음 `set --hostname=tone-chat`(이미 같은 이름이면 `set`이 아무것도 안 바꾼다) → 서버 `up.sh funnel` → `deploy-smoke` → `scripts/mac-engine down`. 학교 노드를 콘솔에서 지우지 않으면 다음엔 로그인 없이 `scripts/deploy-school`만 다시 돌리면 된다.
 - 감수할 것: Mac을 켜고 충전기를 꽂아 둔다(덮개를 닫거나 재시작하면 AI만 멈추고 채팅은 그대로). NVIDIA 무료 한도는 분당 약 40회로 공유라 사용자가 몰리면 힌트가 조용히 빠진다.
 
 </details>
