@@ -1,4 +1,4 @@
-import { createEngine, EngineError, type Engine } from '../engine';
+import { createEngine, EngineError, WARM_EVERY_MS, type Engine } from '../engine';
 
 // 기본 engine 인스턴스가 읽는 supabase(AsyncStorage 네이티브 모듈)는 이 테스트와 관계없다.
 jest.mock('../supabase', () => ({ supabase: null }));
@@ -259,4 +259,21 @@ test.each([[null], [''], ['abc'], ['0'], ['Wed, 21 Oct 2026 07:28:00 GMT']])('42
   const e = await real(f).hint({ room_id: R, text: 'a', seq: 1 }).catch((x) => x);
   expect(e.status).toBe(429);
   expect(e.retryAfterMs).toBeUndefined();
+});
+
+describe('warm (P-48)', () => {
+  it('opens the connection to /v1/hint with a GET at most once a minute and ignores failures', async () => {
+    const fetchFn = jest.fn().mockRejectedValue(new Error('offline'));
+    const now = jest.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    const e = createEngine({ baseUrl: 'https://engine.example/', getToken: async () => 't', fetchFn: fetchFn as unknown as typeof fetch });
+    e.warm();
+    e.warm();
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+    expect(fetchFn).toHaveBeenCalledWith('https://engine.example/v1/hint', expect.objectContaining({ method: 'GET', headers: expect.objectContaining({ Authorization: expect.any(String) }) }));
+    now.mockReturnValue(1_000_000 + WARM_EVERY_MS);
+    e.warm();
+    expect(fetchFn).toHaveBeenCalledTimes(2);
+    await Promise.resolve(); // 거부된 fetch가 처리 안 된 reject로 남지 않는다
+    now.mockRestore();
+  });
 });

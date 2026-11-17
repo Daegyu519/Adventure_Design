@@ -30,7 +30,7 @@ import { useRoomMessages, type SendError, type SendInput } from '../../../lib/us
 import { useSession } from '../../../lib/session';
 import { CASUAL_NOTE, loadCasual, saveCasual } from '../../../lib/casual';
 import { reviewBeforeSend } from '../../../lib/sendReview';
-import type { HintRes } from '../../../lib/engine';
+import { engine, type HintRes } from '../../../lib/engine';
 import { logToneEvent } from '../../../lib/toneEvents';
 import { supabase } from '../../../lib/supabase';
 import { useTheme } from '../../../lib/theme';
@@ -169,7 +169,9 @@ function RoomBody({ id, me }: { id: string; me: string }) {
     setDraft(t);
     setSelection(undefined);
     typing.onDraftChange(t);
+    engine.warm(); // 보내기 전에 엔진 연결을 열어 둔다(P-48, 1분에 한 번만 실제로 보낸다)
   }, [typing]);
+  useEffect(() => engine.warm(), []);
   // 시트를 닫으면 포커스는 입력창으로(힌트 막대의 버튼은 글이 바뀌면 사라질 수 있어 body로 떨어지지 않게). 시트가 돌려주는 포커스보다 나중에.
   const reducedMotion = useReducedMotion();
   const closeDetail = useCallback(() => {

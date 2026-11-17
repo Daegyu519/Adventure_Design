@@ -70,7 +70,7 @@ const mockHintRequest = jest.fn();
 let mockHintEnabled = true;
 const mockFeedback = jest.fn();
 const mockDetail = jest.fn();
-jest.mock('../lib/engine', () => ({ ...jest.requireActual('../lib/engine'), engine: { isMock: true, hint: (...a: unknown[]) => mockHintRequest(...a), feedback: (...a: unknown[]) => mockFeedback(...a), detail: (...a: unknown[]) => mockDetail(...a) } }));
+jest.mock('../lib/engine', () => ({ ...jest.requireActual('../lib/engine'), engine: { isMock: true, warm: () => {}, hint: (...a: unknown[]) => mockHintRequest(...a), feedback: (...a: unknown[]) => mockFeedback(...a), detail: (...a: unknown[]) => mockDetail(...a) } }));
 // 힌트는 화면 밖(useToneHint)에서 만들어진다. 여기서는 떠 있는 힌트와 그 호출만 본다(T-22).
 let mockHint: { title: string; detail: string } | null = null;
 const mockToneInput = jest.fn();
