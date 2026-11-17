@@ -32,7 +32,7 @@ export type CallOpts = { signal?: AbortSignal; timeoutMs?: number };
 export const HINT_TIMEOUT_MS = 1700; // 엔진 1.5초 + 왕복 0.2초
 export const DETAIL_TIMEOUT_MS = 9000;
 export const DEFAULT_TIMEOUT_MS = 10000;
-export const WARM_EVERY_MS = 60_000;
+export const WARM_EVERY_MS = 20_000; // P-50: 방에 있는 동안 연결이 끊기지 않게 20초마다
 
 export type Engine = {
   isMock: boolean;
