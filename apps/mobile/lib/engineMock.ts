@@ -43,6 +43,7 @@ function lastFiveMondays() {
 export function createMockEngine(): Engine {
   return {
     isMock: true,
+    warm() {},
 
     async hint(b, o) {
       await wait(o?.signal);

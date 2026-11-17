@@ -32,6 +32,7 @@ export type CallOpts = { signal?: AbortSignal; timeoutMs?: number };
 export const HINT_TIMEOUT_MS = 1700; // 엔진 1.5초 + 왕복 0.2초
 export const DETAIL_TIMEOUT_MS = 9000;
 export const DEFAULT_TIMEOUT_MS = 10000;
+export const WARM_EVERY_MS = 60_000;
 
 export type Engine = {
   isMock: boolean;
@@ -41,6 +42,8 @@ export type Engine = {
   stats(o?: CallOpts): Promise<StatsRes>;
   mirrorToday(o?: CallOpts): Promise<MirrorTodayRes>;
   mirrorAnswer(b: MirrorAnswerReq, o?: CallOpts): Promise<MirrorAnswerRes>;
+  /** 보내기 전에 연결을 미리 연다(결과 없음, 실패 무시). 방에 들어올 때·입력할 때 부른다. */
+  warm(): void;
 };
 
 export function createEngine(o: {
@@ -56,9 +59,24 @@ export function createEngine(o: {
     // 모든 호출이 연결 실패(status 0)로 끝나 힌트는 조용히 없고, 살펴보기·털어놓기·거울·리포트는 기존 고정 문구를 보인다.
     console.error('[engine] EXPO_PUBLIC_ENGINE_URL is empty in a release build: engine features are off');
     const off = () => Promise.reject(new EngineError(0, 'engine_not_configured'));
-    return { isMock: false, hint: off, detail: off, feedback: off, stats: off, mirrorToday: off, mirrorAnswer: off };
+    return { isMock: false, hint: off, detail: off, feedback: off, stats: off, mirrorToday: off, mirrorAnswer: off, warm: () => {} };
   }
   const fetchFn = o.fetchFn ?? fetch;
+  let warmedAt = -Infinity;
+
+  // 공개 경로(Tailscale Funnel)는 새 연결(TLS)에 1.6~4.3초가 걸려, 보낼 때 처음 연결하면 SEND_REVIEW_MS 안에 판단 요청이
+  // 엔진에 닿지 못하고 그대로 전송됐다(2026-11-17: 메시지 29건 중 9건만 도착, P-48). 연결과 브라우저 사전 확인(CORS preflight)을 미리 끝내 둔다.
+  // 사전 확인은 주소별로 저장되므로 /v1/hint에 Authorization 헤더를 단 GET을 보낸다. 엔진은 GET을 405로 바로 돌려준다(인증·분석·기록 없음).
+  function warm() {
+    const now = Date.now();
+    if (now - warmedAt < WARM_EVERY_MS) return;
+    warmedAt = now;
+    try {
+      fetchFn(baseUrl + '/v1/hint', { method: 'GET', headers: { Authorization: 'Bearer warm', 'Content-Type': 'application/json' } }).catch(() => {});
+    } catch {
+      // fetch가 없거나 바로 던지는 환경: 미리 열기는 선택이라 무시한다
+    }
+  }
 
   async function call<T>(method: 'GET' | 'POST', path: string, body: unknown, opts: CallOpts = {}, defaultTimeoutMs = DEFAULT_TIMEOUT_MS): Promise<T> {
     // Hermes에는 AbortSignal.any가 없다. 호출자 signal과 시간 초과를 우리 controller 하나에 잇는다.
@@ -109,6 +127,7 @@ export function createEngine(o: {
     stats: (opts) => call('GET', '/v1/stats/me', undefined, opts),
     mirrorToday: (opts) => call('POST', '/v1/mirror/today', undefined, opts),
     mirrorAnswer: (b, opts) => call('POST', '/v1/mirror/answer', b, opts),
+    warm,
   };
 }
 
